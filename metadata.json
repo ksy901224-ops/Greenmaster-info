@@ -1,0 +1,8 @@
+{
+  "name": "E&L 정보관리앱",
+  "description": "Integrated Golf Course Information Management System for tracking course details, personnel history, construction status, and research data.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
