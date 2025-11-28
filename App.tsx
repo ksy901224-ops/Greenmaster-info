@@ -10,6 +10,7 @@ import PersonDetail from './pages/PersonDetail';
 import WriteLog from './pages/WriteLog';
 import Settings from './pages/Settings';
 import AdminTodo from './pages/AdminTodo';
+import AdminDashboard from './pages/AdminDashboard';
 import Login from './pages/Login';
 import { useApp } from './contexts/AppContext';
 
@@ -31,6 +32,7 @@ const App: React.FC = () => {
             <Route path="/write" element={<WriteLog />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/admin-todos" element={<AdminTodo />} />
+            <Route path="/admin-dashboard" element={<AdminDashboard />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Layout>

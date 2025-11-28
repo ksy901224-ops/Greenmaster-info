@@ -1,15 +1,17 @@
+
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MOCK_PEOPLE } from '../constants';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary } from '../services/geminiService';
-import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin } from 'lucide-react';
+import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 const CourseDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { courses, logs, updateCourse, people } = useApp(); // Get data from context
+  const navigate = useNavigate();
+  const { courses, logs, updateCourse, deleteCourse, people } = useApp(); // Get data from context
   
   const course = courses.find(c => c.id === id);
   const [activeTab, setActiveTab] = useState<'INFO' | 'LOGS' | 'PEOPLE'>('INFO');
@@ -23,14 +25,13 @@ const CourseDetail: React.FC = () => {
   if (!course) return <div className="p-8 text-center">골프장을 찾을 수 없습니다.</div>;
 
   const relatedLogs = logs.filter(l => l.courseId === id);
-  // Use people from context instead of MOCK_PEOPLE
-  const relatedPeople = people.filter(p => 
-    p.currentCourseId === id || p.careers.some(c => c.courseId === id)
-  );
+  // Separate current and past people
+  const currentStaff = people.filter(p => p.currentCourseId === id);
+  const formerStaff = people.filter(p => p.careers.some(c => c.courseId === id) && p.currentCourseId !== id);
 
   const handleAiAnalysis = async () => {
     setIsSummarizing(true);
-    const summary = await generateCourseSummary(course, relatedLogs, relatedPeople);
+    const summary = await generateCourseSummary(course, relatedLogs, [...currentStaff, ...formerStaff]);
     setAiSummary(summary);
     setIsSummarizing(false);
   };
@@ -60,19 +61,35 @@ const CourseDetail: React.FC = () => {
       }
   };
 
+  const handleDeleteCourse = () => {
+    if (window.confirm(`'${course.name}' 골프장을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+      deleteCourse(course.id);
+      navigate('/courses');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Section */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative">
         <div className="flex justify-between items-start mb-1">
             <h1 className="text-2xl font-bold text-slate-900">{course.name}</h1>
-            <button 
-                onClick={openEditModal}
-                className="p-2 text-slate-400 hover:text-brand-600 hover:bg-slate-100 rounded-full transition-colors"
-                title="정보 수정"
-            >
-                <Edit2 size={18} />
-            </button>
+            <div className="flex space-x-2">
+                <button 
+                    onClick={openEditModal}
+                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-slate-100 rounded-full transition-colors"
+                    title="정보 수정"
+                >
+                    <Edit2 size={18} />
+                </button>
+                <button 
+                    onClick={handleDeleteCourse}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                    title="골프장 삭제"
+                >
+                    <Trash2 size={18} />
+                </button>
+            </div>
         </div>
         <p className="text-slate-500 text-sm flex items-center mb-4">
           <span className="mr-3">{course.address}</span>
@@ -94,35 +111,48 @@ const CourseDetail: React.FC = () => {
           </div>
            <div>
             <span className="block text-slate-400 text-xs">데이터 수</span>
-            <span className="font-medium">로그 {relatedLogs.length}건 / 인물 {relatedPeople.length}명</span>
+            <span className="font-medium">로그 {relatedLogs.length}건 / 인물 {currentStaff.length + formerStaff.length}명</span>
           </div>
         </div>
       </div>
 
       {/* AI Summary Card */}
       <div className="bg-brand-50 rounded-xl border border-brand-100 p-5">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-brand-800 font-bold flex items-center">
-            <Sparkles size={18} className="mr-2 text-brand-600" /> AI 스마트 요약
+        <div className="mb-4">
+          <h3 className="text-brand-800 font-bold flex items-center mb-2">
+            <Sparkles size={18} className="mr-2 text-brand-600" /> AI 스마트 요약 및 전략 추천
           </h3>
+          {!aiSummary && (
+            <p className="text-sm text-brand-700 opacity-70 mb-4">
+              최근 업무 일지와 인물 관계를 종합 분석하여 맞춤형 전략과 Action Plan을 제안합니다.
+            </p>
+          )}
+          
           {!aiSummary && (
             <button 
               onClick={handleAiAnalysis}
               disabled={isSummarizing}
-              className="text-xs bg-brand-600 text-white px-3 py-1.5 rounded-md hover:bg-brand-700 disabled:opacity-50 flex items-center"
+              className="w-full bg-purple-600 text-white font-semibold p-3 rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center shadow-md"
             >
-              {isSummarizing ? '분석 중...' : '지금 분석하기'}
+              {isSummarizing ? (
+                <>
+                  <Loader2 size={20} className="animate-spin mr-2" />
+                  분석 중...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={20} className="mr-2" />
+                  AI 추천 받기 (종합 분석)
+                </>
+              )}
             </button>
           )}
         </div>
-        {aiSummary ? (
-          <div className="text-sm text-brand-900 leading-relaxed whitespace-pre-line">
+        
+        {aiSummary && (
+          <div className="text-sm text-brand-900 leading-relaxed whitespace-pre-line bg-white/50 p-4 rounded-lg border border-brand-100">
             {aiSummary}
           </div>
-        ) : (
-          <p className="text-sm text-brand-700 opacity-70">
-            버튼을 누르면 최근 업무 일지와 인물 관계를 종합 분석하여 보고서를 생성합니다.
-          </p>
         )}
       </div>
 
@@ -157,7 +187,7 @@ const CourseDetail: React.FC = () => {
                 : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
             }`}
           >
-            <Users size={16} className="mr-2" /> 인맥/관계도 ({relatedPeople.length})
+            <Users size={16} className="mr-2" /> 인맥/관계도 ({currentStaff.length + formerStaff.length})
           </button>
         </nav>
       </div>
@@ -169,22 +199,38 @@ const CourseDetail: React.FC = () => {
             <h3 className="font-bold text-lg mb-4">특이사항 및 개요</h3>
             <p className="text-slate-700 leading-relaxed mb-6 whitespace-pre-line">{course.description}</p>
             
-            <h3 className="font-bold text-lg mb-4">연혁 및 주요 이슈</h3>
+            <h3 className="font-bold text-lg mb-4 flex items-center">
+                <History size={18} className="mr-2 text-slate-500"/>
+                연혁 및 주요 이슈 (자동 기록)
+            </h3>
             <div className="space-y-4">
-                {/* Mock History Data */}
-                <div className="flex">
-                    <div className="flex-shrink-0 w-20 text-sm text-slate-500 font-medium pt-1">2023.10</div>
-                    <div className="border-l-2 border-slate-200 pl-4 pb-2">
-                        <p className="text-slate-800 text-sm">클럽하우스 리모델링 완료</p>
+                {course.issues && course.issues.length > 0 ? (
+                    course.issues.map((issue, idx) => (
+                        <div key={idx} className="flex">
+                            <div className="flex-shrink-0 w-4 h-4 mt-1 mr-3 rounded-full bg-slate-200 border-2 border-white shadow-sm"></div>
+                            <div className="pb-2 border-l-2 border-slate-100 pl-4 -ml-5 pt-0.5">
+                                <p className="text-slate-800 text-sm whitespace-pre-line">{issue}</p>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="text-sm text-slate-400 italic bg-slate-50 p-4 rounded-lg">
+                        아직 기록된 주요 이슈가 없습니다. 업무 일지를 작성하면 자동으로 이곳에 업데이트됩니다.
                     </div>
-                </div>
-                 <div className="flex">
-                    <div className="flex-shrink-0 w-20 text-sm text-slate-500 font-medium pt-1">2022.05</div>
-                    <div className="border-l-2 border-slate-200 pl-4 pb-2">
-                        <p className="text-slate-800 text-sm">그린 서브에어 시스템 도입</p>
-                    </div>
-                </div>
+                )}
             </div>
+            
+            {/* Location Data Display */}
+            {(course.lat || course.lng) && (
+                <div className="mt-6 pt-6 border-t border-slate-100">
+                    <h3 className="font-bold text-lg mb-4 flex items-center">
+                        <Globe size={18} className="mr-2 text-slate-400"/> 위치 정보 (GPS)
+                    </h3>
+                    <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg inline-block border border-slate-200">
+                        위도: {course.lat || '미설정'} / 경도: {course.lng || '미설정'}
+                    </div>
+                </div>
+            )}
           </div>
         )}
 
@@ -199,25 +245,65 @@ const CourseDetail: React.FC = () => {
         )}
 
         {activeTab === 'PEOPLE' && (
-          <div className="grid gap-4 md:grid-cols-2">
-            {relatedPeople.map(person => (
-              <Link to={`/people/${person.id}`} key={person.id} className="block">
-                <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 hover:shadow-md transition-all">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                        <h4 className="font-bold text-slate-900">{person.name} <span className="text-sm font-normal text-slate-500">({person.currentRole})</span></h4>
-                        <p className="text-xs text-slate-500">{person.id === 'p1' ? '현재 재직중' : '과거 근무 이력'}</p>
+          <div className="space-y-8">
+            {/* Current Staff Section */}
+            <div>
+              <h3 className="text-md font-bold text-slate-700 mb-3 flex items-center">
+                 <span className="w-2 h-6 bg-brand-500 rounded-sm mr-2"></span>
+                 현재 재직 중 ({currentStaff.length})
+              </h3>
+              <div className="grid gap-4 md:grid-cols-2">
+                {currentStaff.map(person => (
+                  <Link to={`/people/${person.id}`} key={person.id} className="block group">
+                    <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200 group-hover:border-brand-500 transition-all">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                            <h4 className="font-bold text-slate-900 group-hover:text-brand-700 transition-colors">{person.name} <span className="text-sm font-normal text-slate-500">({person.currentRole})</span></h4>
+                            <p className="text-xs text-brand-600 font-medium mt-0.5">입사: {person.currentRoleStartDate || '-'}</p>
+                        </div>
+                        {getAffinityBadge(person.affinity)}
+                      </div>
+                      <p className="text-sm text-slate-600 line-clamp-2 mt-2 bg-slate-50 p-2 rounded border border-slate-100 group-hover:bg-brand-50/50 transition-colors">
+                        "{person.notes}"
+                      </p>
                     </div>
-                    {getAffinityBadge(person.affinity)}
+                  </Link>
+                ))}
+                {currentStaff.length === 0 && (
+                    <div className="col-span-full py-8 text-center text-slate-400 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                        현재 등록된 직원이 없습니다.
+                    </div>
+                )}
+              </div>
+            </div>
+
+            {/* Former Staff Section */}
+            {formerStaff.length > 0 && (
+                <div>
+                  <h3 className="text-md font-bold text-slate-500 mb-3 flex items-center">
+                     <span className="w-2 h-6 bg-slate-300 rounded-sm mr-2"></span>
+                     과거 근무자 ({formerStaff.length})
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2 opacity-80 hover:opacity-100 transition-opacity">
+                    {formerStaff.map(person => {
+                       const careerRecord = person.careers.find(c => c.courseId === id);
+                       
+                       return (
+                          <Link to={`/people/${person.id}`} key={person.id} className="block group">
+                            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 group-hover:border-slate-400 transition-all">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <h4 className="font-bold text-slate-700">{person.name} <span className="text-sm font-normal text-slate-500">({careerRecord?.role || '이전 직책'})</span></h4>
+                                    <p className="text-xs text-slate-500 mt-0.5">근무: {careerRecord?.startDate} ~ {careerRecord?.endDate}</p>
+                                </div>
+                                <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">퇴사</span>
+                              </div>
+                            </div>
+                          </Link>
+                       );
+                    })}
                   </div>
-                  <p className="text-sm text-slate-600 line-clamp-2 mt-2 bg-slate-50 p-2 rounded">
-                    "{person.notes}"
-                  </p>
                 </div>
-              </Link>
-            ))}
-            {relatedPeople.length === 0 && (
-                <div className="col-span-full text-center py-12 text-slate-400">관련된 인물 정보가 없습니다.</div>
             )}
           </div>
         )}
@@ -226,15 +312,15 @@ const CourseDetail: React.FC = () => {
       {/* Edit Modal */}
       {isEditModalOpen && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <h3 className="font-bold text-lg text-slate-900">골프장 정보 수정</h3>
                     <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                         <X size={24} />
                     </button>
                 </div>
                 
-                <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                <div className="p-6 space-y-4 overflow-y-auto">
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">이름</label>
                         <input 
@@ -307,6 +393,24 @@ const CourseDetail: React.FC = () => {
                             onChange={(e) => handleEditChange('openYear', e.target.value)}
                         />
                     </div>
+                    
+                    {/* Major Issues Edit Field (Replaces Coordinates) */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center">
+                            <AlertTriangle size={14} className="mr-1"/> 주요 이슈 및 연혁 (History)
+                        </label>
+                        <textarea 
+                            rows={6}
+                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500 font-mono"
+                            value={(editForm.issues || []).join('\n')}
+                            onChange={(e) => handleEditChange('issues', e.target.value.split('\n'))}
+                            placeholder="주요 이력을 줄바꿈으로 입력하세요.&#10;예: 2024-05-01 배수 공사 완료"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                            업무 일지 등록 시 자동으로 추가됩니다. 필요 시 직접 수정하거나 추가할 수 있습니다.
+                        </p>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">특이사항 및 설명</label>
                         <textarea 
@@ -318,7 +422,7 @@ const CourseDetail: React.FC = () => {
                     </div>
                 </div>
                 
-                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3 shrink-0">
                     <button 
                         onClick={() => setIsEditModalOpen(false)}
                         className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"

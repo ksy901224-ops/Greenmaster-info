@@ -1,6 +1,7 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person } from '../types';
-import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE } from '../constants';
+import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel } from '../types';
+import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS } from '../constants';
 
 interface AppContextType {
   user: UserProfile | null;
@@ -13,13 +14,16 @@ interface AppContextType {
   logs: LogEntry[];
   courses: GolfCourse[];
   people: Person[];
+  externalEvents: ExternalEvent[];
   addLog: (log: LogEntry) => void;
   updateLog: (log: LogEntry) => void;
   deleteLog: (id: string) => void;
   addCourse: (course: GolfCourse) => void;
   updateCourse: (course: GolfCourse) => void;
+  deleteCourse: (id: string) => void; 
   addPerson: (person: Person) => void;
   updatePerson: (person: Person) => void;
+  addExternalEvent: (event: ExternalEvent) => void;
   refreshLogs: () => void;
   isSimulatedLive: boolean;
 }
@@ -135,6 +139,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const savedPeople = localStorage.getItem('greenmaster_people');
     return savedPeople ? JSON.parse(savedPeople) : MOCK_PEOPLE;
   });
+
+  // Initialize external events from localStorage or fallback to MOCK_EXTERNAL_EVENTS
+  const [externalEvents, setExternalEvents] = useState<ExternalEvent[]>(() => {
+    const savedEvents = localStorage.getItem('greenmaster_events');
+    return savedEvents ? JSON.parse(savedEvents) : MOCK_EXTERNAL_EVENTS;
+  });
   
   const [isSimulatedLive] = useState(true);
 
@@ -153,6 +163,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     localStorage.setItem('greenmaster_people', JSON.stringify(people));
   }, [people]);
 
+  // Persist events to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('greenmaster_events', JSON.stringify(externalEvents));
+  }, [externalEvents]);
+
   const addCourse = (newCourse: GolfCourse) => {
     setCourses(prev => {
       // Check for duplicates (normalize names by removing spaces)
@@ -170,32 +185,100 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setCourses(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
   };
 
+  const deleteCourse = (id: string) => {
+    setCourses(prev => prev.filter(c => c.id !== id));
+  };
+
   const addPerson = (newPerson: Person) => {
     setPeople(prev => [...prev, newPerson]);
   };
 
   const updatePerson = (updatedPerson: Person) => {
-    setPeople(prev => prev.map(p => p.id === updatedPerson.id ? updatedPerson : p));
+    setPeople(prev => {
+      // Find the existing person to compare
+      const existingPerson = prev.find(p => p.id === updatedPerson.id);
+      
+      // If the course has changed, move the old current info to history
+      if (existingPerson && existingPerson.currentCourseId !== updatedPerson.currentCourseId) {
+        // If they were previously assigned to a course (not unemployed)
+        if (existingPerson.currentCourseId) {
+           const oldCourse = courses.find(c => c.id === existingPerson.currentCourseId);
+           const newHistoryRecord: CareerRecord = {
+             courseId: existingPerson.currentCourseId,
+             courseName: oldCourse?.name || '알 수 없음',
+             role: existingPerson.currentRole,
+             startDate: existingPerson.currentRoleStartDate || '날짜 미상',
+             endDate: new Date().toISOString().split('T')[0], // Today as end date
+             description: '시스템 자동 이력 전환'
+           };
+           
+           // Apply history update to the incoming updatedPerson object
+           updatedPerson.careers = [...(existingPerson.careers || []), newHistoryRecord];
+           
+           // If the user didn't manually set a new start date, default to today
+           if (updatedPerson.currentRoleStartDate === existingPerson.currentRoleStartDate) {
+              updatedPerson.currentRoleStartDate = new Date().toISOString().split('T')[0];
+           }
+        }
+      }
+
+      return prev.map(p => p.id === updatedPerson.id ? updatedPerson : p);
+    });
   };
 
   const addLog = (newLog: LogEntry) => {
-    // Robust Course Name association
+    // 1. Resolve Course Name
     let resolvedCourseName = newLog.courseName;
-    
-    // If courseName is missing but we have an ID, try to find it
     if ((!resolvedCourseName || resolvedCourseName === '미지정') && newLog.courseId) {
          const found = courses.find(c => c.id === newLog.courseId);
          if (found) resolvedCourseName = found.name;
     }
-
-    // If we still don't have a name, default to '미지정'
     if (!resolvedCourseName) resolvedCourseName = '미지정';
 
     const processedLog = {
       ...newLog,
       courseName: resolvedCourseName
     };
+    
+    // 2. Update Logs State
     setLogs(prevLogs => [processedLog, ...prevLogs]);
+
+    // 3. AUTO-UPDATE: Golf Course History (Issues)
+    if (newLog.courseId) {
+      setCourses(prevCourses => prevCourses.map(course => {
+        if (course.id === newLog.courseId) {
+          // Format: "[YYYY-MM-DD] Title (Dept)"
+          const newIssue = `[${newLog.date}] ${newLog.title} (${newLog.department})`;
+          const updatedIssues = [newIssue, ...(course.issues || [])];
+          return { ...course, issues: updatedIssues };
+        }
+        return course;
+      }));
+    }
+
+    // 4. AUTO-UPDATE: Person (If Contact Person is found and new)
+    if (newLog.contactPerson && newLog.contactPerson.trim().length > 1) {
+        // Robust check for duplicates (ignore whitespace/case)
+        const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+        const targetName = normalize(newLog.contactPerson);
+        
+        const exists = people.some(p => normalize(p.name) === targetName);
+        
+        if (!exists) {
+            const autoPerson: Person = {
+                id: `auto-person-${Date.now()}`,
+                name: newLog.contactPerson.trim(),
+                phone: '',
+                currentRole: '담당자 (자동등록)',
+                currentRoleStartDate: newLog.date,
+                currentCourseId: newLog.courseId || '',
+                affinity: AffinityLevel.NEUTRAL,
+                notes: `업무 일지 "${newLog.title}"에서 자동 추출되어 등록됨.`,
+                careers: []
+            };
+            setPeople(prev => [...prev, autoPerson]);
+        }
+    }
   };
 
   const updateLog = (updatedLog: LogEntry) => {
@@ -206,36 +289,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setLogs(prevLogs => prevLogs.filter(log => log.id !== id));
   };
 
+  const addExternalEvent = (event: ExternalEvent) => {
+    setExternalEvents(prev => [...prev, event]);
+  };
+
   const refreshLogs = () => {
     const savedLogs = localStorage.getItem('greenmaster_logs');
-    if (savedLogs) {
-        setLogs(JSON.parse(savedLogs));
-    }
+    if (savedLogs) setLogs(JSON.parse(savedLogs));
+    
     const savedCourses = localStorage.getItem('greenmaster_courses');
-    if (savedCourses) {
-        setCourses(JSON.parse(savedCourses));
-    }
+    if (savedCourses) setCourses(JSON.parse(savedCourses));
+    
     const savedPeople = localStorage.getItem('greenmaster_people');
-    if (savedPeople) {
-        setPeople(JSON.parse(savedPeople));
-    }
+    if (savedPeople) setPeople(JSON.parse(savedPeople));
+
+    const savedEvents = localStorage.getItem('greenmaster_events');
+    if (savedEvents) setExternalEvents(JSON.parse(savedEvents));
   };
 
   // Simulate "Other people inputting data" (Shared View Simulation)
   useEffect(() => {
     if (!isSimulatedLive) return;
 
-    // Randomly inject a log from a "colleague" every 60-120 seconds to show "Shared" aspect
     const interval = setInterval(() => {
       const randomChance = Math.random();
       if (randomChance > 0.7) { // 30% chance every interval
         const mockAuthors = ['김대리', '이과장', '박팀장', '최이사'];
         const randomAuthor = mockAuthors[Math.floor(Math.random() * mockAuthors.length)];
-        
-        // Find a random course to attach to
         const randomCourse = courses[Math.floor(Math.random() * courses.length)] || courses[0];
 
-        // Only add if there are courses
         if (randomCourse) {
             const newMockLog: LogEntry = {
             id: `auto-${Date.now()}`,
@@ -268,13 +350,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         logs, 
         courses, 
         people,
+        externalEvents,
         addLog, 
         updateLog, 
         deleteLog, 
         addCourse, 
         updateCourse,
+        deleteCourse,
         addPerson,
         updatePerson,
+        addExternalEvent,
         refreshLogs, 
         isSimulatedLive 
     }}>

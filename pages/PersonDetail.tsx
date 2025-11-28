@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle } from 'lucide-react';
-import { AffinityLevel, Person } from '../types';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, Calendar } from 'lucide-react';
+import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 const PersonDetail: React.FC = () => {
@@ -54,6 +55,37 @@ const PersonDetail: React.FC = () => {
       }
   };
 
+  // Helper for Career Management in Edit Mode
+  const addCareerToForm = () => {
+    if (editForm) {
+        const newCareer: CareerRecord = {
+            courseId: '',
+            courseName: '',
+            role: '',
+            startDate: '',
+            endDate: '',
+            description: ''
+        };
+        setEditForm({...editForm, careers: [...editForm.careers, newCareer]});
+    }
+  };
+
+  const removeCareerFromForm = (index: number) => {
+    if (editForm) {
+        const newCareers = [...editForm.careers];
+        newCareers.splice(index, 1);
+        setEditForm({...editForm, careers: newCareers});
+    }
+  };
+
+  const updateCareerField = (index: number, field: keyof CareerRecord, value: string) => {
+      if (editForm) {
+          const newCareers = [...editForm.careers];
+          newCareers[index] = { ...newCareers[index], [field]: value };
+          setEditForm({...editForm, careers: newCareers});
+      }
+  };
+
   const saveEdit = () => {
       if (editForm) {
           updatePerson(editForm);
@@ -88,7 +120,10 @@ const PersonDetail: React.FC = () => {
             </div>
             
             <h1 className="text-2xl font-bold text-slate-900">{person.name}</h1>
-            <p className="text-slate-600 font-medium mb-4">{person.currentRole} @ {currentCourse?.name || '소속 없음'}</p>
+            <p className="text-slate-600 font-medium mb-4 flex items-center">
+                {person.currentRole} @ {currentCourse?.name || '소속 없음'} 
+                {person.currentRoleStartDate && <span className="ml-2 text-xs font-normal bg-slate-100 px-2 py-0.5 rounded text-slate-500">(입사: {person.currentRoleStartDate})</span>}
+            </p>
             
             <div className="flex flex-col space-y-2 text-sm text-slate-500">
                 <div className="flex items-center">
@@ -126,7 +161,9 @@ const PersonDetail: React.FC = () => {
                 <div className="bg-brand-50 border border-brand-100 rounded-lg p-4 shadow-sm">
                     <h4 className="font-bold text-slate-900 text-md">{currentCourse?.name || '현재 소속'}</h4>
                     <p className="text-brand-600 font-medium text-sm">{person.currentRole}</p>
-                    <p className="text-slate-400 text-xs mt-1">현재 재직 중</p>
+                    <p className="text-slate-400 text-xs mt-1">
+                        {person.currentRoleStartDate ? `${person.currentRoleStartDate} ~ 현재` : '현재 재직 중'}
+                    </p>
                 </div>
             </div>
 
@@ -188,15 +225,15 @@ const PersonDetail: React.FC = () => {
        {/* Edit Modal */}
        {isEditModalOpen && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <h3 className="font-bold text-lg text-slate-900">인물 정보 수정</h3>
                     <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
                         <X size={24} />
                     </button>
                 </div>
                 
-                <div className="p-6 space-y-4 overflow-y-auto max-h-[70vh]">
+                <div className="p-6 space-y-4 overflow-y-auto">
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">이름</label>
                         <input 
@@ -215,27 +252,39 @@ const PersonDetail: React.FC = () => {
                             onChange={(e) => handleEditChange('phone', e.target.value)}
                         />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                             <label className="block text-xs font-bold text-slate-700 mb-1.5">소속 골프장</label>
-                             <select 
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                value={editForm.currentCourseId || ''}
-                                onChange={(e) => handleEditChange('currentCourseId', e.target.value)}
-                             >
-                                <option value="">소속 없음</option>
-                                {courses.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                             </select>
+                    <div className="bg-brand-50 p-4 rounded-lg border border-brand-100">
+                        <h4 className="text-xs font-bold text-brand-800 mb-3 border-b border-brand-200 pb-1">현재 근무 정보</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">소속 골프장</label>
+                                <select 
+                                    className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                    value={editForm.currentCourseId || ''}
+                                    onChange={(e) => handleEditChange('currentCourseId', e.target.value)}
+                                >
+                                    <option value="">소속 없음</option>
+                                    {courses.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-700 mb-1.5">직책</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                    value={editForm.currentRole}
+                                    onChange={(e) => handleEditChange('currentRole', e.target.value)}
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1.5">직책</label>
+                        <div className="mt-3">
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">입사일</label>
                             <input 
-                                type="text" 
+                                type="date"
                                 className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                value={editForm.currentRole}
-                                onChange={(e) => handleEditChange('currentRole', e.target.value)}
+                                value={editForm.currentRoleStartDate || ''}
+                                onChange={(e) => handleEditChange('currentRoleStartDate', e.target.value)}
                             />
                         </div>
                     </div>
@@ -269,15 +318,71 @@ const PersonDetail: React.FC = () => {
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">특징 및 메모</label>
                         <textarea 
-                            rows={4}
+                            rows={3}
                             className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
                             value={editForm.notes}
                             onChange={(e) => handleEditChange('notes', e.target.value)}
                         />
                     </div>
+
+                    {/* Career History Edit Section */}
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
+                             <h4 className="text-xs font-bold text-slate-700">이력 관리 (직접 수정)</h4>
+                             <button type="button" onClick={addCareerToForm} className="text-[10px] flex items-center bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">
+                                <Plus size={10} className="mr-1"/> 추가
+                             </button>
+                        </div>
+                        {editForm.careers.map((career, idx) => (
+                            <div key={idx} className="mb-4 pb-4 border-b border-slate-200 last:border-0 last:pb-0 relative group">
+                                <button 
+                                    onClick={() => removeCareerFromForm(idx)}
+                                    className="absolute right-0 top-0 text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <input 
+                                        type="text" 
+                                        placeholder="골프장 이름"
+                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
+                                        value={career.courseName}
+                                        onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)}
+                                    />
+                                     <input 
+                                        type="text" 
+                                        placeholder="직책"
+                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
+                                        value={career.role}
+                                        onChange={(e) => updateCareerField(idx, 'role', e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex space-x-2 items-center">
+                                    <input 
+                                        type="text" 
+                                        placeholder="시작일 (YYYY-MM)"
+                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 w-24 py-1"
+                                        value={career.startDate}
+                                        onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)}
+                                    />
+                                    <span className="text-slate-400 text-xs">~</span>
+                                    <input 
+                                        type="text" 
+                                        placeholder="종료일"
+                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 w-24 py-1"
+                                        value={career.endDate || ''}
+                                        onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                        {editForm.careers.length === 0 && (
+                            <div className="text-center text-xs text-slate-400 py-2">등록된 과거 이력이 없습니다.</div>
+                        )}
+                    </div>
                 </div>
                 
-                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3 shrink-0">
                     <button 
                         onClick={() => setIsEditModalOpen(false)}
                         className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"

@@ -1,3 +1,4 @@
+
 export enum Department {
   SALES = '영업',
   RESEARCH = '연구소', // 임상시험 등
@@ -47,6 +48,7 @@ export interface GolfCourse {
   description: string; // Basic spec info
   lat?: number;
   lng?: number;
+  issues?: string[]; // Added: History of major issues derived from logs
 }
 
 export interface CareerRecord {
@@ -71,6 +73,7 @@ export interface Person {
   name: string;
   phone: string;
   currentRole: string;
+  currentRoleStartDate?: string; // When they started this specific role
   currentCourseId?: string; // If currently working at a known course
   careers: CareerRecord[];
   affinity: AffinityLevel;
@@ -88,13 +91,14 @@ export interface LogEntry {
   content: string;
   imageUrls?: string[];
   tags?: string[]; // e.g., "issue", "urgent", "contract"
+  contactPerson?: string; // Added to help tracking people
 }
 
 export interface ExternalEvent {
   id: string;
   title: string;
   date: string;
-  source: 'Google' | 'Outlook';
+  source: 'Google' | 'Outlook' | 'Manual'; // Added Manual
   time?: string;
   location?: string;
 }

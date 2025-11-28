@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { LogEntry, GolfCourse, Person, GrassType, CourseType } from '../types';
 
@@ -155,6 +156,8 @@ export interface AnalyzedLogData {
   contact_person?: string;
   delivery_date?: string;
   key_issues?: string[]; // New field for specific issues
+  participants?: string[]; // New: People extracted
+  weather?: string; // New: Weather info if present
   course_info?: { // New field for auto-creating courses
     address?: string;
     holes?: number;
@@ -180,121 +183,151 @@ const validateAnalyzedData = (data: any): AnalyzedLogData => {
     contact_person: typeof data.contact_person === 'string' ? data.contact_person : undefined,
     delivery_date: typeof data.delivery_date === 'string' ? data.delivery_date : undefined,
     key_issues: Array.isArray(data.key_issues) ? data.key_issues : [],
+    participants: Array.isArray(data.participants) ? data.participants : [],
+    weather: typeof data.weather === 'string' ? data.weather : undefined,
     course_info: data.course_info || {},
   };
 };
 
 export const analyzeDocument = async (
-  base64Data: string, 
-  mimeType: string,
+  inputData: { base64Data?: string, mimeType?: string, textData?: string }, 
   existingCourseNames: string[] = []
-): Promise<AnalyzedLogData | null> => {
+): Promise<AnalyzedLogData[] | null> => {
   if (!process.env.API_KEY) {
     throw new Error("API Key가 설정되지 않았습니다. 시스템 관리자에게 문의하세요.");
   }
 
-  // 1. Input Validation: Check for valid mime types
-  const validMimeTypes = [
-    'application/pdf', 
-    'image/jpeg', 
-    'image/png', 
-    'image/webp', 
-    'image/heic', 
-    'image/heif'
-  ];
-  
-  if (!validMimeTypes.includes(mimeType)) {
-    throw new Error(`지원하지 않는 파일 형식(${mimeType})입니다. PDF 또는 이미지 파일(JPG, PNG, WEBP, HEIC)만 업로드 가능합니다.`);
+  // Construct content parts based on input type
+  const contentParts: any[] = [];
+
+  if (inputData.base64Data && inputData.mimeType) {
+    // 1. Input Validation: Check for valid mime types for files
+    const validMimeTypes = [
+      'application/pdf', 
+      'image/jpeg', 
+      'image/png', 
+      'image/webp', 
+      'image/heic', 
+      'image/heif'
+    ];
+    
+    if (!validMimeTypes.includes(inputData.mimeType)) {
+      throw new Error(`지원하지 않는 파일 형식(${inputData.mimeType})입니다. PDF 또는 이미지 파일(JPG, PNG, WEBP, HEIC)만 업로드 가능합니다.`);
+    }
+
+    // 2. Strict Size Check (Approximate from Base64 length)
+    const approxSizeInBytes = (inputData.base64Data.length * 3) / 4;
+    const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+
+    if (approxSizeInBytes > MAX_SIZE_BYTES) {
+       throw new Error(`파일 크기가 10MB를 초과했습니다 (${(approxSizeInBytes / (1024*1024)).toFixed(1)}MB). 더 작은 파일을 업로드해주세요.`);
+    }
+
+    contentParts.push({
+      inlineData: {
+        mimeType: inputData.mimeType,
+        data: inputData.base64Data
+      }
+    });
+  } else if (inputData.textData) {
+    // Handling direct text input (Copy-paste)
+    contentParts.push({
+      text: `[입력된 텍스트 데이터 (엑셀 복사, 이메일, 채팅 로그 등)]\n${inputData.textData}`
+    });
+  } else {
+    throw new Error("분석할 데이터(파일 또는 텍스트)가 없습니다.");
   }
 
-  // 2. Strict Size Check (Approximate from Base64 length)
-  const approxSizeInBytes = (base64Data.length * 3) / 4;
-  const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+  // Add the prompt instruction
+  contentParts.push({
+    text: `
+      이 데이터는 골프장 관리, 건설 공사, 영업 일지, 또는 메신저 대화 내용입니다. 
+      입력된 데이터 형식(PDF, 이미지, 텍스트)에 맞춰 내용을 심층 분석하여 JSON **배열(Array)** 형식으로 추출해주세요.
 
-  if (approxSizeInBytes > MAX_SIZE_BYTES) {
-     throw new Error(`파일 크기가 10MB를 초과했습니다 (${(approxSizeInBytes / (1024*1024)).toFixed(1)}MB). 더 작은 파일을 업로드해주세요.`);
-  }
+      [중요: 다중 골프장 분리 규칙]
+      - **만약 2개 이상의 골프장 이야기가 섞여 있다면, 반드시 내용을 분리하여 각각 별도의 객체(Object)로 만드세요.**
+      - 예: "A골프장은 배수공사 완료했고, B골프장은 견적 미팅함" -> [{courseName: "A", ...}, {courseName: "B", ...}]
+      - 각 골프장별로 이슈와 상세 내용을 독립적으로 분석해야 합니다. 뭉뚱그려서 요약하지 마세요.
+
+      [골프장 식별 및 신규 생성 규칙 (Entity Resolution & Creation)]
+      현재 데이터베이스에 등록된 골프장 목록: [${existingCourseNames.join(', ')}]
+      
+      1. courseName: 문서에 언급된 골프장 이름을 추출하세요.
+         - **매칭 우선**: 문서의 골프장 이름이 위 목록 중 하나와 유사하다면(예: '스카이뷰' vs '스카이뷰 CC'), **반드시 목록에 있는 정확한 이름을 사용**하세요.
+         - **신규 생성**: 목록에 없는 새로운 골프장이라면, 문서에 나온 이름을 그대로 사용하세요. (예: '베어크리크 포천')
+
+      [기본 정보 추출]
+      2. title: 해당 골프장 관련 내용을 요약한 구체적인 제목.
+      3. content: 해당 골프장 관련 업무 내용, 현장 상황, 결정 사항 요약.
+      4. date: 날짜 (YYYY-MM-DD). 없으면 오늘.
+      
+      [스마트 분류 - 부서 및 태그 (Smart Defaults)]
+      5. department: ('영업', '연구소', '건설사업', '컨설팅', '관리') 중 하나를 문맥에 맞게 추론하세요. 
+         - **명확하지 않은 경우**: '영업'을 기본값으로 사용하지 말고, 내용에 '비용', '계약'이 있으면 '영업', '시공', '공사'가 있으면 '건설사업', '자문', '조언'이 있으면 '컨설팅'으로 지능적으로 판단하세요. 도저히 알 수 없으면 '영업'으로 하되, '관리'나 '기타' 가능성도 고려하세요.
+      6. tags: 상황별 구체적 태그 5~7개. **명확한 태그가 없다면 본문의 핵심 명사들을 태그로 추출하세요.**
+
+      [상세 정보 추출 (Structured Data Extraction)]
+      7. project_name: 구체적인 프로젝트/공사명 (없으면 null).
+      8. contact_person: 해당 건의 핵심 담당자 (없으면 null).
+      9. delivery_date: 마감 기한 (YYYY-MM-DD, 없으면 null).
+      10. participants: 회의 참석자나 관련 인물 이름 목록 (Array).
+      11. weather: 날씨 정보가 있다면 추출 (없으면 null).
+
+      [심층 분석 및 인사이트 (Deep Insights)]
+      12. key_issues: **해당 골프장에 특화된** 핵심 이슈 3~5가지.
+          - 일반적인 내용은 지양하고, 구체적인 수치, 문제점, 경쟁사 동향 등을 심층적으로 추출하세요.
+          - **Risk Assessment**: 잠재적 리스크 (안전 사고, 공기 지연, 예산 초과, 민원 발생 가능성 등).
+          - **Competitor Intelligence**: 경쟁사 활동 감지 (타사 접촉, 견적 비교 정황, 경쟁 제품 언급).
+
+      [신규 골프장 정보 자동 등록 (Auto-Registration Info)]
+      13. course_info: **만약 위에서 식별한 courseName이 기존 목록에 없는 새로운 골프장인 경우에만** 아래 정보를 추출하세요. 기존 골프장이라면 빈 객체({})로 반환.
+          - address: 주소 (시/군/구 단위).
+          - holes: 홀 수 (추정 불가시 18).
+          - type: (회원제, 대중제). 추정 불가시 '대중제'.
+
+      출력은 반드시 JSON 배열([]) 형식이어야 합니다.
+    `
+  });
 
   try {
     const response = await retryOperation(async () => {
       return await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: {
-          parts: [
-            {
-              inlineData: {
-                mimeType: mimeType,
-                data: base64Data
-              }
-            },
-            {
-              text: `
-                이 문서는 골프장 관리, 건설 공사, 또는 영업 관련 업무 일지 및 보고서입니다. 
-                내용을 심층 분석하여 다음 정보를 JSON 형식으로 추출해주세요.
-
-                [골프장 식별 및 신규 생성 규칙 (Entity Resolution & Creation)]
-                현재 데이터베이스에 등록된 골프장 목록: [${existingCourseNames.join(', ')}]
-                
-                1. courseName: 문서에 언급된 골프장 이름을 추출하세요.
-                   - **매칭 우선**: 문서의 골프장 이름이 위 목록 중 하나와 유사하다면(예: '스카이뷰' vs '스카이뷰 CC'), **반드시 목록에 있는 정확한 이름을 사용**하세요.
-                   - **신규 생성**: 목록에 없는 새로운 골프장이라면, 문서에 나온 이름을 그대로 사용하세요. (예: '베어크리크 포천')
-
-                [기본 정보 추출]
-                2. title: 문서의 핵심 내용을 요약한 간결한 제목.
-                3. content: 주요 업무 내용, 현장 상황, 이슈, 결정 사항 요약.
-                4. date: 날짜 (YYYY-MM-DD). 없으면 오늘.
-                5. department: (영업, 연구소, 건설사업, 컨설팅, 관리) 중 하나.
-
-                [상세 정보 추출 (Structured Data Extraction)]
-                6. project_name: 구체적인 프로젝트/공사명 (없으면 null).
-                7. contact_person: 핵심 담당자 (없으면 null).
-                8. delivery_date: 마감 기한 (YYYY-MM-DD, 없으면 null).
-
-                [심층 분석 및 인사이트 (Deep Insights)]
-                9. tags: 상황별 구체적 태그 5~7개.
-                10. key_issues: 다음 관점을 포함한 핵심 이슈 3~5가지.
-                    - **Risk Assessment**: 잠재적 리스크 (안전 사고, 공기 지연, 예산 초과, 민원 발생 가능성 등).
-                    - **Competitor Intelligence**: 경쟁사 활동 감지 (타사 접촉, 견적 비교 정황, 경쟁 제품 언급).
-                    - **Stakeholder Analysis**: 이해관계자 영향력 (의사결정권자의 성향, 내부 정치 역학).
-
-                [신규 골프장 정보 자동 등록 (Auto-Registration Info)]
-                11. course_info: **만약 위에서 식별한 courseName이 기존 목록에 없는 새로운 골프장인 경우에만** 아래 정보를 추출하세요. 기존 골프장이라면 빈 객체({})로 반환.
-                    - address: 주소 (시/군/구 단위).
-                    - holes: 홀 수 (추정 불가시 18).
-                    - type: (회원제, 대중제). 추정 불가시 '대중제'.
-
-                출력은 오직 JSON 형식이어야 합니다.
-              `
-            }
-          ]
+          parts: contentParts
         },
         config: {
           responseMimeType: "application/json",
           responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING, description: "문서 제목" },
-              content: { type: Type.STRING, description: "상세 내용 요약" },
-              date: { type: Type.STRING, description: "날짜 (YYYY-MM-DD)" },
-              department: { type: Type.STRING, description: "관련 부서" },
-              courseName: { type: Type.STRING, description: "골프장 이름 (매칭된 표준명 또는 신규명)" },
-              project_name: { type: Type.STRING, description: "프로젝트명", nullable: true },
-              contact_person: { type: Type.STRING, description: "담당자", nullable: true },
-              delivery_date: { type: Type.STRING, description: "기한", nullable: true },
-              tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "태그 목록" },
-              key_issues: { type: Type.ARRAY, items: { type: Type.STRING }, description: "핵심 이슈 및 리스크" },
-              course_info: {
+            type: Type.ARRAY, // Changed to ARRAY to support multiple courses
+            items: {
                 type: Type.OBJECT,
                 properties: {
-                    address: { type: Type.STRING, nullable: true },
-                    holes: { type: Type.NUMBER, nullable: true },
-                    type: { type: Type.STRING, nullable: true }
+                title: { type: Type.STRING, description: "문서 제목" },
+                content: { type: Type.STRING, description: "상세 내용 요약" },
+                date: { type: Type.STRING, description: "날짜 (YYYY-MM-DD)" },
+                department: { type: Type.STRING, description: "관련 부서" },
+                courseName: { type: Type.STRING, description: "골프장 이름 (매칭된 표준명 또는 신규명)" },
+                project_name: { type: Type.STRING, description: "프로젝트명", nullable: true },
+                contact_person: { type: Type.STRING, description: "담당자", nullable: true },
+                delivery_date: { type: Type.STRING, description: "기한", nullable: true },
+                participants: { type: Type.ARRAY, items: { type: Type.STRING }, description: "참석자/관련자" },
+                weather: { type: Type.STRING, description: "날씨", nullable: true },
+                tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "태그 목록" },
+                key_issues: { type: Type.ARRAY, items: { type: Type.STRING }, description: "핵심 이슈 및 리스크" },
+                course_info: {
+                    type: Type.OBJECT,
+                    properties: {
+                        address: { type: Type.STRING, nullable: true },
+                        holes: { type: Type.NUMBER, nullable: true },
+                        type: { type: Type.STRING, nullable: true }
+                    },
+                    nullable: true,
+                    description: "신규 골프장일 경우에만 채워짐"
+                }
                 },
-                nullable: true,
-                description: "신규 골프장일 경우에만 채워짐"
-              }
-            },
-            required: ["title", "content", "date", "department", "courseName", "tags"]
+                required: ["title", "content", "date", "department", "courseName", "tags"]
+            }
           }
         }
       });
@@ -317,7 +350,14 @@ export const analyzeDocument = async (
       throw new Error("AI 응답 형식이 올바르지 않습니다.");
     }
 
-    return validateAnalyzedData(parsedData);
+    if (Array.isArray(parsedData)) {
+        return parsedData.map(validateAnalyzedData);
+    } else if (typeof parsedData === 'object') {
+        // Fallback if AI returns single object despite prompt
+        return [validateAnalyzedData(parsedData)];
+    } else {
+        throw new Error("AI 응답 데이터 형식이 맞지 않습니다.");
+    }
 
   } catch (error: any) {
     const msg = error.message || "";
@@ -345,17 +385,25 @@ export const getCourseDetailsFromAI = async (courseName: string): Promise<AICour
     throw new Error("API Key가 필요합니다.");
   }
 
+  // Enhanced prompt to simulate Naver Maps lookup
   const prompt = `
-    "${courseName}" 골프장에 대한 정보를 찾아서 다음 JSON 형식으로 알려줘.
-    한국의 골프장 정보를 기반으로 정확하게 작성해줘. 정보가 확실하지 않으면 가장 일반적인 값을 추정해서 넣어줘.
+    당신은 한국 골프장 데이터베이스 전문가입니다. 
+    "${courseName}"라는 골프장을 네이버 지도(Naver Maps)나 공식 웹사이트에서 검색한다고 가정하고, 다음 정보를 정확하게 추출해주세요.
 
-    Response Schema:
+    요구사항:
+    1. **주소**: 반드시 '도로명 주소'를 우선으로 찾아주세요. (예: 경기도 여주시 북내면 여양1로 500)
+    2. **홀 수**: 총 홀 수(Holes)를 정확히 기재하세요. (18, 27, 36 등)
+    3. **운영 형태**: '회원제'인지 '대중제(퍼블릭)'인지 구분하세요.
+    4. **잔디 종류**: 한국잔디(중지/금잔디)인지 양잔디(벤트그라스/켄터키블루그라스)인지 확인하고, 모르면 '혼합'으로 하세요.
+    5. **설명**: 골프장의 지형적 특징(산악형, 평지형, 링크스 등), 난이도, 주요 이슈를 2문장 내외로 요약하세요.
+
+    Response Schema (JSON):
     {
-      "address": "도로명 주소 (예: 경기도 여주시 ...)",
-      "holes": 숫자 (예: 18, 27, 36),
+      "address": "도로명 주소 (필수)",
+      "holes": 숫자,
       "type": "회원제" 또는 "대중제",
       "grassType": "한국잔디", "벤트그라스", "캔터키블루그라스", 또는 "혼합",
-      "description": "골프장의 특징, 난이도, 최근 이슈 등을 2문장으로 요약"
+      "description": "설명 텍스트"
     }
   `;
 

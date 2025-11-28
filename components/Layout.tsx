@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, ListChecks } from 'lucide-react';
+import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, ListChecks, LayoutDashboard } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole } from '../types';
 
@@ -24,6 +24,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   if (user?.role === UserRole.ADMIN) {
     navItems.push({ label: 'Admin Todo', path: '/admin-todos', icon: <ListChecks size={20} /> });
+    navItems.push({ label: 'Admin 대시보드', path: '/admin-dashboard', icon: <LayoutDashboard size={20} /> });
   }
 
   const isActive = (path: string) => location.pathname === path;
@@ -54,7 +55,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                   }`}
                 >
                   {item.icon}
-                  <span>{item.label}</span>
+                  <span className="hidden lg:inline">{item.label}</span>
                 </Link>
               ))}
             </nav>
