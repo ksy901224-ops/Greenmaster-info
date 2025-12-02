@@ -17,7 +17,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { label: '홈/대시보드', path: '/', icon: <Home size={20} /> },
     { label: '골프장 찾기', path: '/courses', icon: <MapPin size={20} /> },
-    { label: '인물 검색', path: '/people', icon: <Users size={20} /> },
+    // Removed '인물 검색' (Person Search) as requested
     { label: '정보 등록', path: '/write', icon: <PlusSquare size={20} /> },
     { label: '설정', path: '/settings', icon: <Settings size={20} /> },
   ];

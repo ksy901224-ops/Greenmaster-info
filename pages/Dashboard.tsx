@@ -14,7 +14,7 @@ const Dashboard: React.FC = () => {
   const { logs, courses, people, user } = useApp(); // Use shared logs from context
   
   const [filterDept, setFilterDept] = useState<Department | 'ALL'>('ALL');
-  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'course'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar' | 'course'>('course');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
@@ -235,7 +235,7 @@ const Dashboard: React.FC = () => {
             />
             <Search className="absolute left-3 top-3.5 text-indigo-200" size={20} />
             <button 
-               type="submit"
+               type="submit" 
                disabled={isAiSearching || !aiSearchQuery.trim()}
                className="absolute right-1.5 top-1.5 bottom-1.5 px-4 bg-white text-indigo-700 rounded-md font-bold text-sm hover:bg-indigo-50 transition-colors disabled:opacity-70 flex items-center"
             >

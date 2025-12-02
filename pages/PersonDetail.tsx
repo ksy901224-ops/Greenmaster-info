@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, Calendar, Archive, ArrowRight } from 'lucide-react';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, Calendar, Archive, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -115,9 +115,18 @@ const PersonDetail: React.FC = () => {
       // Auto-Archiving Logic
       if (shouldArchive && originalPerson && originalPerson.currentCourseId) {
           const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || 'Unknown';
+          const newCourseName = courses.find(c => c.id === editForm.currentCourseId)?.name || 'Unknown';
           
-          // Generate a meaningful description for the archived record
-          const changeReason = `[시스템 자동 보관] 직책 변경: ${originalPerson.currentRole} -> ${editForm.currentRole}`;
+          // Generate a detailed description for the archived record
+          const changes = [];
+          if (originalPerson.currentCourseId !== editForm.currentCourseId) {
+            changes.push(`소속(${oldCourseName}→${newCourseName})`);
+          }
+          if (originalPerson.currentRole !== editForm.currentRole) {
+            changes.push(`직책(${originalPerson.currentRole}→${editForm.currentRole})`);
+          }
+
+          const changeReason = `[시스템 자동 보관] 변경사항: ${changes.join(', ')}`;
           
           const archivedRecord: CareerRecord = {
               courseId: originalPerson.currentCourseId,
@@ -134,7 +143,7 @@ const PersonDetail: React.FC = () => {
 
       updatePerson(finalPerson);
       setIsEditModalOpen(false);
-      alert('인물 정보가 수정되었습니다.' + (shouldArchive ? '\n(이전 경력이 자동으로 보관되었습니다)' : ''));
+      alert('인물 정보가 수정되었습니다.' + (shouldArchive ? '\n(이전 경력이 자동으로 과거 이력에 보관되었습니다)' : ''));
   };
 
   return (
@@ -357,13 +366,13 @@ const PersonDetail: React.FC = () => {
                                         경력 자동 보관 알림
                                     </p>
                                     <div className="text-xs text-slate-600 mb-2 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
-                                        <div className="flex justify-between mb-1">
-                                            <span className="text-slate-400">이전:</span>
-                                            <span className="font-medium text-slate-700 truncate ml-2">{originalPerson?.currentRole} @ {courses.find(c=>c.id===originalPerson?.currentCourseId)?.name}</span>
+                                        <div className="flex justify-between mb-1 items-center">
+                                            <span className="text-slate-400 w-8">이전:</span>
+                                            <span className="font-medium text-slate-700 truncate flex-1 text-right">{originalPerson?.currentRole} @ {courses.find(c=>c.id===originalPerson?.currentCourseId)?.name}</span>
                                         </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400">변경:</span>
-                                            <span className="font-bold text-brand-700 truncate ml-2">{editForm?.currentRole} @ {courses.find(c=>c.id===editForm?.currentCourseId)?.name}</span>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-slate-400 w-8">변경:</span>
+                                            <span className="font-bold text-brand-700 truncate flex-1 text-right">{editForm?.currentRole} @ {courses.find(c=>c.id===editForm?.currentCourseId)?.name}</span>
                                         </div>
                                     </div>
                                     <label className="flex items-center space-x-2 cursor-pointer select-none">
@@ -426,6 +435,26 @@ const PersonDetail: React.FC = () => {
                                 <Plus size={10} className="mr-1"/> 직접 추가
                              </button>
                         </div>
+                        
+                        {/* Auto Archive Preview */}
+                        {shouldArchive && originalPerson?.currentCourseId && (
+                            <div className="mb-4 bg-brand-50/50 border border-brand-200 border-dashed rounded-lg p-3 relative animate-in fade-in slide-in-from-top-2">
+                                <div className="absolute top-0 right-0 bg-brand-100 text-brand-600 px-2 py-0.5 rounded-bl text-[10px] font-bold shadow-sm flex items-center">
+                                    <Sparkles size={10} className="mr-1"/> 자동 생성 예정
+                                </div>
+                                <div className="flex items-center mb-2">
+                                     <div className="w-1.5 h-1.5 rounded-full bg-brand-500 mr-2"></div>
+                                     <h5 className="text-xs font-bold text-brand-700">과거 이력으로 저장될 항목 (미리보기)</h5>
+                                </div>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600 pl-3.5">
+                                     <div><span className="text-slate-400 text-[10px]">골프장:</span> {courses.find(c => c.id === originalPerson.currentCourseId)?.name}</div>
+                                     <div><span className="text-slate-400 text-[10px]">직책:</span> {originalPerson.currentRole}</div>
+                                     <div className="col-span-2"><span className="text-slate-400 text-[10px]">기간:</span> {originalPerson.currentRoleStartDate || '미상'} ~ {new Date().toISOString().split('T')[0]}</div>
+                                     <div className="col-span-2 text-brand-600 italic mt-1 text-[10px]">"{`[시스템 자동 보관] 변경사항 반영됨`}"</div>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="space-y-4">
                             {editForm.careers.map((career, idx) => (
                                 <div key={idx} className="relative bg-white p-3 rounded border border-slate-200 hover:border-slate-300 shadow-sm group transition-all">
@@ -490,7 +519,7 @@ const PersonDetail: React.FC = () => {
                                     </div>
                                 </div>
                             ))}
-                            {editForm.careers.length === 0 && (
+                            {editForm.careers.length === 0 && !shouldArchive && (
                                 <div className="text-center text-xs text-slate-400 py-4 bg-slate-50/50 rounded border border-dashed border-slate-200">
                                     등록된 과거 이력이 없습니다.
                                 </div>

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { LogEntry, Department, UserRole } from '../types';
 import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
@@ -99,20 +100,20 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
            
            {/* Edit/Delete Actions - Always visible, Restricted to ADMIN only */}
            {isAdmin && (
-             <div className="flex space-x-1 pl-2 border-l border-slate-100">
+             <div className="flex items-center space-x-1 pl-2 border-l border-slate-100 ml-2">
                <button 
                  onClick={handleEdit} 
                  className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" 
                  title="수정"
                >
-                 <Edit2 size={14} />
+                 <Edit2 size={16} />
                </button>
                <button 
                  onClick={handleDelete} 
                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" 
                  title="삭제"
                >
-                 <Trash2 size={14} />
+                 <Trash2 size={16} />
                </button>
              </div>
            )}
@@ -179,10 +180,10 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
             <button 
                 onClick={handleAnalyze}
                 disabled={isLoading}
-                className={`flex items-center text-xs font-bold px-2 py-1 rounded-full border transition-all ${
+                className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-all ${
                     showInsight 
                     ? 'bg-brand-100 text-brand-700 border-brand-200 ring-1 ring-brand-200' 
-                    : 'bg-white text-slate-500 border-slate-200 hover:bg-brand-50 hover:text-brand-600 hover:border-brand-200'
+                    : 'bg-white text-slate-500 border-slate-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200'
                 }`}
                 title="이 업무 기록의 맥락과 리스크를 AI로 분석합니다"
             >

@@ -5,7 +5,6 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import CourseList from './pages/CourseList';
 import CourseDetail from './pages/CourseDetail';
-import PeopleList from './pages/PeopleList';
 import PersonDetail from './pages/PersonDetail';
 import WriteLog from './pages/WriteLog';
 import Settings from './pages/Settings';
@@ -27,7 +26,6 @@ const App: React.FC = () => {
             <Route path="/" element={<Dashboard />} />
             <Route path="/courses" element={<CourseList />} />
             <Route path="/courses/:id" element={<CourseDetail />} />
-            <Route path="/people" element={<PeopleList />} />
             <Route path="/people/:id" element={<PersonDetail />} />
             <Route path="/write" element={<WriteLog />} />
             <Route path="/settings" element={<Settings />} />
