@@ -2,8 +2,16 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { LogEntry, GolfCourse, Person, GrassType, CourseType } from '../types';
 
+// Safety check for API Key
+const getApiKey = () => {
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
+  }
+  return '';
+};
+
 // Initialize Gemini client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+const ai = new GoogleGenAI({ apiKey: getApiKey() });
 
 // Helper for retry logic with exponential backoff
 async function retryOperation<T>(
@@ -38,7 +46,8 @@ export const generateCourseSummary = async (
   logs: LogEntry[],
   people: Person[]
 ): Promise<string> => {
-  if (!process.env.API_KEY) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     return "API Key가 설정되지 않아 AI 요약을 사용할 수 없습니다.";
   }
 
@@ -102,7 +111,8 @@ export const generateCourseSummary = async (
 };
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
-  if (!process.env.API_KEY) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     return "API Key가 없어 분석할 수 없습니다.";
   }
 
@@ -195,7 +205,8 @@ export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }, 
   existingCourseNames: string[] = []
 ): Promise<AnalyzedLogData[] | null> => {
-  if (!process.env.API_KEY) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     throw new Error("API Key가 설정되지 않았습니다. 시스템 관리자에게 문의하세요.");
   }
 
@@ -389,7 +400,8 @@ export interface AICourseDetails {
 }
 
 export const getCourseDetailsFromAI = async (courseName: string): Promise<AICourseDetails> => {
-  if (!process.env.API_KEY) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     throw new Error("API Key가 필요합니다.");
   }
 
@@ -485,7 +497,8 @@ export const searchAppWithAI = async (query: string, appContextData: {
   courses: GolfCourse[],
   people: Person[]
 }): Promise<string> => {
-  if (!process.env.API_KEY) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
     throw new Error("API Key가 필요합니다.");
   }
 
@@ -493,9 +506,9 @@ export const searchAppWithAI = async (query: string, appContextData: {
   // Minimizing tokens by selecting only relevant fields could be an optimization,
   // but sending the JSON structure is usually efficient enough for this scale.
   const contextString = JSON.stringify({
-    courses: appContextData.courses.map(c => ({ name: c.name, type: c.type, desc: c.description })),
-    people: appContextData.people.map(p => ({ name: p.name, role: p.currentRole, notes: p.notes })),
-    recent_logs: appContextData.logs.slice(0, 20).map(l => ({ // Limit to recent 20 logs to save context window
+    courses: appContextData.courses.map(c => ({ name: c.name, type: c.type, desc: c.description, issues: c.issues })),
+    people: appContextData.people.map(p => ({ name: p.name, role: p.currentRole, courseId: p.currentCourseId, notes: p.notes })),
+    recent_logs: appContextData.logs.slice(0, 30).map(l => ({ // Limit to recent 30 logs
       date: l.date,
       course: l.courseName,
       title: l.title,
@@ -504,8 +517,8 @@ export const searchAppWithAI = async (query: string, appContextData: {
   });
 
   const prompt = `
-    You are an intelligent internal search engine for a Golf Course Management System.
-    The user is asking a question about their stored data.
+    You are an intelligent internal search engine for a Golf Course Management System (GreenMaster).
+    The user is asking a question about their stored data (Logs, People, Golf Courses).
     
     [User Query]: "${query}"
 
@@ -524,7 +537,7 @@ export const searchAppWithAI = async (query: string, appContextData: {
   try {
     const response = await retryOperation(async () => {
       return await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite', // Using the fast model as requested
+        model: 'gemini-2.5-flash-lite-latest', // Using the fast model as requested
         contents: prompt,
       });
     });

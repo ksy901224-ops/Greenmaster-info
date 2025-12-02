@@ -4,7 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { MOCK_PEOPLE } from '../constants';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary } from '../services/geminiService';
-import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle } from 'lucide-react';
+import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -53,9 +53,31 @@ const CourseDetail: React.FC = () => {
       }
   };
 
+  // Issue Management logic for modal
+  const handleIssueChange = (index: number, val: string) => {
+      if (!editForm || !editForm.issues) return;
+      const newIssues = [...editForm.issues];
+      newIssues[index] = val;
+      setEditForm({ ...editForm, issues: newIssues });
+  };
+
+  const addIssue = () => {
+      if (!editForm) return;
+      setEditForm({ ...editForm, issues: [...(editForm.issues || []), ''] });
+  };
+
+  const removeIssue = (index: number) => {
+      if (!editForm || !editForm.issues) return;
+      const newIssues = [...editForm.issues];
+      newIssues.splice(index, 1);
+      setEditForm({ ...editForm, issues: newIssues });
+  };
+
   const saveEdit = () => {
       if (editForm) {
-          updateCourse(editForm);
+          // Filter out empty issues
+          const cleanedIssues = (editForm.issues || []).filter(i => i.trim() !== '');
+          updateCourse({ ...editForm, issues: cleanedIssues });
           setIsEditModalOpen(false);
           alert('골프장 정보가 수정되었습니다.');
       }
@@ -201,21 +223,21 @@ const CourseDetail: React.FC = () => {
             
             <h3 className="font-bold text-lg mb-4 flex items-center">
                 <History size={18} className="mr-2 text-slate-500"/>
-                연혁 및 주요 이슈 (자동 기록)
+                연혁 및 주요 이슈 (History)
             </h3>
             <div className="space-y-4">
                 {course.issues && course.issues.length > 0 ? (
                     course.issues.map((issue, idx) => (
                         <div key={idx} className="flex">
                             <div className="flex-shrink-0 w-4 h-4 mt-1 mr-3 rounded-full bg-slate-200 border-2 border-white shadow-sm"></div>
-                            <div className="pb-2 border-l-2 border-slate-100 pl-4 -ml-5 pt-0.5">
+                            <div className="pb-2 border-l-2 border-slate-100 pl-4 -ml-5 pt-0.5 w-full">
                                 <p className="text-slate-800 text-sm whitespace-pre-line">{issue}</p>
                             </div>
                         </div>
                     ))
                 ) : (
                     <div className="text-sm text-slate-400 italic bg-slate-50 p-4 rounded-lg">
-                        아직 기록된 주요 이슈가 없습니다. 업무 일지를 작성하면 자동으로 이곳에 업데이트됩니다.
+                        아직 기록된 주요 이슈가 없습니다. 업무 일지를 작성하거나 편집을 통해 추가하세요.
                     </div>
                 )}
             </div>
@@ -354,7 +376,7 @@ const CourseDetail: React.FC = () => {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1.5">잔디 종류</label>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5"> 잔디 종류</label>
                             <select 
                                 className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
                                 value={editForm.grassType}
@@ -384,31 +406,40 @@ const CourseDetail: React.FC = () => {
                             />
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">개장 연도</label>
-                        <input 
-                            type="text" 
-                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                            value={editForm.openYear}
-                            onChange={(e) => handleEditChange('openYear', e.target.value)}
-                        />
-                    </div>
                     
-                    {/* Major Issues Edit Field (Replaces Coordinates) */}
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center">
-                            <AlertTriangle size={14} className="mr-1"/> 주요 이슈 및 연혁 (History)
-                        </label>
-                        <textarea 
-                            rows={6}
-                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500 font-mono"
-                            value={(editForm.issues || []).join('\n')}
-                            onChange={(e) => handleEditChange('issues', e.target.value.split('\n'))}
-                            placeholder="주요 이력을 줄바꿈으로 입력하세요.&#10;예: 2024-05-01 배수 공사 완료"
-                        />
-                        <p className="text-[10px] text-slate-400 mt-1">
-                            업무 일지 등록 시 자동으로 추가됩니다. 필요 시 직접 수정하거나 추가할 수 있습니다.
-                        </p>
+                    {/* Enhanced Issues Editor */}
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
+                             <h4 className="text-xs font-bold text-slate-700 flex items-center">
+                                <AlertTriangle size={14} className="mr-1.5"/> 주요 이슈 및 연혁 (History)
+                             </h4>
+                             <button type="button" onClick={addIssue} className="text-[10px] flex items-center bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100 shadow-sm font-medium">
+                                <Plus size={10} className="mr-1"/> 항목 추가
+                             </button>
+                        </div>
+                        <div className="space-y-2">
+                            {(editForm.issues || []).map((issue, idx) => (
+                                <div key={idx} className="flex gap-2">
+                                    <input 
+                                        type="text"
+                                        className="flex-1 text-xs border-slate-300 rounded focus:ring-brand-500 py-1.5"
+                                        placeholder="예: 2024-05 배수 공사 완료"
+                                        value={issue}
+                                        onChange={(e) => handleIssueChange(idx, e.target.value)}
+                                    />
+                                    <button 
+                                        type="button" 
+                                        onClick={() => removeIssue(idx)}
+                                        className="text-slate-400 hover:text-red-500 p-1.5"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            ))}
+                            {(!editForm.issues || editForm.issues.length === 0) && (
+                                <div className="text-center text-xs text-slate-400 py-2">등록된 이슈가 없습니다.</div>
+                            )}
+                        </div>
                     </div>
 
                     <div>
@@ -431,7 +462,7 @@ const CourseDetail: React.FC = () => {
                     </button>
                     <button 
                         onClick={saveEdit}
-                        className="px-4 py-2 text-sm font-bold text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center"
+                        className="px-4 py-2 text-sm font-bold text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center shadow-sm"
                     >
                         <CheckCircle size={16} className="mr-2" />
                         수정 완료

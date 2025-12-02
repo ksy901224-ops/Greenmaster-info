@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, Calendar } from 'lucide-react';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, Calendar, Archive, ArrowRight } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -15,10 +15,29 @@ const PersonDetail: React.FC = () => {
   // Edit State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Person | null>(null);
+  
+  // Logic to detect changes for auto-archiving
+  const [originalPerson, setOriginalPerson] = useState<Person | null>(null);
+  const [shouldArchive, setShouldArchive] = useState(false);
 
   if (!person) return <div className="p-8 text-center">인물 정보를 찾을 수 없습니다.</div>;
 
   const currentCourse = courses.find(c => c.id === person.currentCourseId);
+
+  // Detect if critical role fields have changed
+  const hasRoleChanged = editForm && originalPerson && (
+    editForm.currentCourseId !== originalPerson.currentCourseId || 
+    editForm.currentRole !== originalPerson.currentRole
+  );
+
+  // Automatically enable archiving when role/course changes
+  useEffect(() => {
+    if (hasRoleChanged) {
+        setShouldArchive(true);
+    } else {
+        setShouldArchive(false);
+    }
+  }, [hasRoleChanged]);
 
   const toggleExpanded = (index: number) => {
     const newSet = new Set(expandedItems);
@@ -46,6 +65,8 @@ const PersonDetail: React.FC = () => {
 
   const openEditModal = () => {
       setEditForm({ ...person });
+      setOriginalPerson({ ...person });
+      setShouldArchive(false);
       setIsEditModalOpen(true);
   };
 
@@ -66,7 +87,7 @@ const PersonDetail: React.FC = () => {
             endDate: '',
             description: ''
         };
-        setEditForm({...editForm, careers: [...editForm.careers, newCareer]});
+        setEditForm({...editForm, careers: [newCareer, ...editForm.careers]}); // Add to top
     }
   };
 
@@ -87,11 +108,33 @@ const PersonDetail: React.FC = () => {
   };
 
   const saveEdit = () => {
-      if (editForm) {
-          updatePerson(editForm);
-          setIsEditModalOpen(false);
-          alert('인물 정보가 수정되었습니다.');
+      if (!editForm) return;
+
+      let finalPerson = { ...editForm };
+
+      // Auto-Archiving Logic
+      if (shouldArchive && originalPerson && originalPerson.currentCourseId) {
+          const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || 'Unknown';
+          
+          // Generate a meaningful description for the archived record
+          const changeReason = `[시스템 자동 보관] 직책 변경: ${originalPerson.currentRole} -> ${editForm.currentRole}`;
+          
+          const archivedRecord: CareerRecord = {
+              courseId: originalPerson.currentCourseId,
+              courseName: oldCourseName,
+              role: originalPerson.currentRole,
+              startDate: originalPerson.currentRoleStartDate || '',
+              endDate: new Date().toISOString().split('T')[0], // Today as end date
+              description: changeReason
+          };
+          
+          // Add to top of career list
+          finalPerson.careers = [archivedRecord, ...finalPerson.careers];
       }
+
+      updatePerson(finalPerson);
+      setIsEditModalOpen(false);
+      alert('인물 정보가 수정되었습니다.' + (shouldArchive ? '\n(이전 경력이 자동으로 보관되었습니다)' : ''));
   };
 
   return (
@@ -233,27 +276,42 @@ const PersonDetail: React.FC = () => {
                     </button>
                 </div>
                 
-                <div className="p-6 space-y-4 overflow-y-auto">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">이름</label>
-                        <input 
-                            type="text" 
-                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                            value={editForm.name}
-                            onChange={(e) => handleEditChange('name', e.target.value)}
-                        />
+                <div className="p-6 space-y-6 overflow-y-auto">
+                    {/* Basic Info */}
+                    <div className="grid grid-cols-2 gap-4">
+                         <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">이름</label>
+                            <input 
+                                type="text" 
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.name}
+                                onChange={(e) => handleEditChange('name', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">연락처</label>
+                            <input 
+                                type="text" 
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.phone}
+                                onChange={(e) => handleEditChange('phone', e.target.value)}
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">연락처</label>
-                        <input 
-                            type="text" 
-                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                            value={editForm.phone}
-                            onChange={(e) => handleEditChange('phone', e.target.value)}
-                        />
-                    </div>
-                    <div className="bg-brand-50 p-4 rounded-lg border border-brand-100">
-                        <h4 className="text-xs font-bold text-brand-800 mb-3 border-b border-brand-200 pb-1">현재 근무 정보</h4>
+
+                    {/* Current Role Section - Highlighted */}
+                    <div className="bg-brand-50 p-4 rounded-lg border border-brand-100 ring-1 ring-brand-200/50">
+                        <div className="flex justify-between items-center mb-3 border-b border-brand-200 pb-2">
+                             <h4 className="text-xs font-bold text-brand-800 flex items-center">
+                                 <User size={14} className="mr-1.5"/> 현재 근무 정보 (Current)
+                             </h4>
+                             {hasRoleChanged && (
+                                <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-bold animate-pulse">
+                                    변경됨
+                                </span>
+                             )}
+                        </div>
+
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 mb-1.5">소속 골프장</label>
@@ -287,11 +345,44 @@ const PersonDetail: React.FC = () => {
                                 onChange={(e) => handleEditChange('currentRoleStartDate', e.target.value)}
                             />
                         </div>
+
+                        {/* Auto Archive Prompt */}
+                        {hasRoleChanged && originalPerson?.currentCourseId && (
+                            <div className="mt-3 bg-white p-3 rounded border border-brand-200 flex items-start space-x-3 shadow-sm animate-in slide-in-from-top-2">
+                                <div className="bg-brand-100 p-1.5 rounded text-brand-600 shrink-0">
+                                    <Archive size={16} />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-xs text-slate-800 font-bold mb-1">
+                                        경력 자동 보관 알림
+                                    </p>
+                                    <div className="text-xs text-slate-600 mb-2 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
+                                        <div className="flex justify-between mb-1">
+                                            <span className="text-slate-400">이전:</span>
+                                            <span className="font-medium text-slate-700 truncate ml-2">{originalPerson?.currentRole} @ {courses.find(c=>c.id===originalPerson?.currentCourseId)?.name}</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-400">변경:</span>
+                                            <span className="font-bold text-brand-700 truncate ml-2">{editForm?.currentRole} @ {courses.find(c=>c.id===editForm?.currentCourseId)?.name}</span>
+                                        </div>
+                                    </div>
+                                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={shouldArchive}
+                                            onChange={(e) => setShouldArchive(e.target.checked)}
+                                            className="rounded text-brand-600 focus:ring-brand-500"
+                                        />
+                                        <span className="text-xs text-slate-700 font-medium">이전 정보를 '과거 이력'에 저장 (타임라인 보존)</span>
+                                    </label>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">친밀도 (관계)</label>
-                        <div className="flex space-x-2 overflow-x-auto pb-1">
+                        <div className="flex space-x-2 overflow-x-auto pb-1 no-scrollbar">
                             {[
                                 { val: '2', label: 'Ally', color: 'bg-green-100 text-green-800' },
                                 { val: '1', label: 'Friendly', color: 'bg-emerald-50 text-emerald-700' },
@@ -327,58 +418,84 @@ const PersonDetail: React.FC = () => {
 
                     {/* Career History Edit Section */}
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
-                             <h4 className="text-xs font-bold text-slate-700">이력 관리 (직접 수정)</h4>
-                             <button type="button" onClick={addCareerToForm} className="text-[10px] flex items-center bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100">
-                                <Plus size={10} className="mr-1"/> 추가
+                        <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
+                             <h4 className="text-xs font-bold text-slate-700 flex items-center">
+                                <Briefcase size={14} className="mr-1.5"/> 과거 이력 관리
+                             </h4>
+                             <button type="button" onClick={addCareerToForm} className="text-[10px] flex items-center bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100 shadow-sm font-medium">
+                                <Plus size={10} className="mr-1"/> 직접 추가
                              </button>
                         </div>
-                        {editForm.careers.map((career, idx) => (
-                            <div key={idx} className="mb-4 pb-4 border-b border-slate-200 last:border-0 last:pb-0 relative group">
-                                <button 
-                                    onClick={() => removeCareerFromForm(idx)}
-                                    className="absolute right-0 top-0 text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
-                                <div className="grid grid-cols-2 gap-2 mb-2">
-                                    <input 
-                                        type="text" 
-                                        placeholder="골프장 이름"
-                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
-                                        value={career.courseName}
-                                        onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)}
-                                    />
-                                     <input 
-                                        type="text" 
-                                        placeholder="직책"
-                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
-                                        value={career.role}
-                                        onChange={(e) => updateCareerField(idx, 'role', e.target.value)}
-                                    />
+                        <div className="space-y-4">
+                            {editForm.careers.map((career, idx) => (
+                                <div key={idx} className="relative bg-white p-3 rounded border border-slate-200 hover:border-slate-300 shadow-sm group transition-all">
+                                    <button 
+                                        onClick={() => removeCareerFromForm(idx)}
+                                        className="absolute -right-2 -top-2 bg-white text-slate-400 hover:text-red-500 p-1 rounded-full border border-slate-200 shadow opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="삭제"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                    
+                                    <div className="grid grid-cols-2 gap-2 mb-2">
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 block mb-0.5">골프장명</label>
+                                            <input 
+                                                type="text" 
+                                                className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
+                                                value={career.courseName}
+                                                onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-slate-400 block mb-0.5">당시 직책</label>
+                                            <input 
+                                                type="text" 
+                                                className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
+                                                value={career.role}
+                                                onChange={(e) => updateCareerField(idx, 'role', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex space-x-2 items-end">
+                                        <div className="flex-1">
+                                            <label className="text-[10px] text-slate-400 block mb-0.5">기간</label>
+                                            <div className="flex items-center space-x-1">
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="YYYY-MM"
+                                                    className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
+                                                    value={career.startDate}
+                                                    onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)}
+                                                />
+                                                <ArrowRight size={10} className="text-slate-300"/>
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="종료일"
+                                                    className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
+                                                    value={career.endDate || ''}
+                                                    onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2">
+                                        <input 
+                                            type="text" 
+                                            placeholder="주요 성과/설명 (선택)"
+                                            className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
+                                            value={career.description || ''}
+                                            onChange={(e) => updateCareerField(idx, 'description', e.target.value)}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="flex space-x-2 items-center">
-                                    <input 
-                                        type="text" 
-                                        placeholder="시작일 (YYYY-MM)"
-                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 w-24 py-1"
-                                        value={career.startDate}
-                                        onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)}
-                                    />
-                                    <span className="text-slate-400 text-xs">~</span>
-                                    <input 
-                                        type="text" 
-                                        placeholder="종료일"
-                                        className="text-xs border-slate-300 rounded focus:ring-brand-500 w-24 py-1"
-                                        value={career.endDate || ''}
-                                        onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)}
-                                    />
+                            ))}
+                            {editForm.careers.length === 0 && (
+                                <div className="text-center text-xs text-slate-400 py-4 bg-slate-50/50 rounded border border-dashed border-slate-200">
+                                    등록된 과거 이력이 없습니다.
                                 </div>
-                            </div>
-                        ))}
-                        {editForm.careers.length === 0 && (
-                            <div className="text-center text-xs text-slate-400 py-2">등록된 과거 이력이 없습니다.</div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
                 
@@ -391,10 +508,10 @@ const PersonDetail: React.FC = () => {
                     </button>
                     <button 
                         onClick={saveEdit}
-                        className="px-4 py-2 text-sm font-bold text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center"
+                        className="px-4 py-2 text-sm font-bold text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center shadow-sm"
                     >
                         <CheckCircle size={16} className="mr-2" />
-                        수정 완료
+                        저장 완료
                     </button>
                 </div>
             </div>

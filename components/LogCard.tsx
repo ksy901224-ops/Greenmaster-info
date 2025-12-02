@@ -57,7 +57,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.confirm("정말로 이 업무 기록을 삭제하시겠습니까?")) {
+    if (window.confirm("정말로 이 업무 기록을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")) {
       deleteLog(log.id);
     }
   };
@@ -79,6 +79,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   };
 
   const isAdmin = user?.role === UserRole.ADMIN;
+  const shouldTruncate = log.content.length > 100;
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 hover:shadow-md transition-shadow relative group">
@@ -95,33 +96,62 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
              <Calendar size={12} className="mr-1" />
              {log.date}
            </div>
-           {/* Edit/Delete Actions - Visible on hover or mobile */}
-           <div className="flex space-x-1 pl-2 border-l border-slate-100 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-             <button onClick={handleEdit} className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="수정">
-               <Edit2 size={14} />
-             </button>
-             {isAdmin && (
-               <button onClick={handleDelete} className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded" title="삭제">
+           
+           {/* Edit/Delete Actions - Always visible, Restricted to ADMIN only */}
+           {isAdmin && (
+             <div className="flex space-x-1 pl-2 border-l border-slate-100">
+               <button 
+                 onClick={handleEdit} 
+                 className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" 
+                 title="수정"
+               >
+                 <Edit2 size={14} />
+               </button>
+               <button 
+                 onClick={handleDelete} 
+                 className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" 
+                 title="삭제"
+               >
                  <Trash2 size={14} />
                </button>
-             )}
-           </div>
+             </div>
+           )}
         </div>
       </div>
       
       <h3 className="text-lg font-bold text-slate-900 mb-1 pr-16">{log.title}</h3>
       
-      <div className={`text-slate-600 text-sm mb-2 whitespace-pre-line transition-all duration-300 ${isExpanded ? '' : 'line-clamp-3'}`}>
+      {/* Content with Expand/Collapse Animation */}
+      <div 
+        className={`relative text-slate-600 text-sm whitespace-pre-line overflow-hidden transition-all duration-500 ease-in-out ${
+          isExpanded ? 'max-h-[1000px] mb-4' : 'max-h-20 mb-1'
+        }`}
+      >
           {log.content}
+          
+          {/* Gradient Overlay when collapsed */}
+          {!isExpanded && shouldTruncate && (
+            <div 
+              className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white via-white/90 to-transparent cursor-pointer"
+              onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
+            />
+          )}
       </div>
       
-      {/* Toggle Read More */}
-      {log.content.length > 100 && (
+      {shouldTruncate && (
         <button 
           onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
-          className="flex items-center text-xs font-bold text-slate-400 hover:text-brand-600 mb-3 transition-colors"
+          className="flex items-center text-xs font-bold text-slate-400 hover:text-brand-600 mb-3 transition-colors focus:outline-none"
         >
-          {isExpanded ? <><ChevronUp size={14} className="mr-1"/>접기</> : <><ChevronDown size={14} className="mr-1"/>더 읽기</>}
+          {isExpanded ? (
+            <>
+              접기 <ChevronUp size={14} className="ml-1"/>
+            </>
+          ) : (
+            <>
+              더 읽기 <ChevronDown size={14} className="ml-1"/>
+            </>
+          )}
         </button>
       )}
 
@@ -162,7 +192,6 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
         </div>
       </div>
 
-      {/* Loading Skeleton State */}
       {isLoading && (
         <div className="mt-3 bg-slate-50/50 rounded-lg p-4 border border-slate-100 animate-pulse">
             <div className="flex items-center space-x-2 mb-3">
@@ -177,10 +206,8 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
         </div>
       )}
 
-      {/* Insight Section */}
       {showInsight && insight && !isLoading && (
           <div className="mt-3 bg-gradient-to-br from-brand-50/80 to-white border border-brand-100 rounded-lg p-4 animate-in fade-in slide-in-from-top-2 duration-500 shadow-sm relative overflow-hidden group ring-1 ring-brand-200 ring-offset-0">
-              {/* Subtle decorative bar indicating 'new' */}
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-500"></div>
               
               <div className="flex justify-between items-start mb-2 border-b border-brand-100 pb-2 pl-2">
