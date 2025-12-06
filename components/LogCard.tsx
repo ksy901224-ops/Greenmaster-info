@@ -134,13 +134,13 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
               {log.date}
             </div>
             
-            {/* Admin Actions */}
+            {/* Admin Actions (Always Visible) */}
             {isAdmin && (
-              <div className="flex items-center space-x-1 ml-3 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-50 rounded-lg p-0.5 border border-slate-100">
-                <button onClick={handleEdit} className="p-1.5 text-slate-400 hover:text-blue-600 rounded-md transition-colors" title="수정">
+              <div className="flex items-center space-x-1 ml-3 bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
+                <button onClick={handleEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="수정">
                   <Edit2 size={14} />
                 </button>
-                <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-600 rounded-md transition-colors" title="삭제">
+                <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="삭제">
                   <Trash2 size={14} />
                 </button>
               </div>

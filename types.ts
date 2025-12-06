@@ -98,6 +98,8 @@ export interface LogEntry {
   updatedAt?: number; // Added: Last Modification Timestamp
 }
 
+export type EventType = 'MEETING' | 'VISIT' | 'CONSTRUCTION' | 'OTHER';
+
 export interface ExternalEvent {
   id: string;
   title: string;
@@ -105,4 +107,8 @@ export interface ExternalEvent {
   source: 'Google' | 'Outlook' | 'Manual'; // Added Manual
   time?: string;
   location?: string;
+  // Linkage fields
+  type?: EventType; 
+  courseId?: string; 
+  personId?: string;
 }

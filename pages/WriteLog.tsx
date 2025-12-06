@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, ExternalEvent } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, Users, CheckCircle, AlertCircle, PlusSquare, Zap, AlertTriangle, Clock, Globe, Map, ArrowLeft, Calendar, FileType, AlignLeft, CalendarPlus, ListChecks, RefreshCcw, Layers, ChevronDown } from 'lucide-react';
+import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, ExternalEvent, EventType } from '../types';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, Users, CheckCircle, AlertCircle, PlusSquare, Zap, AlertTriangle, Clock, Globe, Map, ArrowLeft, Calendar, FileType, AlignLeft, CalendarPlus, ListChecks, RefreshCcw, Layers, ChevronDown, Briefcase, Phone, User, CalendarDays, Link as LinkIcon, Building } from 'lucide-react';
 import { analyzeDocument, getCourseDetailsFromAI } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -32,6 +32,7 @@ const WriteLog: React.FC = () => {
   const [personCourseId, setPersonCourseId] = useState('');
   const [personAffinity, setPersonAffinity] = useState<string>('0');
   const [personNotes, setPersonNotes] = useState('');
+  const [similarPeople, setSimilarPeople] = useState<Person[]>([]);
 
   // --- Schedule Form State ---
   const [schedTitle, setSchedTitle] = useState('');
@@ -39,6 +40,9 @@ const WriteLog: React.FC = () => {
   const [schedTime, setSchedTime] = useState('09:00');
   const [schedLocation, setSchedLocation] = useState('');
   const [schedSource, setSchedSource] = useState<'Manual' | 'Google' | 'Outlook'>('Manual');
+  const [schedType, setSchedType] = useState<EventType>('MEETING');
+  const [schedCourseId, setSchedCourseId] = useState('');
+  const [schedPersonId, setSchedPersonId] = useState('');
 
   // --- Shared State ---
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,6 +91,26 @@ const WriteLog: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [feedback]);
+
+  // Real-time Duplicate Check for Person
+  useEffect(() => {
+      if (personName.length >= 2) {
+          const matches = globalPeople.filter(p => p.name.includes(personName));
+          setSimilarPeople(matches);
+      } else {
+          setSimilarPeople([]);
+      }
+  }, [personName, globalPeople]);
+
+  // Smart Location Auto-fill for Schedule
+  useEffect(() => {
+      if (schedCourseId) {
+          const c = globalCourses.find(c => c.id === schedCourseId);
+          if (c && (!schedLocation || schedLocation === '')) {
+              setSchedLocation(c.address);
+          }
+      }
+  }, [schedCourseId, globalCourses, schedLocation]);
   
   // Dynamic Course List & Modal
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
@@ -109,7 +133,6 @@ const WriteLog: React.FC = () => {
 
   const processAndRegisterPerson = (rawString: string, linkedCourseId: string) => {
       // (Implementation same as provided)
-      // For brevity, keeping logic identical but hidden here
       if (!rawString || rawString.trim().length < 2) return;
       const cleanStr = rawString.trim();
       const parts = cleanStr.split(/\s+/);
@@ -313,7 +336,8 @@ const WriteLog: React.FC = () => {
     addCourse(courseToAdd);
     getCourseDetailsFromAI(newCourse.name).then((details) => updateCourse({ ...courseToAdd, ...details })).catch(err => console.error(err));
     if (activeTab === 'LOG') setCourseId(courseToAdd.id);
-    else setPersonCourseId(courseToAdd.id);
+    else if (activeTab === 'PERSON') setPersonCourseId(courseToAdd.id);
+    else setSchedCourseId(courseToAdd.id);
     setIsCourseModalOpen(false);
   };
 
@@ -346,22 +370,48 @@ const WriteLog: React.FC = () => {
         currentRoleStartDate: personStartDate, currentCourseId: personCourseId, affinity: parseInt(personAffinity) as AffinityLevel,
         notes: personNotes, careers: [] 
     });
-    setTimeout(() => { setIsSubmitting(false); alert('인물 등록 완료'); setPersonName(''); }, 500);
+    setTimeout(() => { setIsSubmitting(false); alert('인물 등록 완료'); setPersonName(''); setPersonPhone(''); setPersonRole(''); setPersonNotes(''); }, 500);
   };
 
   const handleScheduleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     addExternalEvent({
-        id: `sched-${Date.now()}`, title: schedTitle, date: schedDate, time: schedTime, location: schedLocation, source: schedSource
+        id: `sched-${Date.now()}`, 
+        title: schedTitle, 
+        date: schedDate, 
+        time: schedTime, 
+        location: schedLocation, 
+        source: schedSource,
+        // Linkage fields
+        type: schedType,
+        courseId: schedCourseId,
+        personId: schedPersonId
     });
-    setTimeout(() => { setIsSubmitting(false); alert('일정 등록 완료'); setSchedTitle(''); }, 500);
+    setTimeout(() => { setIsSubmitting(false); alert('일정 등록 완료'); setSchedTitle(''); setSchedLocation(''); }, 500);
   };
 
   const isFilled = (key: string) => highlightedFields.has(key);
   const getInputClass = (key: string) => `w-full rounded-xl border py-3 px-4 transition-all outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 ${isFilled(key) ? 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-200' : 'bg-slate-50 border-slate-200'}`;
   const getSelectClass = (key: string) => `w-full rounded-xl border py-3 px-4 transition-all outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 appearance-none bg-white ${isFilled(key) ? 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-200' : 'border-slate-200'}`;
   const isNewPerson = contactPerson && contactPerson.length > 1 && !globalPeople.some(p => p.name.includes(contactPerson.split(' ')[0]));
+
+  const getAffinityColor = (val: string) => {
+      const v = parseInt(val);
+      if (v >= 1) return 'bg-green-100 text-green-700 ring-green-500';
+      if (v <= -1) return 'bg-red-100 text-red-700 ring-red-500';
+      return 'bg-slate-100 text-slate-700 ring-slate-400';
+  };
+
+  // Helper to render event type badge
+  const renderEventTypeBadge = (type: EventType) => {
+      switch(type) {
+          case 'MEETING': return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">미팅</span>;
+          case 'VISIT': return <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">현장 방문</span>;
+          case 'CONSTRUCTION': return <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] font-bold">공사/작업</span>;
+          default: return <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[10px] font-bold">기타</span>;
+      }
+  };
 
   return (
     <div className="space-y-6 relative max-w-4xl mx-auto">
@@ -518,8 +568,258 @@ const WriteLog: React.FC = () => {
         </div>
       )}
 
-      {/* Person & Schedule Forms - (Keeping structure simplified for brevity, assume similar styling applied) */}
-      {/* ... (Person & Schedule Form Code with updated classes) ... */}
+      {/* --- Person Form (Enhanced) --- */}
+      {activeTab === 'PERSON' && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">
+            {/* Left: Preview Card */}
+            <div className="lg:col-span-2 space-y-4">
+                 <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm sticky top-24 text-center">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">프로필 미리보기</h4>
+                    
+                    <div className="w-24 h-24 bg-slate-100 rounded-full mx-auto flex items-center justify-center mb-4 text-3xl text-slate-400 font-bold border-4 border-white shadow-lg">
+                        {personName ? personName[0] : <User size={40} />}
+                    </div>
+                    
+                    <h3 className="text-xl font-bold text-slate-900 mb-1">{personName || '이름 미입력'}</h3>
+                    <div className="flex justify-center items-center space-x-2 text-sm text-slate-500 mb-4">
+                        <Briefcase size={14} />
+                        <span>{personRole || '직책'}</span>
+                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                        <span>{globalCourses.find(c => c.id === personCourseId)?.name || '소속 골프장'}</span>
+                    </div>
+
+                    <div className={`inline-block px-3 py-1 rounded-full text-xs font-bold mb-6 ${getAffinityColor(personAffinity)} ring-1`}>
+                        {personAffinity === '2' ? '강력한 아군 (Ally)' : 
+                         personAffinity === '1' ? '우호적 (Friendly)' : 
+                         personAffinity === '0' ? '중립 (Neutral)' : 
+                         personAffinity === '-1' ? '비우호적 (Unfriendly)' : '적대적 (Hostile)'}
+                    </div>
+
+                    {personCourseId && (
+                        <div className="text-left bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-500">
+                            <div className="flex items-start mb-1">
+                                <MapPin size={12} className="mr-2 mt-0.5 text-brand-600"/>
+                                <span className="flex-1">{globalCourses.find(c => c.id === personCourseId)?.address}</span>
+                            </div>
+                        </div>
+                    )}
+                 </div>
+
+                 {similarPeople.length > 0 && (
+                     <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
+                         <h5 className="text-xs font-bold text-amber-800 flex items-center mb-2">
+                             <AlertTriangle size={14} className="mr-1.5"/> 유사 인물 발견 ({similarPeople.length})
+                         </h5>
+                         <ul className="space-y-2">
+                             {similarPeople.map(p => (
+                                 <li key={p.id} className="text-xs text-amber-900 bg-white/50 p-2 rounded border border-amber-100/50 flex justify-between">
+                                     <span>{p.name} ({p.currentRole})</span>
+                                     <span className="text-slate-500">{globalCourses.find(c=>c.id===p.currentCourseId)?.name}</span>
+                                 </li>
+                             ))}
+                         </ul>
+                     </div>
+                 )}
+            </div>
+
+            {/* Right: Input Form */}
+            <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+                <form onSubmit={handlePersonSubmit} className="space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">이름 <span className="text-red-500">*</span></label>
+                            <input type="text" required className={getInputClass('personName')} value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="홍길동" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">연락처</label>
+                            <input type="text" className={getInputClass('personPhone')} value={personPhone} onChange={(e) => setPersonPhone(e.target.value)} placeholder="010-0000-0000" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">소속 골프장</label>
+                            <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] bg-brand-50 text-brand-700 px-2 py-1 rounded font-bold hover:bg-brand-100 transition-colors">+ 신규 등록</button>
+                        </div>
+                        <div className="relative">
+                            <select className={getSelectClass('personCourseId')} value={personCourseId} onChange={(e) => setPersonCourseId(e.target.value)}>
+                                <option value="">소속 선택</option>
+                                {globalCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-4 text-slate-400 pointer-events-none" size={16}/>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">직책</label>
+                            <input type="text" className={getInputClass('personRole')} value={personRole} onChange={(e) => setPersonRole(e.target.value)} placeholder="예: 코스팀장" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">입사일 (선택)</label>
+                            <input type="date" className={getInputClass('personStartDate')} value={personStartDate} onChange={(e) => setPersonStartDate(e.target.value)} />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">친밀도 (관계)</label>
+                        <div className="grid grid-cols-5 gap-2">
+                            {['2','1','0','-1','-2'].map(val => (
+                                <button
+                                    key={val}
+                                    type="button"
+                                    onClick={() => setPersonAffinity(val)}
+                                    className={`py-2 rounded-lg text-xs font-bold border transition-all ${personAffinity === val ? getAffinityColor(val) + ' ring-2 ring-offset-1 border-transparent' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                                >
+                                    {val === '2' ? 'Ally' : val === '1' ? 'Friendly' : val === '0' ? 'Neutral' : val === '-1' ? 'Unfriendly' : 'Hostile'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">메모 / 특징</label>
+                        <textarea rows={4} className={getInputClass('personNotes')} value={personNotes} onChange={(e) => setPersonNotes(e.target.value)} placeholder="인물의 성격, 선호도, 특이사항 등을 기록하세요." />
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100">
+                        <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl flex justify-center items-center active:scale-[0.99]">
+                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <UserPlus className="mr-2" />} 인물 등록 완료
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      )}
+
+      {/* --- Schedule Form (Enhanced) --- */}
+      {activeTab === 'SCHEDULE' && (
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">
+            {/* Left: Schedule Preview */}
+             <div className="lg:col-span-2 space-y-4">
+                 <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm sticky top-24">
+                     <div className="flex justify-between items-start mb-4">
+                         <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">일정 미리보기</div>
+                         {renderEventTypeBadge(schedType)}
+                     </div>
+                     
+                     <div className="flex items-start space-x-4 mb-6">
+                         <div className="bg-red-50 text-red-600 rounded-xl p-3 flex flex-col items-center justify-center min-w-[60px] border border-red-100">
+                             <span className="text-xs font-bold uppercase">{new Date(schedDate).toLocaleString('en-US', {month: 'short'})}</span>
+                             <span className="text-xl font-bold">{new Date(schedDate).getDate()}</span>
+                         </div>
+                         <div>
+                             <h3 className="font-bold text-slate-900 text-lg leading-tight">{schedTitle || '일정 제목'}</h3>
+                             <div className="text-sm text-slate-500 mt-1 flex items-center">
+                                 <Clock size={14} className="mr-1.5"/> {schedTime}
+                             </div>
+                         </div>
+                     </div>
+
+                     <div className="space-y-3 pt-4 border-t border-slate-100">
+                         <div className="flex items-start text-sm text-slate-600">
+                             <MapPin size={16} className="mr-3 mt-0.5 text-slate-400 shrink-0"/>
+                             <span>{schedLocation || '장소 미지정'}</span>
+                         </div>
+                         {schedCourseId && (
+                             <div className="flex items-start text-sm text-slate-600">
+                                 <Building size={16} className="mr-3 mt-0.5 text-brand-500 shrink-0"/>
+                                 <span className="font-medium text-brand-700">{globalCourses.find(c => c.id === schedCourseId)?.name}</span>
+                             </div>
+                         )}
+                         {schedPersonId && (
+                             <div className="flex items-start text-sm text-slate-600">
+                                 <User size={16} className="mr-3 mt-0.5 text-slate-400 shrink-0"/>
+                                 <span>{globalPeople.find(p => p.id === schedPersonId)?.name} (관련 인물)</span>
+                             </div>
+                         )}
+                     </div>
+                 </div>
+             </div>
+
+             {/* Right: Input Form */}
+             <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+                <form onSubmit={handleScheduleSubmit} className="space-y-6">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">일정 제목 <span className="text-red-500">*</span></label>
+                        <input type="text" required className={getInputClass('schedTitle')} value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} placeholder="미팅, 공사 일정 등" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">날짜</label>
+                            <input type="date" required className={getInputClass('schedDate')} value={schedDate} onChange={(e) => setSchedDate(e.target.value)} />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">시간</label>
+                            <input type="time" required className={getInputClass('schedTime')} value={schedTime} onChange={(e) => setSchedTime(e.target.value)} />
+                        </div>
+                    </div>
+
+                    {/* Context Linking Section */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                        <h5 className="text-xs font-bold text-slate-500 uppercase flex items-center">
+                            <LinkIcon size={12} className="mr-1.5"/> 연관 정보 (Context)
+                        </h5>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">골프장 (장소 자동완성)</label>
+                                <select className="w-full text-sm rounded-lg border-slate-300 py-2 px-3" value={schedCourseId} onChange={(e) => setSchedCourseId(e.target.value)}>
+                                    <option value="">선택 안함</option>
+                                    {globalCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">관련 인물</label>
+                                <select className="w-full text-sm rounded-lg border-slate-300 py-2 px-3" value={schedPersonId} onChange={(e) => setSchedPersonId(e.target.value)}>
+                                    <option value="">선택 안함</option>
+                                    {globalPeople
+                                        .filter(p => !schedCourseId || p.currentCourseId === schedCourseId) // Filter by course if selected
+                                        .map(p => <option key={p.id} value={p.id}>{p.name}</option>)
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">장소 (직접 입력 가능)</label>
+                        <div className="relative">
+                            <MapPin className="absolute left-3 top-3.5 text-slate-400" size={16} />
+                            <input type="text" className={`w-full rounded-xl border py-3 pl-10 pr-4 transition-all outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 ${isFilled('schedLocation') ? 'bg-yellow-50 border-yellow-300' : 'bg-white border-slate-200'}`} value={schedLocation} onChange={(e) => setSchedLocation(e.target.value)} placeholder="주소 또는 장소명" />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">일정 유형</label>
+                            <select className={getSelectClass('schedType')} value={schedType} onChange={(e) => setSchedType(e.target.value as EventType)}>
+                                <option value="MEETING">미팅 (Meeting)</option>
+                                <option value="VISIT">현장 방문 (Visit)</option>
+                                <option value="CONSTRUCTION">공사/작업 (Construction)</option>
+                                <option value="OTHER">기타 (Other)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">출처 소스</label>
+                            <select className={getSelectClass('schedSource')} value={schedSource} onChange={(e) => setSchedSource(e.target.value as any)}>
+                                <option value="Manual">직접 입력</option>
+                                <option value="Google">Google Calendar</option>
+                                <option value="Outlook">Outlook</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-100">
+                        <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl flex justify-center items-center active:scale-[0.99]">
+                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CalendarPlus className="mr-2" />} 일정 등록 완료
+                        </button>
+                    </div>
+                </form>
+             </div>
+        </div>
+      )}
       
       {isCourseModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
