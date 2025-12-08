@@ -13,6 +13,7 @@ interface AppContextType {
   updateUserStatus: (userId: string, status: UserStatus) => void;
   updateUserRole: (userId: string, role: UserRole) => void;
   updateUserDepartment: (userId: string, department: Department) => void;
+  updateUser: (userId: string, data: Partial<UserProfile>) => Promise<void>;
   logs: LogEntry[];
   courses: GolfCourse[];
   people: Person[];
@@ -186,12 +187,56 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await updateDocument('users', userId, { department });
   };
 
+  // General Update User Function
+  const updateUser = async (userId: string, data: Partial<UserProfile>) => {
+    await updateDocument('users', userId, data);
+  };
+
   // --- CRUD Actions (Now using Firestore) ---
-  const addLog = (log: LogEntry) => saveDocument('logs', log);
+  
+  // Enhanced: Prevent duplicate logs
+  const addLog = (log: LogEntry) => {
+      // Check for identical logs (same date, title, and course) to prevent duplicate uploads
+      const isDuplicate = logs.some(existing => 
+          existing.date === log.date && 
+          existing.title === log.title && 
+          existing.courseId === log.courseId
+      );
+
+      if (isDuplicate) {
+          console.warn('Duplicate log detected. Skipping save.');
+          return; // Skip saving
+      }
+      saveDocument('logs', log);
+  };
+
   const updateLog = (log: LogEntry) => updateDocument('logs', log.id, log);
   const deleteLog = (id: string) => deleteDocument('logs', id);
 
-  const addCourse = (course: GolfCourse) => saveDocument('courses', course);
+  // Enhanced: Smart Course Merging
+  const addCourse = async (course: GolfCourse) => {
+      const normalize = (s: string) => s.trim().replace(/\s+/g, '').toLowerCase();
+      const existing = courses.find(c => normalize(c.name) === normalize(course.name));
+
+      if (existing) {
+          // Merge Logic: Use new data if existing is empty/default
+          const merged: GolfCourse = {
+              ...existing,
+              address: (existing.address.length < 5 && course.address.length > 5) ? course.address : existing.address,
+              holes: existing.holes || course.holes,
+              type: existing.type || course.type,
+              grassType: existing.grassType || course.grassType,
+              // Merge issues array without duplicates
+              issues: Array.from(new Set([...(existing.issues || []), ...(course.issues || [])])).filter(i => i.trim() !== '')
+          };
+          
+          await updateDocument('courses', existing.id, merged);
+          console.log(`Merged duplicate course: ${existing.name}`);
+      } else {
+          await saveDocument('courses', course);
+      }
+  };
+
   const updateCourse = (course: GolfCourse) => updateDocument('courses', course.id, course);
   const deleteCourse = (id: string) => deleteDocument('courses', id);
 
@@ -270,7 +315,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const isAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
 
   const value = {
-    user, allUsers, login, register, logout, updateUserStatus, updateUserRole, updateUserDepartment,
+    user, allUsers, login, register, logout, updateUserStatus, updateUserRole, updateUserDepartment, updateUser,
     logs, courses, people, externalEvents,
     addLog, updateLog, deleteLog,
     addCourse, updateCourse, deleteCourse,

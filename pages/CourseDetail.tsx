@@ -1,16 +1,17 @@
 
 // ... (imports remain the same, ensure CourseType, GrassType are imported)
 import React, { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary } from '../services/geminiService';
-import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud } from 'lucide-react';
+import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 const CourseDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { courses, logs, updateCourse, deleteCourse, people, canUseAI, canViewFullData, isAdmin } = useApp(); // Get data and permissions
   
   const course = courses.find(c => c.id === id);
@@ -22,6 +23,19 @@ const CourseDetail: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<GolfCourse | null>(null);
   
+  // Search state for logs tab
+  const [logSearchTerm, setLogSearchTerm] = useState('');
+
+  // Handle auto-filtering from dashboard redirect
+  useEffect(() => {
+      if (location.state?.filterIssue && canViewFullData) {
+          setActiveTab('LOGS');
+          setLogSearchTerm(location.state.filterIssue);
+          // Optional: clear state to prevent re-triggering? 
+          // Not strictly necessary as navigating away clears it
+      }
+  }, [location.state, canViewFullData]);
+
   // Converters State
   const [areaPyeong, setAreaPyeong] = useState<string>('');
   const [areaM2, setAreaM2] = useState<string>('');
@@ -30,7 +44,18 @@ const CourseDetail: React.FC = () => {
 
   if (!course) return <div className="p-8 text-center">골프장을 찾을 수 없습니다.</div>;
 
-  const relatedLogs = logs.filter(l => l.courseId === id);
+  const relatedLogs = logs
+    .filter(l => l.courseId === id)
+    .filter(l => {
+        if (!logSearchTerm) return true;
+        const term = logSearchTerm.toLowerCase();
+        return (
+            l.title.toLowerCase().includes(term) ||
+            l.content.toLowerCase().includes(term) ||
+            l.tags?.some(t => t.toLowerCase().includes(term))
+        );
+    });
+
   // Separate current and past people
   const currentStaff = people.filter(p => p.currentCourseId === id);
   const formerStaff = people.filter(p => p.careers.some(c => c.courseId === id) && p.currentCourseId !== id);
@@ -164,6 +189,15 @@ const CourseDetail: React.FC = () => {
       deleteCourse(course.id);
       navigate('/courses');
     }
+  };
+
+  const handleIssueClick = (issueText: string) => {
+      if (canViewFullData) {
+          setActiveTab('LOGS');
+          setLogSearchTerm(issueText);
+      } else {
+          alert('업무 일지 상세 조회 권한이 필요합니다.');
+      }
   };
 
   return (
@@ -315,10 +349,13 @@ const CourseDetail: React.FC = () => {
             <div className="space-y-4">
                 {course.issues && course.issues.length > 0 ? (
                     course.issues.map((issue, idx) => (
-                        <div key={idx} className="flex">
-                            <div className="flex-shrink-0 w-4 h-4 mt-1 mr-3 rounded-full bg-slate-200 border-2 border-white shadow-sm ring-1 ring-slate-100"></div>
+                        <div key={idx} className="flex group cursor-pointer" onClick={() => handleIssueClick(issue)}>
+                            <div className="flex-shrink-0 w-4 h-4 mt-1 mr-3 rounded-full bg-slate-200 border-2 border-white shadow-sm ring-1 ring-slate-100 group-hover:bg-brand-500 transition-colors"></div>
                             <div className="pb-2 border-l-2 border-slate-100 pl-4 -ml-5 pt-0.5 w-full">
-                                <p className="text-slate-800 text-sm whitespace-pre-line">{issue}</p>
+                                <p className="text-slate-800 text-sm whitespace-pre-line group-hover:text-brand-700 transition-colors">
+                                    {issue}
+                                    {canViewFullData && <span className="ml-2 text-[10px] text-brand-500 opacity-0 group-hover:opacity-100 transition-opacity">→ 관련 기록 보기</span>}
+                                </p>
                             </div>
                         </div>
                     ))
@@ -350,12 +387,29 @@ const CourseDetail: React.FC = () => {
         {/* ... (Other tabs remain the same) ... */}
         {canViewFullData && activeTab === 'LOGS' && (
           <div className="space-y-4">
+             {/* Log Search Bar */}
+             <div className="relative mb-4">
+                 <input 
+                    type="text" 
+                    placeholder="업무 일지 내용 검색..." 
+                    className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-brand-500"
+                    value={logSearchTerm}
+                    onChange={(e) => setLogSearchTerm(e.target.value)}
+                 />
+                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                 {logSearchTerm && (
+                     <button onClick={() => setLogSearchTerm('')} className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
+                         <X size={16} />
+                     </button>
+                 )}
+             </div>
+
              {relatedLogs.length > 0 ? (
                  relatedLogs.map(log => <LogCard key={log.id} log={log} />)
              ) : (
                  <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                     <List size={32} className="mx-auto mb-2 opacity-20"/>
-                    등록된 업무 일지가 없습니다.
+                    {logSearchTerm ? '검색 조건에 맞는 기록이 없습니다.' : '등록된 업무 일지가 없습니다.'}
                  </div>
              )}
           </div>

@@ -1,22 +1,64 @@
 
-import React, { useState } from 'react';
-import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { UserRole, UserStatus } from '../types';
+import { Department, UserRole, UserStatus } from '../types';
 
 const Settings: React.FC = () => {
-  const { user, allUsers, updateUserStatus, updateUserRole, logout } = useApp();
+  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout } = useApp();
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(true);
   const [marketingNotif, setMarketingNotif] = useState(false);
   const [defaultView, setDefaultView] = useState('list');
   const [theme, setTheme] = useState('light');
 
+  // --- Profile Edit State ---
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+      name: '',
+      department: Department.SALES,
+      role: UserRole.INTERMEDIATE
+  });
+
+  // Init profile form
+  useEffect(() => {
+      if (user) {
+          setProfileForm({
+              name: user.name,
+              department: user.department,
+              role: user.role
+          });
+      }
+  }, [user]);
+
+  const handleUpdateProfile = async () => {
+      if (!user) return;
+      try {
+          await updateUser(user.id, profileForm);
+          setIsEditingProfile(false);
+          alert('프로필 정보가 수정되었습니다.');
+      } catch (e) {
+          console.error(e);
+          alert('수정 중 오류가 발생했습니다.');
+      }
+  };
+
+  const cancelEditProfile = () => {
+      if (user) {
+          setProfileForm({
+              name: user.name,
+              department: user.department,
+              role: user.role
+          });
+      }
+      setIsEditingProfile(false);
+  };
+
   const isAdmin = user?.role === UserRole.ADMIN;
 
-  const handleSave = () => {
-    // In a real app, this would save to local storage or backend API
-    alert('설정이 성공적으로 저장되었습니다.');
+  const handleSaveSettings = () => {
+    // In a real app, this would save preferences to local storage or backend API
+    alert('환경 설정이 저장되었습니다.');
   };
 
   const getStatusBadge = (status: UserStatus) => {
@@ -35,34 +77,110 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="grid gap-6">
-        {/* Account Information (Real Data) */}
+        {/* Account Information */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-           <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center pb-2 border-b border-slate-100">
-            <Shield className="mr-2 text-brand-600" size={20} /> 
-            내 계정 정보
-          </h2>
+           <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-2">
+               <h2 className="text-lg font-bold text-slate-900 flex items-center">
+                    <Shield className="mr-2 text-brand-600" size={20} /> 
+                    내 계정 정보
+               </h2>
+               {!isEditingProfile && (
+                   <button 
+                    onClick={() => setIsEditingProfile(true)}
+                    className="text-slate-400 hover:text-brand-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
+                    title="프로필 수정"
+                   >
+                       <Edit2 size={18} />
+                   </button>
+               )}
+           </div>
           
-          <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-100">
-             <div className="flex items-center space-x-4">
-                 <div className="h-12 w-12 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden">
-                     {user?.avatar ? <img src={user.avatar} className="w-full h-full" alt="profile"/> : <User size={24} />}
-                 </div>
-                 <div>
-                     <div className="flex items-center">
-                        <h3 className="font-bold text-slate-900 mr-2">{user?.name}</h3>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${user?.role === UserRole.ADMIN ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-blue-100 text-blue-800 border-blue-200'}`}>
-                            {user?.role}
-                        </span>
+          <div className={`bg-slate-50 p-4 rounded-lg border border-slate-100 transition-all ${isEditingProfile ? 'ring-2 ring-brand-100 bg-white' : ''}`}>
+             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                 <div className="flex items-center space-x-4 flex-1">
+                     <div className="h-14 w-14 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 overflow-hidden shrink-0">
+                         {user?.avatar ? <img src={user.avatar} className="w-full h-full object-cover" alt="profile"/> : <User size={28} />}
                      </div>
-                     <p className="text-sm text-slate-500">{user?.email} • {user?.department}</p>
+                     
+                     {isEditingProfile ? (
+                         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
+                             <div>
+                                 <label className="text-[10px] font-bold text-slate-400 uppercase">이름</label>
+                                 <input 
+                                    type="text" 
+                                    value={profileForm.name}
+                                    onChange={(e) => setProfileForm({...profileForm, name: e.target.value})}
+                                    className="w-full text-sm border-slate-300 rounded-lg px-2 py-1.5 focus:ring-brand-500 focus:border-brand-500"
+                                 />
+                             </div>
+                             <div>
+                                 <label className="text-[10px] font-bold text-slate-400 uppercase">부서</label>
+                                 <select 
+                                    value={profileForm.department}
+                                    onChange={(e) => setProfileForm({...profileForm, department: e.target.value as Department})}
+                                    className="w-full text-sm border-slate-300 rounded-lg px-2 py-1.5 focus:ring-brand-500 focus:border-brand-500 bg-white"
+                                 >
+                                     {Object.values(Department).map(d => (
+                                         <option key={d} value={d}>{d}</option>
+                                     ))}
+                                 </select>
+                             </div>
+                             <div className="md:col-span-2">
+                                 <label className="text-[10px] font-bold text-slate-400 uppercase">직책 (Role)</label>
+                                 <select 
+                                    value={profileForm.role}
+                                    onChange={(e) => setProfileForm({...profileForm, role: e.target.value as UserRole})}
+                                    className="w-full text-sm border-slate-300 rounded-lg px-2 py-1.5 focus:ring-brand-500 focus:border-brand-500 bg-white"
+                                 >
+                                     <option value={UserRole.JUNIOR}>하급자 (Junior)</option>
+                                     <option value={UserRole.INTERMEDIATE}>중급자 (Intermediate)</option>
+                                     <option value={UserRole.SENIOR}>상급자 (Senior)</option>
+                                     <option value={UserRole.ADMIN}>관리자 (Admin)</option>
+                                 </select>
+                                 <p className="text-[10px] text-orange-500 mt-1 flex items-center">
+                                     <Shield size={10} className="mr-1"/> 
+                                     주의: 권한 변경 시 접근 범위가 즉시 변경됩니다.
+                                 </p>
+                             </div>
+                         </div>
+                     ) : (
+                         <div>
+                             <div className="flex items-center">
+                                <h3 className="font-bold text-slate-900 mr-2 text-lg">{user?.name}</h3>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${user?.role === UserRole.ADMIN ? 'bg-yellow-100 text-yellow-800 border-yellow-200' : 'bg-blue-100 text-blue-800 border-blue-200'}`}>
+                                    {user?.role}
+                                </span>
+                             </div>
+                             <p className="text-sm text-slate-500">{user?.email}</p>
+                             <p className="text-xs font-bold text-brand-600 mt-0.5">{user?.department}</p>
+                         </div>
+                     )}
                  </div>
+
+                 {isEditingProfile ? (
+                     <div className="flex flex-col space-y-2 shrink-0 min-w-[100px]">
+                         <button 
+                            onClick={handleUpdateProfile}
+                            className="bg-brand-600 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-brand-700 flex items-center justify-center"
+                         >
+                             <Save size={14} className="mr-1.5"/> 저장
+                         </button>
+                         <button 
+                            onClick={cancelEditProfile}
+                            className="bg-white border border-slate-300 text-slate-600 text-xs font-bold px-3 py-2 rounded-lg hover:bg-slate-50 flex items-center justify-center"
+                         >
+                             <X size={14} className="mr-1.5"/> 취소
+                         </button>
+                     </div>
+                 ) : (
+                     <button 
+                        onClick={logout}
+                        className="text-sm text-slate-500 hover:text-red-600 font-medium border border-slate-300 bg-white px-4 py-2 rounded-lg transition-colors flex items-center hover:border-red-200 hover:bg-red-50 shrink-0"
+                     >
+                         <LogOut size={16} className="mr-2" /> 로그아웃
+                     </button>
+                 )}
              </div>
-             <button 
-                onClick={logout}
-                className="text-sm text-slate-500 hover:text-red-600 font-medium border border-slate-300 bg-white px-3 py-1.5 rounded-lg transition-colors flex items-center hover:border-red-200 hover:bg-red-50"
-             >
-                 <LogOut size={14} className="mr-1.5" /> 로그아웃
-             </button>
           </div>
         </div>
 
@@ -235,7 +353,7 @@ const Settings: React.FC = () => {
         {/* Save Button */}
         <div className="flex justify-end pt-4">
             <button 
-                onClick={handleSave}
+                onClick={handleSaveSettings}
                 className="flex items-center bg-brand-600 text-white px-6 py-3 rounded-lg font-bold shadow-md hover:bg-brand-700 transition-all hover:shadow-lg"
             >
                 <Save size={18} className="mr-2" />

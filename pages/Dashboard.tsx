@@ -5,14 +5,15 @@ import LogCard from '../components/LogCard';
 import { CalendarView } from '../components/CalendarView';
 import { CalendarSettingsModal } from '../components/CalendarSettingsModal';
 import { Department, LogEntry, UserRole } from '../types';
-import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon } from 'lucide-react';
+import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { addTodo } from '../services/firestoreService';
 import { searchAppWithAI } from '../services/geminiService';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
   const { logs, courses, people, user, canUseAI, canViewFullData, isAdmin } = useApp();
+  const navigate = useNavigate();
   
   // Determine default department filter based on user role
   // Senior/Admin starts with 'ALL', Intermediate starts with their department
@@ -93,27 +94,15 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // --- Recent Activity Logic ---
+  // --- Recent Activity Logic (Latest Uploads) ---
   const recentLogs = useMemo(() => {
     return [...logs].sort((a, b) => {
-      const tA = a.updatedAt || a.createdAt || 0;
-      const tB = b.updatedAt || b.createdAt || 0;
+      // Prioritize CreatedAt for "Recently Uploaded", falling back to Date
+      const tA = a.createdAt || new Date(a.date).getTime();
+      const tB = b.createdAt || new Date(b.date).getTime();
       return tB - tA;
-    }).slice(0, 5);
+    }).slice(0, 6);
   }, [logs]);
-
-  const formatTimeAgo = (timestamp?: number) => {
-      if (!timestamp) return '';
-      const seconds = Math.floor((Date.now() - timestamp) / 1000);
-      if (seconds < 60) return '방금 전';
-      const minutes = Math.floor(seconds / 60);
-      if (minutes < 60) return `${minutes}분 전`;
-      const hours = Math.floor(minutes / 60);
-      if (hours < 24) return `${hours}시간 전`;
-      const days = Math.floor(hours / 24);
-      if (days < 7) return `${days}일 전`;
-      return new Date(timestamp).toLocaleDateString();
-  };
 
   // Filters and Sorts
   const deptFilteredLogs = filterDept === 'ALL' ? logs : logs.filter(l => l.department === filterDept);
@@ -133,13 +122,8 @@ const Dashboard: React.FC = () => {
     ...(isGoogleConnected ? MOCK_EXTERNAL_EVENTS.filter(e => e.source === 'Google') : []),
     ...(isOutlookConnected ? MOCK_EXTERNAL_EVENTS.filter(e => e.source === 'Outlook') : [])
   ];
-  const selectedDateExternalEvents = (viewMode === 'calendar' && selectedCalendarDate) 
-    ? externalEvents.filter(e => e.date === selectedCalendarDate)
-    : [];
-
+  
   const handleDateSelect = (date: string) => setSelectedCalendarDate(selectedCalendarDate === date ? null : date);
-  const clearFilters = () => { setStartDate(''); setEndDate(''); setSelectedCalendarDate(null); };
-  const toggleSort = () => setSortOrder(prev => prev === 'latest' ? 'oldest' : 'latest');
   const isAnyCalendarConnected = isGoogleConnected || isOutlookConnected;
 
   const groupedByCourse = finalDisplayLogs.reduce((acc, log) => {
@@ -159,14 +143,14 @@ const Dashboard: React.FC = () => {
   // --- SPECIAL VIEW FOR JUNIOR (ISSUES ONLY) ---
   if (!canViewFullData) {
       return (
-          <div className="space-y-6">
+          <div className="space-y-8">
               <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-200 shadow-sm flex items-center space-x-4">
                   <div className="p-3 bg-white rounded-full text-yellow-600 shadow-sm">
                       <AlertTriangle size={32} />
                   </div>
                   <div>
                       <h1 className="text-2xl font-bold text-slate-900">주요 이슈 현황판</h1>
-                      <p className="text-slate-600">하급자 권한으로 골프장별 이슈 사항만 조회할 수 있습니다.</p>
+                      <p className="text-slate-600">골프장별 이슈 사항을 조회하고 클릭하여 상세 내역을 확인할 수 있습니다.</p>
                   </div>
               </div>
 
@@ -184,9 +168,14 @@ const Dashboard: React.FC = () => {
                               {hasIssues ? (
                                   <ul className="space-y-3">
                                       {course.issues?.map((issue, idx) => (
-                                          <li key={idx} className="text-sm text-slate-700 flex items-start bg-red-50 p-2 rounded-lg">
+                                          <li 
+                                            key={idx} 
+                                            className="text-sm text-slate-700 flex items-start bg-red-50 p-2 rounded-lg cursor-pointer hover:bg-red-100 transition-colors group"
+                                            onClick={() => navigate(`/courses/${course.id}`, { state: { filterIssue: issue } })}
+                                            title="클릭하여 관련 업무 일지 조회"
+                                          >
                                               <AlertOctagon size={14} className="text-red-500 mr-2 mt-0.5 shrink-0" />
-                                              {issue}
+                                              <span className="group-hover:underline">{issue}</span>
                                           </li>
                                       ))}
                                   </ul>
@@ -200,9 +189,33 @@ const Dashboard: React.FC = () => {
                       );
                   })}
               </div>
+
+              {/* Recent Updates Section for Junior */}
+              <div className="mt-8">
+                  <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                      <Activity size={20} className="mr-2 text-brand-600"/> 최신 업데이트된 자료 (Recent Uploads)
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {recentLogs.map(log => (
+                          <div key={log.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:border-brand-300 transition-all shadow-sm">
+                              <div className="flex justify-between text-xs text-slate-500 mb-2">
+                                  <span className="font-bold text-brand-600">{log.courseName}</span>
+                                  <span>{log.date}</span>
+                              </div>
+                              <h4 className="text-sm font-bold text-slate-800 mb-1 line-clamp-1">{log.title}</h4>
+                              <p className="text-xs text-slate-600 line-clamp-2">{log.content}</p>
+                          </div>
+                      ))}
+                      {recentLogs.length === 0 && (
+                          <div className="col-span-full text-center py-8 text-slate-400 bg-slate-50 rounded-lg border border-dashed">
+                              최신 자료가 없습니다.
+                          </div>
+                      )}
+                  </div>
+              </div>
               
-              <div className="bg-white border border-slate-200 p-4 rounded-lg text-center text-xs text-slate-500 flex items-center justify-center">
-                  <Lock size={14} className="mr-2 text-slate-400"/> 상세 업무 일지 및 인물 정보는 상급자/중급자 권한이 필요합니다.
+              <div className="bg-white border border-slate-200 p-4 rounded-lg text-center text-xs text-slate-500 flex items-center justify-center mt-6">
+                  <Lock size={14} className="mr-2 text-slate-400"/> 상세 업무 일지 전체 조회 및 인물 정보는 상급자/중급자 권한이 필요합니다.
               </div>
           </div>
       );
