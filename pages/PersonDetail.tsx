@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 const PersonDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { people, courses, updatePerson } = useApp();
+  const navigate = useNavigate();
+  const { people, courses, updatePerson, deletePerson, isAdmin } = useApp();
   
   const person = people.find(p => p.id === id);
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
@@ -31,7 +32,6 @@ const PersonDetail: React.FC = () => {
   );
 
   // Automatically enable archiving when role/course changes
-  // Only trigger when hasRoleChanged transitions (to avoid overriding user uncheck)
   useEffect(() => {
     if (hasRoleChanged) {
         setShouldArchive(true);
@@ -148,15 +148,14 @@ const PersonDetail: React.FC = () => {
       // Auto-Archiving Logic
       if (shouldArchive && originalPerson && originalPerson.currentCourseId) {
           const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || 'Unknown';
-          const newCourseName = courses.find(c => c.id === editForm.currentCourseId)?.name || 'Unknown';
           
           // Generate a detailed description for the archived record
           const changes = [];
           if (originalPerson.currentCourseId !== editForm.currentCourseId) {
-            changes.push(`소속 변경(${oldCourseName} → ${newCourseName})`);
+            changes.push(`소속 변경`);
           }
           if (originalPerson.currentRole !== editForm.currentRole) {
-            changes.push(`직책 변경(${originalPerson.currentRole} → ${editForm.currentRole})`);
+            changes.push(`직책 변경`);
           }
 
           const changeReason = `[시스템 자동 보관] ${changes.join(', ')}`;
@@ -181,18 +180,38 @@ const PersonDetail: React.FC = () => {
       alert('인물 정보가 수정되었습니다.' + (shouldArchive ? '\n(이전 경력이 자동으로 과거 이력에 보관되었습니다)' : ''));
   };
 
+  // --- DELETE HANDLER ---
+  const handleDelete = () => {
+      if (window.confirm(`정말로 '${person.name}' 인물 정보를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+          deletePerson(person.id);
+          alert('삭제되었습니다.');
+          navigate(-1); // Go back to previous page
+      }
+  };
+
   return (
     <div className="space-y-6">
       {/* Profile Header */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
         <div className="bg-brand-900 h-24 relative">
-             <button 
-                onClick={openEditModal}
-                className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 text-white p-2 rounded-full backdrop-blur-sm transition-colors"
-                title="인물 정보 수정"
-             >
-                <Edit2 size={18} />
-             </button>
+             <div className="absolute top-4 right-4 flex space-x-2">
+                 {/* Delete Button (Trash) */}
+                 <button 
+                    onClick={handleDelete}
+                    className="bg-white/20 hover:bg-red-500/80 text-white p-2 rounded-full backdrop-blur-sm transition-colors"
+                    title="인물 정보 삭제"
+                 >
+                    <Trash2 size={18} />
+                 </button>
+                 {/* Edit Button */}
+                 <button 
+                    onClick={openEditModal}
+                    className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-full backdrop-blur-sm transition-colors"
+                    title="인물 정보 수정"
+                 >
+                    <Edit2 size={18} />
+                 </button>
+             </div>
         </div>
         <div className="px-6 pb-6 relative">
             <div className="flex justify-between items-end -mt-10 mb-4">
