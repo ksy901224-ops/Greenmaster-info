@@ -187,84 +187,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await updateDocument('users', userId, { department });
   };
 
-  // General Update User Function
   const updateUser = async (userId: string, data: Partial<UserProfile>) => {
     await updateDocument('users', userId, data);
   };
 
   // --- CRUD Actions (Now using Firestore) ---
-  
-  // Enhanced: Prevent duplicate logs
-  const addLog = (log: LogEntry) => {
-      // Check for identical logs (same date, title, and course) to prevent duplicate uploads
-      const isDuplicate = logs.some(existing => 
-          existing.date === log.date && 
-          existing.title === log.title && 
-          existing.courseId === log.courseId
-      );
-
-      if (isDuplicate) {
-          console.warn('Duplicate log detected. Skipping save.');
-          return; // Skip saving
-      }
-      saveDocument('logs', log);
-  };
-
+  const addLog = (log: LogEntry) => saveDocument('logs', log);
   const updateLog = (log: LogEntry) => updateDocument('logs', log.id, log);
   const deleteLog = (id: string) => deleteDocument('logs', id);
 
-  // Enhanced: Smart Course Merging
-  const addCourse = async (course: GolfCourse) => {
-      const normalize = (s: string) => s.trim().replace(/\s+/g, '').toLowerCase();
-      const existing = courses.find(c => normalize(c.name) === normalize(course.name));
-
-      if (existing) {
-          // Merge Logic: Use new data if existing is empty/default
-          const merged: GolfCourse = {
-              ...existing,
-              address: (existing.address.length < 5 && course.address.length > 5) ? course.address : existing.address,
-              holes: existing.holes || course.holes,
-              type: existing.type || course.type,
-              grassType: existing.grassType || course.grassType,
-              // Merge issues array without duplicates
-              issues: Array.from(new Set([...(existing.issues || []), ...(course.issues || [])])).filter(i => i.trim() !== '')
-          };
-          
-          await updateDocument('courses', existing.id, merged);
-          console.log(`Merged duplicate course: ${existing.name}`);
-      } else {
-          await saveDocument('courses', course);
-      }
-  };
-
+  const addCourse = (course: GolfCourse) => saveDocument('courses', course);
   const updateCourse = (course: GolfCourse) => updateDocument('courses', course.id, course);
   const deleteCourse = (id: string) => deleteDocument('courses', id);
 
-  // Smart Person Add (Enhanced Deduplication & Merging)
+  // Smart Person Add (Deduplication Logic preserved but async)
   const addPerson = async (newPerson: Person) => {
     const normalize = (s: string) => s.trim().replace(/\s+/g, '').toLowerCase();
+    // Use current 'people' state which is synced from DB
     const existing = people.find(p => normalize(p.name) === normalize(newPerson.name));
 
     if (existing) {
-        // --- Merge Logic ---
-        
-        // 1. Careers: Merge new careers into existing ones, avoiding duplicates
-        const existingCareers = existing.careers || [];
-        const newCareersToAdd = (newPerson.careers || []).filter(nc => {
-            // Check if this career already exists in the history (matching course and role)
-            return !existingCareers.some(ec => 
-                ec.courseId === nc.courseId && normalize(ec.role) === normalize(nc.role)
-            );
-        });
-        
-        let mergedCareers = [...existingCareers, ...newCareersToAdd];
-
-        // 2. Archive Current Role if Changed
-        // If the new data says they are somewhere else, move old current role to career history
+        let updatedCareers = [...existing.careers];
         const isRoleChanged = newPerson.currentCourseId && (newPerson.currentCourseId !== existing.currentCourseId);
+        
         if (isRoleChanged && existing.currentCourseId) {
              const oldCourse = courses.find(c => c.id === existing.currentCourseId);
-             mergedCareers.unshift({ // Add to top as most recent history
+             updatedCareers.push({
                  courseId: existing.currentCourseId,
                  courseName: oldCourse?.name || 'Unknown Course',
                  role: existing.currentRole,
@@ -274,36 +222,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
              });
         }
 
-        // 3. Construct Merged Person
         const merged: Person = {
             ...existing,
-            // Keep existing phone if new one is empty, otherwise update
-            phone: (newPerson.phone && newPerson.phone.length > 3) ? newPerson.phone : existing.phone,
-            
-            // Update role/course if new info is provided
+            phone: newPerson.phone || existing.phone,
             currentRole: newPerson.currentRole || existing.currentRole,
             currentCourseId: newPerson.currentCourseId || existing.currentCourseId,
             currentRoleStartDate: newPerson.currentRoleStartDate || existing.currentRoleStartDate,
-            
-            // Prefer non-neutral affinity if available
             affinity: newPerson.affinity !== 0 ? newPerson.affinity : existing.affinity,
-            
-            // Append notes instead of overwriting
-            notes: existing.notes + (newPerson.notes && !existing.notes.includes(newPerson.notes) ? `\n\n[통합됨]: ${newPerson.notes}` : ''),
-            
-            careers: mergedCareers
+            notes: existing.notes + (newPerson.notes ? `\n\n[Merged Info]: ${newPerson.notes}` : ''),
+            careers: updatedCareers
         };
-        
         await updateDocument('people', existing.id, merged);
-        console.log(`Merged duplicate person: ${existing.name}`);
     } else {
         await saveDocument('people', newPerson);
     }
   };
 
   const updatePerson = (person: Person) => updateDocument('people', person.id, person);
-  
-  // New Delete Person Function
   const deletePerson = (id: string) => deleteDocument('people', id);
 
   const addExternalEvent = (event: ExternalEvent) => saveDocument('external_events', event);
@@ -319,7 +254,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logs, courses, people, externalEvents,
     addLog, updateLog, deleteLog,
     addCourse, updateCourse, deleteCourse,
-    addPerson, updatePerson, deletePerson, // Export deletePerson
+    addPerson, updatePerson, deletePerson,
     addExternalEvent, refreshLogs, isSimulatedLive,
     canUseAI, canViewFullData, isAdmin
   };
