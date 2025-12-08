@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary } from '../services/geminiService';
-import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft } from 'lucide-react';
+import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -49,8 +49,20 @@ const CourseDetail: React.FC = () => {
   };
 
   const openEditModal = () => {
-      setEditForm({ ...course });
-      // Initialize calculator fields (optional)
+      // Check for draft
+      const draftKey = `GM_DRAFT_COURSE_${course.id}`;
+      const savedDraft = localStorage.getItem(draftKey);
+      
+      if (savedDraft) {
+          try {
+              setEditForm(JSON.parse(savedDraft));
+          } catch(e) {
+              setEditForm({ ...course });
+          }
+      } else {
+          setEditForm({ ...course });
+      }
+
       setAreaPyeong('');
       setAreaM2('');
       setLengthYard('');
@@ -58,9 +70,18 @@ const CourseDetail: React.FC = () => {
       setIsEditModalOpen(true);
   };
 
+  const closeEditModal = () => {
+      // Explicit cancel clears draft
+      localStorage.removeItem(`GM_DRAFT_COURSE_${course.id}`);
+      setIsEditModalOpen(false);
+  }
+
   const handleEditChange = (field: keyof GolfCourse, value: any) => {
       if (editForm) {
-          setEditForm({ ...editForm, [field]: value });
+          const newState = { ...editForm, [field]: value };
+          setEditForm(newState);
+          // Autosave
+          localStorage.setItem(`GM_DRAFT_COURSE_${course.id}`, JSON.stringify(newState));
       }
   };
 
@@ -102,11 +123,19 @@ const CourseDetail: React.FC = () => {
       const newIssues = [...editForm.issues];
       newIssues[index] = val;
       setEditForm({ ...editForm, issues: newIssues });
+      
+      // Autosave manually for nested
+      const newState = { ...editForm, issues: newIssues };
+      localStorage.setItem(`GM_DRAFT_COURSE_${course.id}`, JSON.stringify(newState));
   };
 
   const addIssue = () => {
       if (!editForm) return;
-      setEditForm({ ...editForm, issues: [...(editForm.issues || []), ''] });
+      const newIssues = [...(editForm.issues || []), ''];
+      setEditForm({ ...editForm, issues: newIssues });
+      // Autosave
+      const newState = { ...editForm, issues: newIssues };
+      localStorage.setItem(`GM_DRAFT_COURSE_${course.id}`, JSON.stringify(newState));
   };
 
   const removeIssue = (index: number) => {
@@ -114,6 +143,9 @@ const CourseDetail: React.FC = () => {
       const newIssues = [...editForm.issues];
       newIssues.splice(index, 1);
       setEditForm({ ...editForm, issues: newIssues });
+      // Autosave
+      const newState = { ...editForm, issues: newIssues };
+      localStorage.setItem(`GM_DRAFT_COURSE_${course.id}`, JSON.stringify(newState));
   };
 
   const saveEdit = () => {
@@ -121,6 +153,7 @@ const CourseDetail: React.FC = () => {
           // Filter out empty issues
           const cleanedIssues = (editForm.issues || []).filter(i => i.trim() !== '');
           updateCourse({ ...editForm, issues: cleanedIssues });
+          localStorage.removeItem(`GM_DRAFT_COURSE_${course.id}`);
           setIsEditModalOpen(false);
           alert('골프장 정보가 수정되었습니다.');
       }
@@ -398,8 +431,13 @@ const CourseDetail: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                    <h3 className="font-bold text-lg text-slate-900">골프장 정보 수정</h3>
-                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <h3 className="font-bold text-lg text-slate-900 flex items-center">
+                        골프장 정보 수정 
+                        <span className="ml-2 text-[10px] text-brand-600 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full flex items-center">
+                            <Cloud size={10} className="mr-1"/> 자동 저장 중
+                        </span>
+                    </h3>
+                    <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600">
                         <X size={24} />
                     </button>
                 </div>
@@ -607,7 +645,7 @@ const CourseDetail: React.FC = () => {
                 </div>
                 
                 <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3 shrink-0">
-                    <button onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100">
+                    <button onClick={closeEditModal} className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100">
                         취소
                     </button>
                     <button onClick={saveEdit} className="px-4 py-2 text-sm font-bold text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center shadow-sm">

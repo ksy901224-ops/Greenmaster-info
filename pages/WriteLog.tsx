@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, ExternalEvent, EventType } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, Users, CheckCircle, AlertCircle, PlusSquare, Zap, AlertTriangle, Clock, Globe, Map, ArrowLeft, Calendar, FileType, AlignLeft, CalendarPlus, ListChecks, RefreshCcw, Layers, ChevronDown, Briefcase, Phone, User, CalendarDays, Link as LinkIcon, Building, Calculator } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, Users, CheckCircle, AlertCircle, PlusSquare, Zap, AlertTriangle, Clock, Globe, Map, ArrowLeft, Calendar, FileType, AlignLeft, CalendarPlus, ListChecks, RefreshCcw, Layers, ChevronDown, Briefcase, Phone, User, CalendarDays, Link as LinkIcon, Building, Calculator, Cloud } from 'lucide-react';
 import { analyzeDocument, getCourseDetailsFromAI } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -13,6 +13,9 @@ const WriteLog: React.FC = () => {
   const editingLog = location.state?.log as LogEntry | undefined;
   
   const [activeTab, setActiveTab] = useState<'LOG' | 'PERSON' | 'SCHEDULE'>('LOG');
+
+  // --- Autosave Indicator State ---
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
   // --- Log Form State ---
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]); // Added Date State
@@ -72,18 +75,85 @@ const WriteLog: React.FC = () => {
 
   const [highlightedFields, setHighlightedFields] = useState<Set<string>>(new Set());
   
+  // --- Initial Data Loading (Draft or Edit) ---
   useEffect(() => {
     if (editingLog) {
       setActiveTab('LOG');
-      setLogDate(editingLog.date); // Load date
+      setLogDate(editingLog.date);
       setTitle(editingLog.title);
       setContent(editingLog.content);
       setDept(editingLog.department);
       setCourseId(editingLog.courseId);
       setTags(editingLog.tags || []);
       setContactPerson(editingLog.contactPerson || '');
+    } else {
+        // Load Drafts if new entry
+        const savedLogDraft = localStorage.getItem('GM_DRAFT_LOG');
+        if (savedLogDraft) {
+            try {
+                const p = JSON.parse(savedLogDraft);
+                setLogDate(p.logDate || new Date().toISOString().split('T')[0]);
+                setDept(p.dept || '영업');
+                setCourseId(p.courseId || '');
+                setTitle(p.title || '');
+                setContent(p.content || '');
+                setTags(p.tags || []);
+                setContactPerson(p.contactPerson || '');
+            } catch(e) {}
+        }
+
+        const savedPersonDraft = localStorage.getItem('GM_DRAFT_PERSON');
+        if (savedPersonDraft) {
+            try {
+                const p = JSON.parse(savedPersonDraft);
+                setPersonName(p.personName || '');
+                setPersonPhone(p.personPhone || '');
+                setPersonRole(p.personRole || '');
+                setPersonStartDate(p.personStartDate || new Date().toISOString().split('T')[0]);
+                setPersonCourseId(p.personCourseId || '');
+                setPersonAffinity(p.personAffinity || '0');
+                setPersonNotes(p.personNotes || '');
+            } catch(e) {}
+        }
+
+        const savedSchedDraft = localStorage.getItem('GM_DRAFT_SCHED');
+        if (savedSchedDraft) {
+            try {
+                const p = JSON.parse(savedSchedDraft);
+                setSchedTitle(p.schedTitle || '');
+                setSchedDate(p.schedDate || new Date().toISOString().split('T')[0]);
+                setSchedTime(p.schedTime || '09:00');
+                setSchedLocation(p.schedLocation || '');
+                setSchedSource(p.schedSource || 'Manual');
+                setSchedType(p.schedType || 'MEETING');
+                setSchedCourseId(p.schedCourseId || '');
+                setSchedPersonId(p.schedPersonId || '');
+            } catch(e) {}
+        }
     }
   }, [editingLog]);
+
+  // --- Autosave Effect ---
+  useEffect(() => {
+      // Only autosave new entries, skip if editing existing log (unless we want to support that too, but keeping it simple)
+      if (editingLog) return; 
+
+      const logDraft = { logDate, dept, courseId, title, content, tags, contactPerson };
+      const personDraft = { personName, personPhone, personRole, personStartDate, personCourseId, personAffinity, personNotes };
+      const schedDraft = { schedTitle, schedDate, schedTime, schedLocation, schedSource, schedType, schedCourseId, schedPersonId };
+
+      localStorage.setItem('GM_DRAFT_LOG', JSON.stringify(logDraft));
+      localStorage.setItem('GM_DRAFT_PERSON', JSON.stringify(personDraft));
+      localStorage.setItem('GM_DRAFT_SCHED', JSON.stringify(schedDraft));
+
+      setLastSavedTime(new Date().toLocaleTimeString());
+  }, [
+      // Dependencies for all fields
+      logDate, dept, courseId, title, content, tags, contactPerson,
+      personName, personPhone, personRole, personStartDate, personCourseId, personAffinity, personNotes,
+      schedTitle, schedDate, schedTime, schedLocation, schedSource, schedType, schedCourseId, schedPersonId,
+      editingLog
+  ]);
 
   useEffect(() => {
     if (feedback?.type === 'success' && !feedback.summaryReport) {
@@ -386,9 +456,15 @@ const WriteLog: React.FC = () => {
     if (editingLog) updateLog({ ...editingLog, ...logData });
     else addLog({ id: `manual-${Date.now()}`, author: '사용자', createdAt: Date.now(), ...logData });
     
+    // Clear Draft on Success
+    localStorage.removeItem('GM_DRAFT_LOG');
+
     setTimeout(() => { 
         setIsSubmitting(false); alert('저장되었습니다.'); 
-        if(!editingLog) { setTitle(''); setContent(''); setTags([]); setCourseId(''); setContactPerson(''); setLogDate(new Date().toISOString().split('T')[0]); }
+        if(!editingLog) { 
+            setTitle(''); setContent(''); setTags([]); setCourseId(''); setContactPerson(''); setLogDate(new Date().toISOString().split('T')[0]); 
+            setLastSavedTime(null);
+        }
         else navigate(-1);
     }, 500);
   };
@@ -401,7 +477,15 @@ const WriteLog: React.FC = () => {
         currentRoleStartDate: personStartDate, currentCourseId: personCourseId, affinity: parseInt(personAffinity) as AffinityLevel,
         notes: personNotes, careers: [] 
     });
-    setTimeout(() => { setIsSubmitting(false); alert('인물 등록 완료'); setPersonName(''); setPersonPhone(''); setPersonRole(''); setPersonNotes(''); }, 500);
+    
+    // Clear Draft
+    localStorage.removeItem('GM_DRAFT_PERSON');
+
+    setTimeout(() => { 
+        setIsSubmitting(false); alert('인물 등록 완료'); 
+        setPersonName(''); setPersonPhone(''); setPersonRole(''); setPersonNotes(''); 
+        setLastSavedTime(null);
+    }, 500);
   };
 
   const handleScheduleSubmit = (e: React.FormEvent) => {
@@ -419,7 +503,14 @@ const WriteLog: React.FC = () => {
         courseId: schedCourseId,
         personId: schedPersonId
     });
-    setTimeout(() => { setIsSubmitting(false); alert('일정 등록 완료'); setSchedTitle(''); setSchedLocation(''); }, 500);
+
+    // Clear Draft
+    localStorage.removeItem('GM_DRAFT_SCHED');
+
+    setTimeout(() => { 
+        setIsSubmitting(false); alert('일정 등록 완료'); setSchedTitle(''); setSchedLocation(''); 
+        setLastSavedTime(null);
+    }, 500);
   };
 
   const isFilled = (key: string) => highlightedFields.has(key);
@@ -541,7 +632,15 @@ const WriteLog: React.FC = () => {
             </div>
           )}
 
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 relative">
+            {/* Autosave Status Indicator */}
+            {!editingLog && lastSavedTime && (
+                <div className="absolute top-8 right-8 text-[10px] text-slate-400 flex items-center bg-slate-50 px-2 py-1 rounded-full border border-slate-100 animate-in fade-in">
+                    <Cloud size={10} className="mr-1 text-brand-500" />
+                    자동 저장됨 ({lastSavedTime})
+                </div>
+            )}
+
             <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center"><FileText className="mr-2 text-slate-400"/> 세부 정보 입력</h3>
             <form onSubmit={handleLogSubmit} className="space-y-6">
               {/* Date Input Added */}
@@ -663,7 +762,14 @@ const WriteLog: React.FC = () => {
             </div>
 
             {/* Right: Input Form */}
-            <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+            <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-slate-200 p-8 relative">
+                {/* Autosave Status Indicator */}
+                {lastSavedTime && (
+                    <div className="absolute top-8 right-8 text-[10px] text-slate-400 flex items-center bg-slate-50 px-2 py-1 rounded-full border border-slate-100 animate-in fade-in">
+                        <Cloud size={10} className="mr-1 text-brand-500" />
+                        자동 저장됨 ({lastSavedTime})
+                    </div>
+                )}
                 <form onSubmit={handlePersonSubmit} className="space-y-6">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -778,7 +884,14 @@ const WriteLog: React.FC = () => {
              </div>
 
              {/* Right: Input Form */}
-             <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
+             <div className="lg:col-span-3 bg-white rounded-3xl shadow-sm border border-slate-200 p-8 relative">
+                {/* Autosave Status Indicator */}
+                {lastSavedTime && (
+                    <div className="absolute top-8 right-8 text-[10px] text-slate-400 flex items-center bg-slate-50 px-2 py-1 rounded-full border border-slate-100 animate-in fade-in">
+                        <Cloud size={10} className="mr-1 text-brand-500" />
+                        자동 저장됨 ({lastSavedTime})
+                    </div>
+                )}
                 <form onSubmit={handleScheduleSubmit} className="space-y-6">
                     <div>
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">일정 제목 <span className="text-red-500">*</span></label>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles } from 'lucide-react';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -65,15 +65,37 @@ const PersonDetail: React.FC = () => {
   };
 
   const openEditModal = () => {
-      setEditForm({ ...person });
+      // Check for Draft
+      const draftKey = `GM_DRAFT_PERSON_${person.id}`;
+      const savedDraft = localStorage.getItem(draftKey);
+
+      if (savedDraft) {
+          try {
+              setEditForm(JSON.parse(savedDraft));
+          } catch(e) {
+              setEditForm({ ...person });
+          }
+      } else {
+          setEditForm({ ...person });
+      }
+      
       setOriginalPerson({ ...person }); // Store snapshot
       setShouldArchive(false);
       setIsEditModalOpen(true);
   };
 
+  const closeEditModal = () => {
+      // Clear Draft on explicit cancel
+      localStorage.removeItem(`GM_DRAFT_PERSON_${person.id}`);
+      setIsEditModalOpen(false);
+  };
+
   const handleEditChange = (field: keyof Person, value: any) => {
       if (editForm) {
-          setEditForm({ ...editForm, [field]: value });
+          const newState = { ...editForm, [field]: value };
+          setEditForm(newState);
+          // Autosave
+          localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
       }
   };
 
@@ -88,7 +110,11 @@ const PersonDetail: React.FC = () => {
             endDate: '',
             description: ''
         };
-        setEditForm({...editForm, careers: [newCareer, ...editForm.careers]}); // Add to top
+        const newCareers = [newCareer, ...editForm.careers];
+        setEditForm({...editForm, careers: newCareers});
+        // Autosave
+        const newState = { ...editForm, careers: newCareers };
+        localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
     }
   };
 
@@ -97,6 +123,9 @@ const PersonDetail: React.FC = () => {
         const newCareers = [...editForm.careers];
         newCareers.splice(index, 1);
         setEditForm({...editForm, careers: newCareers});
+        // Autosave
+        const newState = { ...editForm, careers: newCareers };
+        localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
     }
   };
 
@@ -105,6 +134,9 @@ const PersonDetail: React.FC = () => {
           const newCareers = [...editForm.careers];
           newCareers[index] = { ...newCareers[index], [field]: value };
           setEditForm({...editForm, careers: newCareers});
+          // Autosave
+          const newState = { ...editForm, careers: newCareers };
+          localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
       }
   };
 
@@ -143,6 +175,8 @@ const PersonDetail: React.FC = () => {
       }
 
       updatePerson(finalPerson);
+      // Clear Draft on Success
+      localStorage.removeItem(`GM_DRAFT_PERSON_${person.id}`);
       setIsEditModalOpen(false);
       alert('인물 정보가 수정되었습니다.' + (shouldArchive ? '\n(이전 경력이 자동으로 과거 이력에 보관되었습니다)' : ''));
   };
@@ -280,8 +314,13 @@ const PersonDetail: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                    <h3 className="font-bold text-lg text-slate-900">인물 정보 수정</h3>
-                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <h3 className="font-bold text-lg text-slate-900 flex items-center">
+                        인물 정보 수정
+                        <span className="ml-2 text-[10px] text-brand-600 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full flex items-center">
+                            <Cloud size={10} className="mr-1"/> 자동 저장 중
+                        </span>
+                    </h3>
+                    <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600">
                         <X size={24} />
                     </button>
                 </div>
@@ -531,7 +570,7 @@ const PersonDetail: React.FC = () => {
                 
                 <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3 shrink-0">
                     <button 
-                        onClick={() => setIsEditModalOpen(false)}
+                        onClick={closeEditModal}
                         className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
                     >
                         취소
