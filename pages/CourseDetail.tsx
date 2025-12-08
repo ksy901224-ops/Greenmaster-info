@@ -1,9 +1,10 @@
 
+// ... (imports remain the same, ensure CourseType, GrassType are imported)
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary } from '../services/geminiService';
-import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock } from 'lucide-react';
+import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -20,6 +21,12 @@ const CourseDetail: React.FC = () => {
   // Edit State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<GolfCourse | null>(null);
+  
+  // Converters State
+  const [areaPyeong, setAreaPyeong] = useState<string>('');
+  const [areaM2, setAreaM2] = useState<string>('');
+  const [lengthYard, setLengthYard] = useState<string>('');
+  const [lengthMeter, setLengthMeter] = useState<string>('');
 
   if (!course) return <div className="p-8 text-center">골프장을 찾을 수 없습니다.</div>;
 
@@ -43,12 +50,49 @@ const CourseDetail: React.FC = () => {
 
   const openEditModal = () => {
       setEditForm({ ...course });
+      // Initialize calculator fields (optional)
+      setAreaPyeong('');
+      setAreaM2('');
+      setLengthYard('');
+      setLengthMeter('');
       setIsEditModalOpen(true);
   };
 
   const handleEditChange = (field: keyof GolfCourse, value: any) => {
       if (editForm) {
           setEditForm({ ...editForm, [field]: value });
+      }
+  };
+
+  // --- Calculator Logic ---
+  const handlePyeongChange = (val: string) => {
+      setAreaPyeong(val);
+      if (val && !isNaN(parseFloat(val))) {
+          const m2 = (parseFloat(val) * 3.305785).toFixed(0);
+          setAreaM2(m2);
+          handleEditChange('area', `${Number(val).toLocaleString()}평 (${Number(m2).toLocaleString()} m²)`);
+      } else {
+          setAreaM2('');
+      }
+  };
+
+  const handleM2Change = (val: string) => {
+      setAreaM2(val);
+      if (val && !isNaN(parseFloat(val))) {
+          const py = (parseFloat(val) / 3.305785).toFixed(1);
+          setAreaPyeong(py);
+          handleEditChange('area', `${Number(py).toLocaleString()}평 (${Number(val).toLocaleString()} m²)`);
+      } else {
+          setAreaPyeong('');
+      }
+  };
+
+  const handleYardChange = (val: string) => {
+      setLengthYard(val);
+      if (val && !isNaN(parseFloat(val))) {
+          const m = (parseFloat(val) * 0.9144).toFixed(0);
+          setLengthMeter(m);
+          handleEditChange('length', `${Number(val).toLocaleString()} yds`);
       }
   };
 
@@ -90,7 +134,7 @@ const CourseDetail: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header Section */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative">
         <div className="flex justify-between items-start mb-1">
@@ -117,35 +161,33 @@ const CourseDetail: React.FC = () => {
             </div>
         </div>
         <p className="text-slate-500 text-sm flex items-center mb-4">
-          <span className="mr-3">{course.address}</span>
-          <span className="px-2 py-0.5 bg-slate-100 rounded text-xs">{course.type}</span>
+          <span className="mr-3 flex items-center"><MapPin size={14} className="mr-1"/> {course.address}</span>
+          <span className="px-2 py-0.5 bg-slate-100 rounded text-xs border border-slate-200">{course.type}</span>
         </p>
         
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm border-t pt-4 border-slate-100">
           <div>
-            <span className="block text-slate-400 text-xs">규모</span>
-            <span className="font-medium">{course.holes}홀 / {course.area}</span>
+            <span className="block text-slate-400 text-xs mb-0.5">규모 / 면적</span>
+            <span className="font-medium text-slate-700">{course.holes}홀 / {course.area || '-'}</span>
           </div>
           <div>
-            <span className="block text-slate-400 text-xs">잔디</span>
-            <span className="font-medium">{course.grassType}</span>
+            <span className="block text-slate-400 text-xs mb-0.5">코스 전장</span>
+            <span className="font-medium text-slate-700">{course.length || '-'}</span>
           </div>
           <div>
-            <span className="block text-slate-400 text-xs">오픈</span>
-            <span className="font-medium">{course.openYear}년</span>
+            <span className="block text-slate-400 text-xs mb-0.5">잔디 종류</span>
+            <span className="font-medium text-slate-700">{course.grassType}</span>
           </div>
-           {canViewFullData && (
-               <div>
-                <span className="block text-slate-400 text-xs">데이터 수</span>
-                <span className="font-medium">로그 {relatedLogs.length}건 / 인물 {currentStaff.length + formerStaff.length}명</span>
-              </div>
-           )}
+          <div>
+            <span className="block text-slate-400 text-xs mb-0.5">개장 년도</span>
+            <span className="font-medium text-slate-700">{course.openYear}년</span>
+          </div>
         </div>
       </div>
 
       {/* AI Summary Card - SENIOR Only */}
       {canUseAI && (
-          <div className="bg-brand-50 rounded-xl border border-brand-100 p-5">
+          <div className="bg-brand-50 rounded-xl border border-brand-100 p-5 shadow-sm">
             <div className="mb-4">
               <h3 className="text-brand-800 font-bold flex items-center mb-2">
                 <Sparkles size={18} className="mr-2 text-brand-600" /> AI 스마트 요약 및 전략 추천 (상급자 전용)
@@ -178,19 +220,19 @@ const CourseDetail: React.FC = () => {
             </div>
             
             {aiSummary && (
-              <div className="text-sm text-brand-900 leading-relaxed whitespace-pre-line bg-white/50 p-4 rounded-lg border border-brand-100">
+              <div className="text-sm text-brand-900 leading-relaxed whitespace-pre-line bg-white/60 p-5 rounded-xl border border-brand-100/50 shadow-inner">
                 {aiSummary}
               </div>
             )}
           </div>
       )}
 
-      {/* Tabs - Hiding Logs/People for Juniors */}
+      {/* Tabs */}
       <div className="border-b border-slate-200">
         <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
           <button
             onClick={() => setActiveTab('INFO')}
-            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors ${
               activeTab === 'INFO'
                 ? 'border-brand-500 text-brand-600'
                 : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
@@ -203,7 +245,7 @@ const CourseDetail: React.FC = () => {
               <>
                   <button
                     onClick={() => setActiveTab('LOGS')}
-                    className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+                    className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors ${
                       activeTab === 'LOGS'
                         ? 'border-brand-500 text-brand-600'
                         : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
@@ -213,7 +255,7 @@ const CourseDetail: React.FC = () => {
                   </button>
                   <button
                     onClick={() => setActiveTab('PEOPLE')}
-                    className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center ${
+                    className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors ${
                       activeTab === 'PEOPLE'
                         ? 'border-brand-500 text-brand-600'
                         : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
@@ -231,7 +273,7 @@ const CourseDetail: React.FC = () => {
         {activeTab === 'INFO' && (
           <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
             <h3 className="font-bold text-lg mb-4">특이사항 및 개요</h3>
-            <p className="text-slate-700 leading-relaxed mb-6 whitespace-pre-line">{course.description}</p>
+            <p className="text-slate-700 leading-relaxed mb-6 whitespace-pre-line bg-slate-50 p-4 rounded-lg border border-slate-100">{course.description}</p>
             
             <h3 className="font-bold text-lg mb-4 flex items-center">
                 <History size={18} className="mr-2 text-slate-500"/>
@@ -241,38 +283,47 @@ const CourseDetail: React.FC = () => {
                 {course.issues && course.issues.length > 0 ? (
                     course.issues.map((issue, idx) => (
                         <div key={idx} className="flex">
-                            <div className="flex-shrink-0 w-4 h-4 mt-1 mr-3 rounded-full bg-slate-200 border-2 border-white shadow-sm"></div>
+                            <div className="flex-shrink-0 w-4 h-4 mt-1 mr-3 rounded-full bg-slate-200 border-2 border-white shadow-sm ring-1 ring-slate-100"></div>
                             <div className="pb-2 border-l-2 border-slate-100 pl-4 -ml-5 pt-0.5 w-full">
                                 <p className="text-slate-800 text-sm whitespace-pre-line">{issue}</p>
                             </div>
                         </div>
                     ))
                 ) : (
-                    <div className="text-sm text-slate-400 italic bg-slate-50 p-4 rounded-lg">
-                        아직 기록된 주요 이슈가 없습니다. 업무 일지를 작성하거나 편집을 통해 추가하세요.
+                    <div className="text-sm text-slate-400 italic bg-slate-50 p-4 rounded-lg border border-dashed border-slate-200">
+                        아직 기록된 주요 이슈가 없습니다. 정보 수정을 통해 추가하세요.
                     </div>
                 )}
             </div>
             
             {(course.lat || course.lng) && (
-                <div className="mt-6 pt-6 border-t border-slate-100">
+                <div className="mt-8 pt-6 border-t border-slate-100">
                     <h3 className="font-bold text-lg mb-4 flex items-center">
                         <Globe size={18} className="mr-2 text-slate-400"/> 위치 정보 (GPS)
                     </h3>
-                    <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg inline-block border border-slate-200">
-                        위도: {course.lat || '미설정'} / 경도: {course.lng || '미설정'}
+                    <div className="flex items-center space-x-4">
+                         <div className="text-sm text-slate-600 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 flex items-center">
+                            <span className="font-bold mr-2 text-slate-400">LAT</span> {course.lat || '미설정'} 
+                         </div>
+                         <div className="text-sm text-slate-600 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 flex items-center">
+                            <span className="font-bold mr-2 text-slate-400">LNG</span> {course.lng || '미설정'} 
+                         </div>
                     </div>
                 </div>
             )}
           </div>
         )}
 
+        {/* ... (Other tabs remain the same) ... */}
         {canViewFullData && activeTab === 'LOGS' && (
           <div className="space-y-4">
              {relatedLogs.length > 0 ? (
                  relatedLogs.map(log => <LogCard key={log.id} log={log} />)
              ) : (
-                 <div className="text-center py-12 text-slate-400">등록된 업무 일지가 없습니다.</div>
+                 <div className="text-center py-12 text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <List size={32} className="mx-auto mb-2 opacity-20"/>
+                    등록된 업무 일지가 없습니다.
+                 </div>
              )}
           </div>
         )}
@@ -342,10 +393,10 @@ const CourseDetail: React.FC = () => {
         )}
       </div>
 
-      {/* Edit Modal */}
+      {/* Edit Modal (Expanded Scope) */}
       {isEditModalOpen && editForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <h3 className="font-bold text-lg text-slate-900">골프장 정보 수정</h3>
                     <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -353,27 +404,182 @@ const CourseDetail: React.FC = () => {
                     </button>
                 </div>
                 
-                <div className="p-6 space-y-4 overflow-y-auto">
-                    {/* Only Senior/Admin can edit basic info */}
+                <div className="p-6 space-y-6 overflow-y-auto">
+                    {/* 1. Basic Info */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="col-span-1 md:col-span-2">
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">골프장 이름</label>
+                            <input 
+                                type="text" 
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.name}
+                                onChange={(e) => handleEditChange('name', e.target.value)}
+                            />
+                        </div>
+                        <div className="col-span-1 md:col-span-2">
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5">주소</label>
+                            <input 
+                                type="text" 
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.address}
+                                onChange={(e) => handleEditChange('address', e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    {/* 2. Specs */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                             <label className="block text-xs font-bold text-slate-700 mb-1.5">규모 (Holes)</label>
+                             <input 
+                                type="number" 
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.holes}
+                                onChange={(e) => handleEditChange('holes', parseInt(e.target.value) || 0)}
+                             />
+                        </div>
+                        <div>
+                             <label className="block text-xs font-bold text-slate-700 mb-1.5">운영 형태</label>
+                             <select 
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.type}
+                                onChange={(e) => handleEditChange('type', e.target.value as CourseType)}
+                             >
+                                 {Object.values(CourseType).map(t => <option key={t} value={t}>{t}</option>)}
+                             </select>
+                        </div>
+                        <div>
+                             <label className="block text-xs font-bold text-slate-700 mb-1.5">잔디 종류</label>
+                             <select 
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.grassType}
+                                onChange={(e) => handleEditChange('grassType', e.target.value as GrassType)}
+                             >
+                                 {Object.values(GrassType).map(g => <option key={g} value={g}>{g}</option>)}
+                             </select>
+                        </div>
+                    </div>
+
+                    {/* Area & Length with Calculators */}
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center">
+                             <Calculator size={14} className="mr-1.5"/> 면적 및 전장 (Calculator)
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label className="block text-[10px] text-slate-500 mb-1 font-bold">총 면적 (평 ↔ m² 자동변환)</label>
+                                <div className="flex space-x-2">
+                                    <div className="relative flex-1">
+                                        <input 
+                                            type="number" 
+                                            placeholder="평"
+                                            className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500"
+                                            value={areaPyeong}
+                                            onChange={(e) => handlePyeongChange(e.target.value)}
+                                        />
+                                        <span className="absolute right-3 top-2.5 text-xs text-slate-400">평</span>
+                                    </div>
+                                    <div className="relative flex-1">
+                                        <input 
+                                            type="number" 
+                                            placeholder="m²"
+                                            className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500 bg-slate-100"
+                                            value={areaM2}
+                                            onChange={(e) => handleM2Change(e.target.value)}
+                                        />
+                                        <span className="absolute right-3 top-2.5 text-xs text-slate-400">m²</span>
+                                    </div>
+                                </div>
+                                <input type="hidden" value={editForm.area} />
+                            </div>
+
+                            <div>
+                                <label className="block text-[10px] text-slate-500 mb-1 font-bold">코스 전장 (Length)</label>
+                                <div className="flex space-x-2">
+                                    <div className="relative flex-1">
+                                        <input 
+                                            type="number" 
+                                            placeholder="Yard"
+                                            className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500"
+                                            value={lengthYard}
+                                            onChange={(e) => handleYardChange(e.target.value)}
+                                        />
+                                        <span className="absolute right-3 top-2.5 text-xs text-slate-400">yd</span>
+                                    </div>
+                                    <div className="relative flex-1">
+                                         <div className="w-full rounded-lg border border-slate-200 bg-slate-100 text-sm py-2 px-3 text-slate-500 h-[38px] flex items-center">
+                                            {lengthMeter ? `${Number(lengthMeter).toLocaleString()} m` : '-'}
+                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                             <label className="block text-xs font-bold text-slate-700 mb-1.5">개장 년도</label>
+                             <input 
+                                type="text" 
+                                placeholder="YYYY"
+                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                value={editForm.openYear}
+                                onChange={(e) => handleEditChange('openYear', e.target.value)}
+                             />
+                        </div>
+                        <div>
+                            {/* Spacer */}
+                        </div>
+                    </div>
+
+                    {/* 3. GPS */}
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <label className="block text-xs font-bold text-slate-700 mb-2 flex items-center">
+                             <Globe size={14} className="mr-1.5"/> GPS 좌표 (위치 정보)
+                        </label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[10px] text-slate-500 mb-0.5">Latitude (위도)</label>
+                                <input 
+                                    type="number" 
+                                    step="0.000001"
+                                    className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                    value={editForm.lat || ''}
+                                    onChange={(e) => handleEditChange('lat', parseFloat(e.target.value))}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] text-slate-500 mb-0.5">Longitude (경도)</label>
+                                <input 
+                                    type="number" 
+                                    step="0.000001"
+                                    className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
+                                    value={editForm.lng || ''}
+                                    onChange={(e) => handleEditChange('lng', parseFloat(e.target.value))}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 4. Description */}
                     <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">이름</label>
-                        <input 
-                            type="text" 
-                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                            value={editForm.name}
-                            onChange={(e) => handleEditChange('name', e.target.value)}
-                            disabled={!isAdmin} 
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">특이사항 및 설명</label>
+                        <textarea 
+                            rows={4}
+                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500 leading-relaxed"
+                            value={editForm.description}
+                            onChange={(e) => handleEditChange('description', e.target.value)}
                         />
                     </div>
-                    {/* ... other fields ... */}
                     
-                    {/* Enhanced Issues Editor (Accessible to all who can edit) */}
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <div className="flex justify-between items-center mb-3 border-b border-slate-200 pb-2">
-                             <h4 className="text-xs font-bold text-slate-700 flex items-center">
+                    {/* 5. Issues (Enhanced) */}
+                    <div className="bg-red-50 p-4 rounded-lg border border-red-100">
+                        <div className="flex justify-between items-center mb-3 border-b border-red-200 pb-2">
+                             <h4 className="text-xs font-bold text-red-800 flex items-center">
                                 <AlertTriangle size={14} className="mr-1.5"/> 주요 이슈 및 연혁 (History)
                              </h4>
-                             <button type="button" onClick={addIssue} className="text-[10px] flex items-center bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100 shadow-sm font-medium">
+                             <button type="button" onClick={addIssue} className="text-[10px] flex items-center bg-white border border-red-200 px-2 py-1 rounded hover:bg-red-50 shadow-sm font-medium text-red-600">
                                 <Plus size={10} className="mr-1"/> 항목 추가
                              </button>
                         </div>
@@ -382,7 +588,7 @@ const CourseDetail: React.FC = () => {
                                 <div key={idx} className="flex gap-2">
                                     <input 
                                         type="text"
-                                        className="flex-1 text-xs border-slate-300 rounded focus:ring-brand-500 py-1.5"
+                                        className="flex-1 text-xs border-red-200 rounded focus:ring-red-500 py-2"
                                         placeholder="예: 2024-05 배수 공사 완료"
                                         value={issue}
                                         onChange={(e) => handleIssueChange(idx, e.target.value)}
@@ -390,23 +596,13 @@ const CourseDetail: React.FC = () => {
                                     <button 
                                         type="button" 
                                         onClick={() => removeIssue(idx)}
-                                        className="text-slate-400 hover:text-red-500 p-1.5"
+                                        className="text-red-400 hover:text-red-600 p-1.5"
                                     >
                                         <Trash2 size={14} />
                                     </button>
                                 </div>
                             ))}
                         </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">특이사항 및 설명</label>
-                        <textarea 
-                            rows={4}
-                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                            value={editForm.description}
-                            onChange={(e) => handleEditChange('description', e.target.value)}
-                        />
                     </div>
                 </div>
                 

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, ExternalEvent, EventType } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, Users, CheckCircle, AlertCircle, PlusSquare, Zap, AlertTriangle, Clock, Globe, Map, ArrowLeft, Calendar, FileType, AlignLeft, CalendarPlus, ListChecks, RefreshCcw, Layers, ChevronDown, Briefcase, Phone, User, CalendarDays, Link as LinkIcon, Building } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, Users, CheckCircle, AlertCircle, PlusSquare, Zap, AlertTriangle, Clock, Globe, Map, ArrowLeft, Calendar, FileType, AlignLeft, CalendarPlus, ListChecks, RefreshCcw, Layers, ChevronDown, Briefcase, Phone, User, CalendarDays, Link as LinkIcon, Building, Calculator } from 'lucide-react';
 import { analyzeDocument, getCourseDetailsFromAI } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -15,6 +15,7 @@ const WriteLog: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'LOG' | 'PERSON' | 'SCHEDULE'>('LOG');
 
   // --- Log Form State ---
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]); // Added Date State
   const [dept, setDept] = useState<string>('영업');
   const [courseId, setCourseId] = useState<string>('');
   const [title, setTitle] = useState('');
@@ -74,6 +75,7 @@ const WriteLog: React.FC = () => {
   useEffect(() => {
     if (editingLog) {
       setActiveTab('LOG');
+      setLogDate(editingLog.date); // Load date
       setTitle(editingLog.title);
       setContent(editingLog.content);
       setDept(editingLog.department);
@@ -121,13 +123,40 @@ const WriteLog: React.FC = () => {
     holes: number;
     type: CourseType;
     grassType: GrassType;
+    area: string;
+    length: string;
   }>({
     name: '',
     address: '',
     holes: 18,
     type: CourseType.PUBLIC,
-    grassType: GrassType.ZOYSIA
+    grassType: GrassType.ZOYSIA,
+    area: '',
+    length: ''
   });
+  
+  // Course Calculator State
+  const [newCoursePyeong, setNewCoursePyeong] = useState('');
+  const [newCourseM2, setNewCourseM2] = useState('');
+  const [newCourseYard, setNewCourseYard] = useState('');
+
+  const handlePyeongChange = (val: string) => {
+      setNewCoursePyeong(val);
+      if (val && !isNaN(parseFloat(val))) {
+          const m2 = (parseFloat(val) * 3.305785).toFixed(0);
+          setNewCourseM2(m2);
+          setNewCourse(prev => ({...prev, area: `${Number(val).toLocaleString()}평 (${Number(m2).toLocaleString()} m²)`}));
+      } else {
+          setNewCourseM2('');
+      }
+  };
+
+  const handleYardChange = (val: string) => {
+      setNewCourseYard(val);
+      if (val && !isNaN(parseFloat(val))) {
+          setNewCourse(prev => ({...prev, length: `${Number(val).toLocaleString()} yds`}));
+      }
+  };
   
   const [courseErrors, setCourseErrors] = useState<{name?: string; holes?: string}>({});
 
@@ -269,6 +298,7 @@ const WriteLog: React.FC = () => {
                     if (results.length === 1) {
                         const r = results[0];
                         setTitle(r.title); setContent(enhancedContent); setDept(matchedDept); setCourseId(targetCourseId); setTags(r.tags || []);
+                        if (r.date) setLogDate(r.date); // Update Date from AI
                         if (r.contact_person) { setContactPerson(r.contact_person); setHighlightedFields(prev => new Set(prev).add('contactPerson')); }
                         setHighlightedFields(new Set(['title', 'content', 'department', 'courseId', 'tags']));
                     }
@@ -331,7 +361,7 @@ const WriteLog: React.FC = () => {
     const courseToAdd: GolfCourse = {
       id: `new-${Date.now()}`, name: newCourse.name, address: newCourse.address || '', holes: newCourse.holes,
       type: newCourse.type, grassType: newCourse.grassType, openYear: new Date().getFullYear().toString(),
-      area: '-', description: '직접 등록', issues: []
+      area: newCourse.area || '-', length: newCourse.length || '-', description: '직접 등록', issues: []
     };
     addCourse(courseToAdd);
     getCourseDetailsFromAI(newCourse.name).then((details) => updateCourse({ ...courseToAdd, ...details })).catch(err => console.error(err));
@@ -341,6 +371,7 @@ const WriteLog: React.FC = () => {
     setIsCourseModalOpen(false);
   };
 
+  // ... (Log Submit, Person Submit, Schedule Submit Logic - No changes needed)
   const handleLogSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -349,15 +380,15 @@ const WriteLog: React.FC = () => {
 
     const logData = {
         department: dept as Department, courseId, courseName: selectedCourse?.name || '미지정',
-        title, content, tags, contactPerson, updatedAt: Date.now()
+        title, content, tags, contactPerson, updatedAt: Date.now(), date: logDate
     };
 
     if (editingLog) updateLog({ ...editingLog, ...logData });
-    else addLog({ id: `manual-${Date.now()}`, date: new Date().toISOString().split('T')[0], author: '사용자', createdAt: Date.now(), ...logData });
+    else addLog({ id: `manual-${Date.now()}`, author: '사용자', createdAt: Date.now(), ...logData });
     
     setTimeout(() => { 
         setIsSubmitting(false); alert('저장되었습니다.'); 
-        if(!editingLog) { setTitle(''); setContent(''); setTags([]); setCourseId(''); setContactPerson(''); }
+        if(!editingLog) { setTitle(''); setContent(''); setTags([]); setCourseId(''); setContactPerson(''); setLogDate(new Date().toISOString().split('T')[0]); }
         else navigate(-1);
     }, 500);
   };
@@ -422,6 +453,7 @@ const WriteLog: React.FC = () => {
           </div>
       )}
 
+      {/* ... (Tabs and Log Form UI - largely unchanged) ... */}
       {!editingLog && (
           <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 mb-6">
             {['LOG', 'PERSON', 'SCHEDULE'].map(tab => (
@@ -441,7 +473,8 @@ const WriteLog: React.FC = () => {
 
       {activeTab === 'LOG' && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          {!editingLog && (
+           {/* ... (AI Upload Section - Unchanged) ... */}
+           {!editingLog && (
             <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden border border-slate-700">
                 <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500 rounded-full blur-[100px] opacity-20 -translate-y-1/2 translate-x-1/2"></div>
                 
@@ -511,6 +544,12 @@ const WriteLog: React.FC = () => {
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8">
             <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center"><FileText className="mr-2 text-slate-400"/> 세부 정보 입력</h3>
             <form onSubmit={handleLogSubmit} className="space-y-6">
+              {/* Date Input Added */}
+              <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">업무 날짜</label>
+                  <input type="date" required className={getInputClass('date')} value={logDate} onChange={(e) => setLogDate(e.target.value)} />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">부서</label>
@@ -536,6 +575,7 @@ const WriteLog: React.FC = () => {
                   </div>
               </div>
 
+              {/* ... (Rest of Log Form) ... */}
               <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">제목</label>
                   <input type="text" required className={getInputClass('title')} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="업무 요약 제목" />
@@ -568,7 +608,7 @@ const WriteLog: React.FC = () => {
         </div>
       )}
 
-      {/* --- Person Form (Enhanced) --- */}
+      {/* --- Person Form (unchanged) --- */}
       {activeTab === 'PERSON' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">
             {/* Left: Preview Card */}
@@ -692,7 +732,7 @@ const WriteLog: React.FC = () => {
         </div>
       )}
 
-      {/* --- Schedule Form (Enhanced) --- */}
+      {/* --- Schedule Form (unchanged) --- */}
       {activeTab === 'SCHEDULE' && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 animate-in fade-in duration-300">
             {/* Left: Schedule Preview */}
@@ -821,10 +861,11 @@ const WriteLog: React.FC = () => {
         </div>
       )}
       
+      {/* New Course Modal */}
       {isCourseModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
               <h3 className="font-bold text-slate-800 flex items-center text-lg">
                  <PlusSquare size={20} className="mr-2 text-brand-600"/> 신규 골프장 등록
               </h3>
@@ -840,12 +881,60 @@ const WriteLog: React.FC = () => {
                 </div>
               </div>
               
-              {/* ... Other Course Fields with new styling ... */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-2">주소</label>
                 <input type="text" className="w-full rounded-xl border border-slate-200 py-3 px-4 outline-none focus:border-brand-500" value={newCourse.address} onChange={(e) => handleCourseChange('address', e.target.value)} />
               </div>
               
+              {/* Area & Length with Calculators */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                   <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center">
+                        <Calculator size={14} className="mr-1.5"/> 면적 및 전장 (Calculator)
+                   </h4>
+                   
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label className="block text-[10px] text-slate-500 mb-1 font-bold">총 면적 (평 ↔ m² 자동변환)</label>
+                            <div className="flex space-x-2">
+                                <div className="relative flex-1">
+                                    <input 
+                                        type="number" 
+                                        placeholder="평"
+                                        className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500"
+                                        value={newCoursePyeong}
+                                        onChange={(e) => handlePyeongChange(e.target.value)}
+                                    />
+                                    <span className="absolute right-3 top-2.5 text-xs text-slate-400">평</span>
+                                </div>
+                                <div className="relative flex-1">
+                                    <input 
+                                        type="number" 
+                                        placeholder="m²"
+                                        className="w-full rounded-lg border-slate-200 bg-slate-100 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500 text-slate-500"
+                                        value={newCourseM2}
+                                        readOnly
+                                    />
+                                    <span className="absolute right-3 top-2.5 text-xs text-slate-400">m²</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] text-slate-500 mb-1 font-bold">코스 전장 (Length)</label>
+                            <div className="relative">
+                                <input 
+                                    type="number" 
+                                    placeholder="Yard"
+                                    className="w-full rounded-lg border-slate-300 text-sm pr-12 focus:border-brand-500 focus:ring-brand-500"
+                                    value={newCourseYard}
+                                    onChange={(e) => handleYardChange(e.target.value)}
+                                />
+                                <span className="absolute right-3 top-2.5 text-xs text-slate-400">yds</span>
+                            </div>
+                        </div>
+                   </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-2">운영 형태</label>
@@ -862,7 +951,7 @@ const WriteLog: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end space-x-3">
+            <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex justify-end space-x-3 shrink-0">
               <button onClick={() => setIsCourseModalOpen(false)} className="px-6 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">취소</button>
               <button onClick={handleSaveNewCourse} className="px-6 py-3 text-sm font-bold text-white bg-brand-600 rounded-xl hover:bg-brand-700 shadow-lg hover:shadow-xl transition-all"><CheckCircle size={16} className="inline mr-2" /> 등록 완료</button>
             </div>

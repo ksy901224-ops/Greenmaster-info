@@ -46,7 +46,8 @@ export interface GolfCourse {
   openYear: string;
   address: string;
   grassType: GrassType;
-  area: string; // e.g., "30만평"
+  area: string; // e.g., "30만평 (991,735 m²)"
+  length?: string; // Added: Total course length (e.g., "7,200 yds")
   description: string; // Basic spec info
   lat?: number;
   lng?: number;
