@@ -147,6 +147,7 @@ export enum MaterialCategory {
 export interface MaterialRecord {
   id: string;
   courseId: string;
+  year: number; // Added for year-based filtering
   category: MaterialCategory;
   name: string; // Product Name
   supplier?: string;

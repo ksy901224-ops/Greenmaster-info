@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { LogEntry, GolfCourse, Person, GrassType, CourseType } from '../types';
+import { LogEntry, GolfCourse, Person, GrassType, CourseType, MaterialCategory, MaterialRecord } from '../types';
 
 // Safety check for API Key
 const getApiKey = () => {
@@ -389,6 +389,83 @@ export const analyzeDocument = async (
     
     console.error("Unhandled Gemini Error:", error);
     throw new Error(`분석 중 오류 발생: ${msg.substring(0, 80)}...`);
+  }
+};
+
+/**
+ * Parses an image or text document containing Material/Inventory table data.
+ * Designed for Excel screenshots or CSV data.
+ */
+export const analyzeMaterialInventory = async (
+  inputData: { base64Data?: string, mimeType?: string, textData?: string }
+): Promise<Omit<MaterialRecord, 'id' | 'courseId' | 'lastUpdated'>[]> => {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error("API Key가 필요합니다.");
+
+  const contentPart = inputData.base64Data 
+    ? { inlineData: { mimeType: inputData.mimeType || 'image/png', data: inputData.base64Data } }
+    : { text: inputData.textData || '' };
+
+  const prompt = `
+    당신은 골프장 자재 재고 관리 전문가입니다.
+    제공된 이미지(엑셀/표 스크린샷) 또는 텍스트 데이터에서 자재 재고 목록을 추출하세요.
+
+    [필수 추출 항목]
+    1. **category**: 품목의 특성에 따라 다음 중 하나로 정확히 분류하세요.
+       - '농약' (살균제, 살충제, 제초제, 성장조절제 등)
+       - '비료' (복합비료, 요소, 칼슘제, 미량요소 등)
+       - '잔디/종자' (벤트그라스, 켄터키, 중지, 씨앗 등)
+       - '기타자재' (배관, 모래, 장비부품, 작업도구 등)
+    2. **name**: 제품명 또는 품목명.
+    3. **quantity**: 수량 (숫자만 추출, 콤마 제거).
+    4. **unit**: 단위 (kg, L, bag, 포, 개, m 등).
+    5. **supplier**: 공급처 또는 제조사 (없으면 null).
+    6. **year**: 데이터의 기준 연도 (문서 내에 날짜가 있다면 해당 연도, 없으면 ${new Date().getFullYear()}).
+    7. **notes**: 비고 사항 (규격, 용도 등 추가 정보).
+
+    [주의사항]
+    - 표의 헤더(Category, Name 등)는 제외하고 실제 데이터 행만 추출하세요.
+    - 수량이 명확하지 않은 행은 제외하세요.
+    - JSON 배열 형태로 반환하세요.
+  `;
+
+  try {
+    const response = await retryOperation(async () => {
+      return await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: {
+          parts: [contentPart, { text: prompt }]
+        },
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                year: { type: Type.INTEGER },
+                category: { type: Type.STRING, enum: Object.values(MaterialCategory) },
+                name: { type: Type.STRING },
+                quantity: { type: Type.NUMBER },
+                unit: { type: Type.STRING },
+                supplier: { type: Type.STRING, nullable: true },
+                notes: { type: Type.STRING, nullable: true }
+              },
+              required: ['year', 'category', 'name', 'quantity', 'unit']
+            }
+          }
+        }
+      });
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response");
+    
+    return JSON.parse(text);
+
+  } catch (error: any) {
+    console.error("Material Analysis Error:", error);
+    throw new Error("자재 데이터 분석 중 오류가 발생했습니다.");
   }
 };
 

@@ -152,9 +152,8 @@ export const MOCK_FINANCIALS: FinancialRecord[] = [
 ];
 
 export const MOCK_MATERIALS: MaterialRecord[] = [
-  { id: 'm1', courseId: 'c1', category: MaterialCategory.PESTICIDE, name: '파란들 수화제', quantity: 50, unit: 'kg', lastUpdated: '2024-05-01', supplier: '농협케미컬' },
-  { id: 'm2', courseId: 'c1', category: MaterialCategory.FERTILIZER, name: '복합비료 21-17-17', quantity: 200, unit: '포', lastUpdated: '2024-04-15', supplier: '조비' },
-  { id: 'm3', courseId: 'c1', category: MaterialCategory.GRASS, name: '켄터키 블루그라스 종자', quantity: 10, unit: 'kg', lastUpdated: '2024-03-20', notes: '보식용' },
-  
-  { id: 'm4', courseId: 'c2', category: MaterialCategory.MATERIAL, name: '배수관 100mm', quantity: 50, unit: 'm', lastUpdated: '2024-05-10', notes: '5번홀 공사 잔여분' },
+  { id: 'm1', courseId: 'c1', year: 2024, category: MaterialCategory.PESTICIDE, name: '파란들 수화제', quantity: 50, unit: 'kg', lastUpdated: '2024-05-01', supplier: '농협케미컬' },
+  { id: 'm2', courseId: 'c1', year: 2024, category: MaterialCategory.FERTILIZER, name: '복합비료 21-17-17', quantity: 200, unit: '포', lastUpdated: '2024-04-15', supplier: '조비' },
+  { id: 'm3', courseId: 'c1', year: 2023, category: MaterialCategory.GRASS, name: '켄터키 블루그라스 종자', quantity: 10, unit: 'kg', lastUpdated: '2023-03-20', notes: '보식용' },
+  { id: 'm4', courseId: 'c2', year: 2024, category: MaterialCategory.MATERIAL, name: '배수관 100mm', quantity: 50, unit: 'm', lastUpdated: '2024-05-10', notes: '5번홀 공사 잔여분' },
 ];

@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
-import { generateCourseSummary } from '../services/geminiService';
-import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box } from 'lucide-react';
+import { generateCourseSummary, analyzeMaterialInventory } from '../services/geminiService';
+import { Info, FileText, Users, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -27,17 +27,29 @@ const CourseDetail: React.FC = () => {
   const [editingFin, setEditingFin] = useState<FinancialRecord | null>(null);
   const [finForm, setFinForm] = useState({ year: new Date().getFullYear(), revenue: 0, profit: 0 });
 
+  // Material States
   const [isMatModalOpen, setIsMatModalOpen] = useState(false);
   const [editingMat, setEditingMat] = useState<MaterialRecord | null>(null);
   const [matCategory, setMatCategory] = useState<MaterialCategory>(MaterialCategory.PESTICIDE);
+  // Year Filter for Materials
+  const currentYear = new Date().getFullYear();
+  const [matYearFilter, setMatYearFilter] = useState<number>(currentYear);
+  
   const [matForm, setMatForm] = useState({
       category: MaterialCategory.PESTICIDE,
       name: '',
       quantity: 0,
       unit: 'kg',
       supplier: '',
-      notes: ''
+      notes: '',
+      year: currentYear
   });
+
+  // AI Material Upload State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingMat, setIsUploadingMat] = useState(false);
+  const [previewMaterials, setPreviewMaterials] = useState<Omit<MaterialRecord, 'id' | 'courseId' | 'lastUpdated'>[]>([]);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   // Handle auto-filtering from dashboard redirect
   useEffect(() => {
@@ -85,7 +97,15 @@ const CourseDetail: React.FC = () => {
       return materials.filter(m => m.courseId === id);
   }, [materials, id]);
 
-  const filteredMaterials = courseMaterials.filter(m => m.category === matCategory);
+  const availableYears = useMemo(() => {
+      const years = new Set(courseMaterials.map(m => m.year || currentYear));
+      years.add(currentYear);
+      return Array.from(years).sort((a, b) => b - a);
+  }, [courseMaterials, currentYear]);
+
+  const filteredMaterials = courseMaterials
+    .filter(m => m.category === matCategory)
+    .filter(m => (m.year || currentYear) === matYearFilter);
 
   // Separate current and past people
   const currentStaff = people.filter(p => p.currentCourseId === id);
@@ -175,12 +195,12 @@ const CourseDetail: React.FC = () => {
       if (record) {
           setEditingMat(record);
           setMatForm({
-              category: record.category, name: record.name, quantity: record.quantity, unit: record.unit, supplier: record.supplier || '', notes: record.notes || ''
+              category: record.category, name: record.name, quantity: record.quantity, unit: record.unit, supplier: record.supplier || '', notes: record.notes || '', year: record.year || currentYear
           });
       } else {
           setEditingMat(null);
           setMatForm({
-              category: matCategory, name: '', quantity: 0, unit: 'kg', supplier: '', notes: ''
+              category: matCategory, name: '', quantity: 0, unit: 'kg', supplier: '', notes: '', year: matYearFilter || currentYear
           });
       }
       setIsMatModalOpen(true);
@@ -203,6 +223,70 @@ const CourseDetail: React.FC = () => {
 
   const handleDeleteMat = (mid: string) => {
       if(window.confirm('삭제하시겠습니까?')) deleteMaterial(mid);
+  };
+
+  // --- AI Material Upload Handlers ---
+  const triggerMatFileUpload = () => {
+      if (fileInputRef.current) {
+          fileInputRef.current.click();
+      }
+  };
+
+  const handleMatFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      setIsUploadingMat(true);
+      try {
+          const reader = new FileReader();
+          reader.onload = async (event) => {
+              const base64String = event.target?.result as string;
+              // Extract base64 data only
+              const base64Data = base64String.split(',')[1];
+              
+              try {
+                  const result = await analyzeMaterialInventory({
+                      base64Data: base64Data,
+                      mimeType: file.type
+                  });
+                  setPreviewMaterials(result);
+                  setIsPreviewModalOpen(true);
+              } catch (err: any) {
+                  alert("AI 분석 실패: " + err.message);
+              } finally {
+                  setIsUploadingMat(false);
+              }
+          };
+          reader.readAsDataURL(file);
+      } catch (err) {
+          console.error(err);
+          setIsUploadingMat(false);
+      }
+      // Reset input
+      e.target.value = '';
+  };
+
+  const confirmBatchUpload = () => {
+      const today = new Date().toISOString().split('T')[0];
+      let addedCount = 0;
+      previewMaterials.forEach(item => {
+          addMaterial({
+              id: `mat-ai-${Date.now()}-${Math.random().toString(36).substr(2,5)}`,
+              courseId: id!,
+              category: item.category,
+              name: item.name,
+              quantity: item.quantity,
+              unit: item.unit,
+              supplier: item.supplier,
+              notes: item.notes,
+              year: item.year || currentYear,
+              lastUpdated: today
+          });
+          addedCount++;
+      });
+      alert(`${addedCount}건의 자재가 등록되었습니다.`);
+      setIsPreviewModalOpen(false);
+      setPreviewMaterials([]);
   };
 
   // --- Layout logic ---
@@ -424,28 +508,52 @@ const CourseDetail: React.FC = () => {
 
                 {/* 2. Materials */}
                 <section>
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
                         <h3 className="text-lg font-bold text-slate-900 flex items-center"><Package size={20} className="mr-2 text-emerald-600"/> 자재 및 재고 관리</h3>
-                        <button onClick={() => handleOpenMatModal()} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 flex items-center"><Plus size={14} className="mr-1"/> 자재 등록</button>
+                        
+                        <div className="flex space-x-2">
+                            {/* AI Upload Button */}
+                            <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleMatFileChange} />
+                            <button onClick={triggerMatFileUpload} disabled={isUploadingMat} className="text-xs bg-slate-800 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-slate-700 flex items-center shadow-sm disabled:opacity-50">
+                                {isUploadingMat ? <Loader2 size={14} className="animate-spin mr-1"/> : <Camera size={14} className="mr-1"/>}
+                                엑셀/이미지 분석 등록
+                            </button>
+                            <button onClick={() => handleOpenMatModal()} className="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 flex items-center"><Plus size={14} className="mr-1"/> 직접 등록</button>
+                        </div>
                     </div>
 
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                        {/* Material Category Tabs */}
-                        <div className="flex border-b border-slate-100 bg-slate-50 px-2 pt-2 gap-1 overflow-x-auto no-scrollbar">
-                            {[
-                                { cat: MaterialCategory.PESTICIDE, icon: <Droplets size={14}/>, color: 'text-purple-600' },
-                                { cat: MaterialCategory.FERTILIZER, icon: <Sprout size={14}/>, color: 'text-amber-600' },
-                                { cat: MaterialCategory.GRASS, icon: <TrendingUp size={14}/>, color: 'text-green-600' },
-                                { cat: MaterialCategory.MATERIAL, icon: <Box size={14}/>, color: 'text-slate-600' }
-                            ].map(item => (
-                                <button
-                                    key={item.cat}
-                                    onClick={() => setMatCategory(item.cat)}
-                                    className={`px-4 py-2.5 rounded-t-lg text-xs font-bold flex items-center transition-colors ${matCategory === item.cat ? 'bg-white text-slate-800 shadow-sm border-t border-x border-slate-200 -mb-px' : 'text-slate-500 hover:bg-slate-100'}`}
+                        {/* Material Category Tabs + Year Filter */}
+                        <div className="flex flex-col sm:flex-row border-b border-slate-100 bg-slate-50 px-2 pt-2 gap-2 sm:gap-4 sm:items-end">
+                            <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1">
+                                {[
+                                    { cat: MaterialCategory.PESTICIDE, icon: <Droplets size={14}/>, color: 'text-purple-600' },
+                                    { cat: MaterialCategory.FERTILIZER, icon: <Sprout size={14}/>, color: 'text-amber-600' },
+                                    { cat: MaterialCategory.GRASS, icon: <TrendingUp size={14}/>, color: 'text-green-600' },
+                                    { cat: MaterialCategory.MATERIAL, icon: <Box size={14}/>, color: 'text-slate-600' }
+                                ].map(item => (
+                                    <button
+                                        key={item.cat}
+                                        onClick={() => setMatCategory(item.cat)}
+                                        className={`px-4 py-2.5 rounded-t-lg text-xs font-bold flex items-center transition-colors whitespace-nowrap ${matCategory === item.cat ? 'bg-white text-slate-800 shadow-sm border-t border-x border-slate-200 -mb-px' : 'text-slate-500 hover:bg-slate-100'}`}
+                                    >
+                                        <span className={`mr-2 ${item.color}`}>{item.icon}</span> {item.cat}
+                                    </button>
+                                ))}
+                            </div>
+                            
+                            {/* Year Filter */}
+                            <div className="pb-2 pr-2">
+                                <select 
+                                    value={matYearFilter}
+                                    onChange={(e) => setMatYearFilter(parseInt(e.target.value))}
+                                    className="text-xs border-slate-200 rounded-lg py-1 pl-2 pr-6 bg-white focus:ring-emerald-500 focus:border-emerald-500 font-bold text-slate-700 shadow-sm cursor-pointer"
                                 >
-                                    <span className={`mr-2 ${item.color}`}>{item.icon}</span> {item.cat}
-                                </button>
-                            ))}
+                                    {availableYears.map(year => (
+                                        <option key={year} value={year}>{year}년</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         <div className="p-0">
@@ -480,7 +588,9 @@ const CourseDetail: React.FC = () => {
                                         ))
                                     ) : (
                                         <tr>
-                                            <td colSpan={5} className="text-center py-8 text-slate-400">등록된 {matCategory} 내역이 없습니다.</td>
+                                            <td colSpan={5} className="text-center py-8 text-slate-400">
+                                                {matYearFilter}년도에 등록된 {matCategory} 내역이 없습니다.
+                                            </td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -663,12 +773,16 @@ const CourseDetail: React.FC = () => {
           </div>
       )}
 
-      {/* Material Modal */}
+      {/* Material Manual Edit Modal */}
       {isMatModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm">
               <div className="bg-white rounded-xl p-6 w-full max-w-sm">
                   <h3 className="font-bold mb-4">{editingMat ? '자재 정보 수정' : '자재 정보 등록'}</h3>
                   <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">기준 연도</label>
+                          <input type="number" className="w-full border rounded-lg p-2" value={matForm.year} onChange={e => setMatForm({...matForm, year: parseInt(e.target.value)})} />
+                      </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
                           <select className="w-full border rounded-lg p-2 text-sm" value={matForm.category} onChange={e => setMatForm({...matForm, category: e.target.value as MaterialCategory})}>
@@ -701,6 +815,74 @@ const CourseDetail: React.FC = () => {
                   <div className="flex justify-end space-x-2 mt-6">
                       <button onClick={() => setIsMatModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm">취소</button>
                       <button onClick={handleSaveMat} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold">저장</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* AI Preview Modal */}
+      {isPreviewModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-60 p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh]">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <div>
+                          <h3 className="font-bold text-xl text-slate-900 flex items-center">
+                              <Sparkles size={20} className="text-emerald-500 mr-2"/>
+                              AI 분석 결과 확인
+                          </h3>
+                          <p className="text-sm text-slate-500 mt-1">이미지/파일에서 추출된 자재 내역입니다. 확인 후 저장하세요.</p>
+                      </div>
+                      <button onClick={() => setIsPreviewModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-6">
+                      <table className="w-full text-sm text-left border border-slate-200 rounded-lg">
+                          <thead className="bg-slate-100 text-slate-600 font-bold">
+                              <tr>
+                                  <th className="px-4 py-3">연도</th>
+                                  <th className="px-4 py-3">분류</th>
+                                  <th className="px-4 py-3">품명</th>
+                                  <th className="px-4 py-3">수량</th>
+                                  <th className="px-4 py-3">단위</th>
+                                  <th className="px-4 py-3">공급사</th>
+                                  <th className="px-4 py-3">비고</th>
+                                  <th className="px-4 py-3 text-center">삭제</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                              {previewMaterials.map((item, idx) => (
+                                  <tr key={idx} className="hover:bg-slate-50">
+                                      <td className="px-4 py-2">{item.year}</td>
+                                      <td className="px-4 py-2">
+                                          <span className="bg-white border border-slate-200 px-2 py-1 rounded text-xs">{item.category}</span>
+                                      </td>
+                                      <td className="px-4 py-2 font-bold">{item.name}</td>
+                                      <td className="px-4 py-2 text-emerald-700 font-bold">{item.quantity}</td>
+                                      <td className="px-4 py-2 text-slate-500">{item.unit}</td>
+                                      <td className="px-4 py-2">{item.supplier || '-'}</td>
+                                      <td className="px-4 py-2 text-slate-400 text-xs">{item.notes}</td>
+                                      <td className="px-4 py-2 text-center">
+                                          <button 
+                                            onClick={() => setPreviewMaterials(prev => prev.filter((_, i) => i !== idx))}
+                                            className="text-red-400 hover:text-red-600 p-1"
+                                          >
+                                              <X size={16}/>
+                                          </button>
+                                      </td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                      {previewMaterials.length === 0 && (
+                          <div className="text-center py-8 text-slate-400">추출된 데이터가 없습니다.</div>
+                      )}
+                  </div>
+
+                  <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3">
+                      <button onClick={() => setIsPreviewModalOpen(false)} className="px-5 py-2.5 bg-white border border-slate-300 rounded-xl font-bold text-slate-600 hover:bg-slate-50">취소</button>
+                      <button onClick={confirmBatchUpload} disabled={previewMaterials.length === 0} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-lg disabled:opacity-50 flex items-center">
+                          <CheckCircle size={18} className="mr-2"/> 일괄 저장하기
+                      </button>
                   </div>
               </div>
           </div>
