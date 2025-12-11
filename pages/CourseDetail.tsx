@@ -84,12 +84,18 @@ const CourseDetail: React.FC = () => {
       return financials.filter(f => f.courseId === id).sort((a, b) => b.year - a.year);
   }, [financials, id]);
 
-  const financialGrowth = useMemo(() => {
+  const financialComparison = useMemo(() => {
       if (courseFinancials.length < 2) return null;
       const current = courseFinancials[0];
       const prev = courseFinancials[1];
-      const growth = ((current.revenue - prev.revenue) / prev.revenue) * 100;
-      return growth.toFixed(1);
+      const diff = current.revenue - prev.revenue;
+      const growth = ((diff) / prev.revenue) * 100;
+      return {
+          diff,
+          growth: growth.toFixed(1),
+          currentYear: current.year,
+          prevYear: prev.year
+      };
   }, [courseFinancials]);
 
   // Material Logic
@@ -106,6 +112,20 @@ const CourseDetail: React.FC = () => {
   const filteredMaterials = courseMaterials
     .filter(m => m.category === matCategory)
     .filter(m => (m.year || currentYear) === matYearFilter);
+
+  // Material Accumulation Statistics
+  const materialStats = useMemo(() => {
+      const byUnit: Record<string, number> = {};
+      let totalItems = 0;
+
+      filteredMaterials.forEach(m => {
+          const unit = m.unit.toLowerCase().trim();
+          byUnit[unit] = (byUnit[unit] || 0) + m.quantity;
+          totalItems++;
+      });
+
+      return { totalItems, byUnit };
+  }, [filteredMaterials]);
 
   // Separate current and past people
   const currentStaff = people.filter(p => p.currentCourseId === id);
@@ -321,7 +341,16 @@ const CourseDetail: React.FC = () => {
       if (val && !isNaN(parseFloat(val))) {
           const m = (parseFloat(val) * 0.9144).toFixed(0);
           setLengthMeter(m);
-          handleEditChange('length', `${Number(val).toLocaleString()} yds`);
+          handleEditChange('length', `${Number(val).toLocaleString()} yds (${Number(m).toLocaleString()} m)`);
+      }
+  };
+
+  const handleMeterChange = (val: string) => {
+      setLengthMeter(val);
+      if (val && !isNaN(parseFloat(val))) {
+          const yd = (parseFloat(val) / 0.9144).toFixed(0);
+          setLengthYard(yd);
+          handleEditChange('length', `${Number(yd).toLocaleString()} yds (${Number(val).toLocaleString()} m)`);
       }
   };
 
@@ -462,18 +491,23 @@ const CourseDetail: React.FC = () => {
                                     })}
                                 </div>
                                 
-                                {/* Table Area */}
-                                <div className="flex-1">
+                                {/* Table & Comparison Area */}
+                                <div className="flex-1 flex flex-col">
                                     <div className="flex justify-between items-center mb-3">
                                         <h4 className="font-bold text-slate-700 text-sm">연도별 상세 매출</h4>
-                                        {financialGrowth && (
-                                            <span className={`text-xs font-bold px-2 py-1 rounded-full flex items-center ${parseFloat(financialGrowth) >= 0 ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                                                {parseFloat(financialGrowth) >= 0 ? <TrendingUp size={12} className="mr-1"/> : <TrendingDown size={12} className="mr-1"/>}
-                                                전년 대비 {financialGrowth}%
-                                            </span>
+                                        {financialComparison && (
+                                            <div className="text-right">
+                                                <div className={`text-xs font-bold px-2 py-1 rounded-full inline-flex items-center ${financialComparison.diff >= 0 ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                    {financialComparison.diff >= 0 ? <TrendingUp size={12} className="mr-1"/> : <TrendingDown size={12} className="mr-1"/>}
+                                                    {financialComparison.growth}%
+                                                </div>
+                                                <div className={`text-[10px] mt-0.5 font-medium ${financialComparison.diff >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                                                    {financialComparison.diff > 0 ? '+' : ''}{(financialComparison.diff / 10000).toLocaleString()}만원 ({financialComparison.prevYear} 대비)
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
-                                    <div className="overflow-hidden rounded-lg border border-slate-200">
+                                    <div className="overflow-hidden rounded-lg border border-slate-200 flex-1">
                                         <table className="w-full text-sm">
                                             <thead className="bg-slate-50 text-xs text-slate-500 font-bold uppercase">
                                                 <tr>
@@ -555,6 +589,21 @@ const CourseDetail: React.FC = () => {
                                 </select>
                             </div>
                         </div>
+
+                        {/* Summary Stats Bar (Accumulation) */}
+                        {materialStats.totalItems > 0 && (
+                            <div className="bg-emerald-50/50 border-b border-emerald-100 px-6 py-3 flex items-center justify-between text-xs">
+                                <span className="font-bold text-emerald-800 flex items-center"><Calculator size={12} className="mr-1.5"/> {matYearFilter}년도 {matCategory} 사용 통계:</span>
+                                <div className="flex gap-3">
+                                    <span className="text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">총 {materialStats.totalItems}건</span>
+                                    {Object.entries(materialStats.byUnit).map(([unit, qty]) => (
+                                        <span key={unit} className="font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
+                                            {qty.toLocaleString()} {unit}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="p-0">
                             <table className="w-full text-sm text-left">
@@ -705,23 +754,26 @@ const CourseDetail: React.FC = () => {
                     </div>
                     {/* Area & Length with Calculators */}
                     <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center"><Calculator size={14} className="mr-1.5"/> 면적 및 전장 (Calculator)</h4>
+                        <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center"><Calculator size={14} className="mr-1.5"/> 면적 및 전장 (단위 자동 변환)</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                             <div>
-                                <label className="block text-[10px] text-slate-500 mb-1 font-bold">총 면적 (평 ↔ m² 자동변환)</label>
+                                <label className="block text-[10px] text-slate-500 mb-1 font-bold">총 면적 (평 ↔ m²)</label>
                                 <div className="flex space-x-2">
                                     <div className="relative flex-1"><input type="number" placeholder="평" className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500" value={areaPyeong} onChange={(e) => handlePyeongChange(e.target.value)} /><span className="absolute right-3 top-2.5 text-xs text-slate-400">평</span></div>
-                                    <div className="relative flex-1"><input type="number" placeholder="m²" className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500 bg-slate-100" value={areaM2} onChange={(e) => handleM2Change(e.target.value)} /><span className="absolute right-3 top-2.5 text-xs text-slate-400">m²</span></div>
+                                    <div className="relative flex-1"><input type="number" placeholder="m²" className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500 bg-white" value={areaM2} onChange={(e) => handleM2Change(e.target.value)} /><span className="absolute right-3 top-2.5 text-xs text-slate-400">m²</span></div>
                                 </div>
                                 <input type="hidden" value={editForm.area} />
                             </div>
                             <div>
-                                <label className="block text-[10px] text-slate-500 mb-1 font-bold">코스 전장 (Length)</label>
+                                <label className="block text-[10px] text-slate-500 mb-1 font-bold">코스 전장 (Yard ↔ Meter)</label>
                                 <div className="flex space-x-2">
                                     <div className="relative flex-1"><input type="number" placeholder="Yard" className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500" value={lengthYard} onChange={(e) => handleYardChange(e.target.value)} /><span className="absolute right-3 top-2.5 text-xs text-slate-400">yd</span></div>
-                                    <div className="relative flex-1"><div className="w-full rounded-lg border border-slate-200 bg-slate-100 text-sm py-2 px-3 text-slate-500 h-[38px] flex items-center">{lengthMeter ? `${Number(lengthMeter).toLocaleString()} m` : '-'}</div></div>
+                                    <div className="relative flex-1"><input type="number" placeholder="Meter" className="w-full rounded-lg border-slate-300 text-sm pr-8 focus:border-brand-500 focus:ring-brand-500 bg-white" value={lengthMeter} onChange={(e) => handleMeterChange(e.target.value)} /><span className="absolute right-3 top-2.5 text-xs text-slate-400">m</span></div>
                                 </div>
                             </div>
+                        </div>
+                        <div className="text-[10px] text-slate-400 flex items-center">
+                            <Info size={10} className="mr-1"/> 입력 시 자동 계산되어 저장됩니다.
                         </div>
                     </div>
                     {/* GPS */}
