@@ -146,10 +146,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       else { setLogs(data as LogEntry[]); }
     });
 
-    // 2. Courses
+    // 2. Courses - Check against MOCK_COURSES length to force update if new mock data added
     const unsubCourses = subscribeToCollection('courses', (data) => {
-      if (data.length === 0) { seedCollection('courses', MOCK_COURSES); } 
-      else { setCourses(data as GolfCourse[]); }
+      if (data.length < MOCK_COURSES.length) { 
+          seedCollection('courses', MOCK_COURSES); 
+      } 
+      setCourses(data as GolfCourse[]);
     });
 
     // 3. People

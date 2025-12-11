@@ -1,6 +1,6 @@
 
 import { db, isMockMode } from "../firebaseConfig";
-import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, onSnapshot, setDoc, writeBatch } from "firebase/firestore";
+import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, onSnapshot, setDoc, writeBatch, QuerySnapshot, DocumentData } from "firebase/firestore";
 
 export interface TodoItem {
   id?: string;
@@ -74,7 +74,7 @@ export const getAllTodos = async (): Promise<TodoItem[]> => {
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
-      ...doc.data(),
+      ...(doc.data() as any),
     })) as TodoItem[];
   } catch (error) {
     console.error("Error getting documents: ", error);
@@ -136,7 +136,9 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
 
   const q = query(collection(db, collectionName));
   return onSnapshot(q, (snapshot) => {
-    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // Explicit cast to QuerySnapshot to ensure 'docs' property is accessible
+    const querySnapshot = snapshot as QuerySnapshot<DocumentData>;
+    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
     callback(data);
   }, (error) => {
     console.error(`Error subscribing to ${collectionName}:`, error);
@@ -212,11 +214,23 @@ export const deleteDocument = async (collectionName: string, id: string) => {
 // 5. Seed (Initial Data Upload)
 export const seedCollection = async (collectionName: string, dataArray: any[]) => {
   if (isMockMode || !db) {
-    // Only seed if empty
     const current = getLocalData(collectionName);
+    
+    // Case 1: Empty collection -> Full seed
     if (current.length === 0) {
         setLocalData(collectionName, dataArray);
-        console.log(`[Mock] Seeded ${collectionName}`);
+        console.log(`[Mock] Seeded ${collectionName} with ${dataArray.length} items`);
+    } 
+    // Case 2: Incomplete courses -> Merge new items
+    else if (collectionName === 'courses' && current.length < dataArray.length) {
+        const existingIds = new Set(current.map((c: any) => c.id));
+        const missingItems = dataArray.filter(item => !existingIds.has(item.id));
+        
+        if (missingItems.length > 0) {
+            console.log(`[Mock] Merging ${missingItems.length} missing items into ${collectionName}`);
+            const merged = [...current, ...missingItems];
+            setLocalData(collectionName, merged);
+        }
     }
     return;
   }
