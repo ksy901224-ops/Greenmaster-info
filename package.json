@@ -15,7 +15,7 @@
     "react-router-dom": "^6.22.0",
     "firebase": "^10.8.0",
     "lucide-react": "^0.330.0",
-    "@google/genai": "latest",
+    "@google/genai": "*",
     "tailwindcss": "^3.4.1"
   },
   "devDependencies": {
