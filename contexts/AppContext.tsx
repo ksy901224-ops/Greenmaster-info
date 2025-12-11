@@ -43,6 +43,7 @@ interface AppContextType {
   deleteMaterial: (id: string) => void;
 
   refreshLogs: () => void;
+  resetData: () => void; // New Reset Function
   isSimulatedLive: boolean;
   canUseAI: boolean;
   canViewFullData: boolean;
@@ -142,70 +143,71 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     // 1. Logs
     const unsubLogs = subscribeToCollection('logs', (data) => {
-      if (data.length === 0) { seedCollection('logs', MOCK_LOGS); } 
-      else { setLogs(data as LogEntry[]); }
+      if (data.length === 0) { seedCollection('logs', MOCK_LOGS); return; } 
+      setLogs(data as LogEntry[]);
     });
 
     // 2. Courses - Check against MOCK_COURSES length to force update if new mock data added
+    // CRITICAL FIX: If seeding is triggered, do NOT setCourses with current data to avoid race conditions.
+    // The seed function will trigger this callback again with the full merged data.
     const unsubCourses = subscribeToCollection('courses', (data) => {
       if (data.length < MOCK_COURSES.length) { 
+          console.log(`[Auto-Sync] Detected incomplete course data (${data.length} vs ${MOCK_COURSES.length}). Merging...`);
           seedCollection('courses', MOCK_COURSES); 
+          return; // Wait for the re-trigger from seedCollection
       } 
       setCourses(data as GolfCourse[]);
     });
 
     // 3. People
     const unsubPeople = subscribeToCollection('people', (data) => {
-      if (data.length === 0) { seedCollection('people', MOCK_PEOPLE); } 
-      else { setPeople(data as Person[]); }
+      if (data.length === 0) { seedCollection('people', MOCK_PEOPLE); return; } 
+      setPeople(data as Person[]);
     });
 
     // 4. Events
     const unsubEvents = subscribeToCollection('external_events', (data) => {
-      if (data.length === 0) { seedCollection('external_events', MOCK_EXTERNAL_EVENTS); } 
-      else { setExternalEvents(data as ExternalEvent[]); }
+      if (data.length === 0) { seedCollection('external_events', MOCK_EXTERNAL_EVENTS); return; } 
+      setExternalEvents(data as ExternalEvent[]);
     });
 
     // 5. Users
     const unsubUsers = subscribeToCollection('users', (data) => {
-      if (data.length === 0) { seedCollection('users', [DEFAULT_ADMIN]); } 
-      else { 
-        const fetchedUsers = data as UserProfile[];
-        setAllUsers(fetchedUsers);
-        // Real-time update of current user permission
-        if (user) {
-            const updatedSelf = fetchedUsers.find(u => u.id === user.id);
-            if (updatedSelf && JSON.stringify(updatedSelf) !== JSON.stringify(user)) {
-                setUser(updatedSelf);
-                localStorage.setItem('greenmaster_user', JSON.stringify(updatedSelf));
-            }
-        }
+      if (data.length === 0) { seedCollection('users', [DEFAULT_ADMIN]); return; } 
+      const fetchedUsers = data as UserProfile[];
+      setAllUsers(fetchedUsers);
+      // Real-time update of current user permission
+      if (user) {
+          const updatedSelf = fetchedUsers.find(u => u.id === user.id);
+          if (updatedSelf && JSON.stringify(updatedSelf) !== JSON.stringify(user)) {
+              setUser(updatedSelf);
+              localStorage.setItem('greenmaster_user', JSON.stringify(updatedSelf));
+          }
       }
     });
 
-    // 6. System Logs (New)
+    // 6. System Logs
     const unsubSystem = subscribeToCollection('system_logs', (data) => {
-        // Sort client-side if needed, but Firestore queries usually handle it
         const sorted = (data as SystemLog[]).sort((a, b) => b.timestamp - a.timestamp);
         setSystemLogs(sorted);
     });
 
-    // 7. Financials (New)
+    // 7. Financials
     const unsubFin = subscribeToCollection('financials', (data) => {
-      if (data.length === 0) { seedCollection('financials', MOCK_FINANCIALS); }
-      else { setFinancials(data as FinancialRecord[]); }
+      if (data.length === 0) { seedCollection('financials', MOCK_FINANCIALS); return; }
+      setFinancials(data as FinancialRecord[]);
     });
 
-    // 8. Materials (New)
+    // 8. Materials
     const unsubMat = subscribeToCollection('materials', (data) => {
-      if (data.length === 0) { seedCollection('materials', MOCK_MATERIALS); }
-      else { setMaterials(data as MaterialRecord[]); }
+      if (data.length === 0) { seedCollection('materials', MOCK_MATERIALS); return; }
+      setMaterials(data as MaterialRecord[]);
     });
 
     return () => {
       unsubLogs(); unsubCourses(); unsubPeople(); unsubEvents(); unsubUsers(); unsubSystem(); unsubFin(); unsubMat();
     };
-  }, [user?.id]); // Depend on user.id to ensure self-update logic works
+  }, [user?.id]); 
 
   // --- Auth Actions ---
   const login = async (email: string): Promise<string | void> => {
@@ -218,7 +220,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setUser(foundUser);
     localStorage.setItem('greenmaster_user', JSON.stringify(foundUser));
     
-    // Log Login Activity (Self-logged via firestore since user state updates slightly later, we pass manual info)
     const loginLog: SystemLog = {
         id: `sys-${Date.now()}`, timestamp: Date.now(), userId: foundUser.id, userName: foundUser.name,
         actionType: 'LOGIN', targetType: 'USER', targetName: 'System Login'
@@ -266,7 +267,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('UPDATE', 'USER', 'Profile', 'User updated own profile');
   };
 
-  // --- CRUD Actions with Logging ---
+  // --- CRUD Actions ---
   const addLog = (log: LogEntry) => {
       saveDocument('logs', log);
       logActivity('CREATE', 'LOG', log.title, `${log.courseName} - ${log.department}`);
@@ -320,7 +321,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const addExternalEvent = (event: ExternalEvent) => saveDocument('external_events', event);
   
-  // --- New CRUD ---
   const addFinancial = (record: FinancialRecord) => {
     saveDocument('financials', record);
     logActivity('CREATE', 'FINANCE', `${record.year} 매출`, `Course ID: ${record.courseId}`);
@@ -350,6 +350,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const refreshLogs = () => {}; 
 
+  // Function to manually reset local storage data to initial mock state
+  const resetData = () => {
+      if (window.confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
+          localStorage.clear();
+          window.location.reload();
+      }
+  };
+
   const isSimulatedLive = true;
   const canUseAI = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
   const canViewFullData = user?.role === UserRole.SENIOR || user?.role === UserRole.INTERMEDIATE || user?.role === UserRole.ADMIN;
@@ -364,7 +372,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addExternalEvent,
     addFinancial, updateFinancial, deleteFinancial,
     addMaterial, updateMaterial, deleteMaterial,
-    refreshLogs, isSimulatedLive,
+    refreshLogs, resetData, isSimulatedLive,
     canUseAI, canViewFullData, isAdmin,
     currentPath, navigate, routeParams, locationState
   };

@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X } from 'lucide-react';
+import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Department, UserRole, UserStatus } from '../types';
 
 const Settings: React.FC = () => {
-  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout } = useApp();
+  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData } = useApp();
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(true);
   const [marketingNotif, setMarketingNotif] = useState(false);
@@ -57,7 +57,6 @@ const Settings: React.FC = () => {
   const isAdmin = user?.role === UserRole.ADMIN;
 
   const handleSaveSettings = () => {
-    // In a real app, this would save preferences to local storage or backend API
     alert('환경 설정이 저장되었습니다.');
   };
 
@@ -257,6 +256,26 @@ const Settings: React.FC = () => {
                 </div>
             </div>
         )}
+
+        {/* Data Management (Debug) */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center pb-2 border-b border-slate-100">
+                <Database className="mr-2 text-brand-600" size={20} /> 
+                데이터 관리
+            </h2>
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="text-sm font-bold text-slate-800">데이터 초기화 (Reset)</h3>
+                    <p className="text-xs text-slate-500">모든 로컬 데이터를 삭제하고 초기 상태(Mock Data)로 되돌립니다.<br/>골프장 목록이 보이지 않을 때 사용하세요.</p>
+                </div>
+                <button 
+                    onClick={resetData}
+                    className="flex items-center bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
+                >
+                    <RotateCcw size={14} className="mr-1.5" /> 초기화 실행
+                </button>
+            </div>
+        </div>
 
         {/* Notification Settings */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
