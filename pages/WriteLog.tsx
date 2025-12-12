@@ -35,6 +35,10 @@ const WriteLog: React.FC = () => {
   const [personAffinity, setPersonAffinity] = useState<string>('0');
   const [personNotes, setPersonNotes] = useState('');
 
+  // --- Quick Person Add State (For Log Tab) ---
+  const [isQuickPersonModalOpen, setIsQuickPersonModalOpen] = useState(false);
+  const [quickPerson, setQuickPerson] = useState({ name: '', role: '', phone: '', affinity: '0' });
+
   // --- Schedule Form State ---
   const [schedTitle, setSchedTitle] = useState('');
   const [schedDate, setSchedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -179,6 +183,27 @@ const WriteLog: React.FC = () => {
         // Reset form
         setPersonName(''); setPersonPhone(''); setPersonRole(''); setPersonCourseId(''); setPersonNotes('');
     }, 500);
+  };
+
+  const handleQuickPersonSubmit = () => {
+      if (!quickPerson.name) {
+          alert('이름을 입력해주세요.');
+          return;
+      }
+      addPerson({
+          id: `person-q-${Date.now()}`,
+          name: quickPerson.name,
+          phone: quickPerson.phone,
+          currentRole: quickPerson.role,
+          currentCourseId: courseId, // Automatically link to the selected course in Log tab
+          affinity: parseInt(quickPerson.affinity) as AffinityLevel,
+          notes: '업무 일지 작성 중 간편 등록됨',
+          careers: []
+      });
+      setContactPerson(quickPerson.name); // Auto-fill the input
+      setIsQuickPersonModalOpen(false);
+      setQuickPerson({ name: '', role: '', phone: '', affinity: '0' });
+      alert('인물이 등록되었습니다.');
   };
 
   const handleScheduleSubmit = (e: React.FormEvent) => {
@@ -496,9 +521,19 @@ const WriteLog: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Contact Person (Updated with Datalist) */}
+                    {/* Contact Person (Updated with Quick Add Feature) */}
                     <div>
-                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">관련 인물 (선택)</label>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">관련 인물 (선택)</label>
+                            <button 
+                                type="button" 
+                                onClick={() => setIsQuickPersonModalOpen(true)}
+                                disabled={!courseId}
+                                className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded font-bold hover:bg-slate-200 transition-colors flex items-center disabled:opacity-50"
+                            >
+                                <UserPlus size={10} className="mr-1"/> 간편 인물 등록
+                            </button>
+                        </div>
                         <div className="relative">
                             <input 
                                 list="people-list" 
@@ -515,7 +550,7 @@ const WriteLog: React.FC = () => {
                             </datalist>
                             <User className="absolute right-4 top-3.5 text-slate-400 pointer-events-none" size={16}/>
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-1 pl-1">* 목록에 없는 경우 직접 입력하거나 '인물 등록' 탭에서 새로 등록하세요.</p>
+                        <p className="text-[10px] text-slate-400 mt-1 pl-1">* 목록에 없는 경우 직접 입력하거나 우측 상단 '간편 인물 등록'을 이용하세요.</p>
                     </div>
 
                     {/* Content */}
@@ -654,6 +689,69 @@ const WriteLog: React.FC = () => {
                 </form>
             )}
       </div>
+
+      {/* Quick Person Modal (For Log Tab) */}
+      {isQuickPersonModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in zoom-in-95">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+             <div className="flex justify-between items-center mb-4 border-b pb-3">
+                 <h3 className="font-bold text-lg flex items-center"><UserPlus size={18} className="mr-2 text-brand-600"/>간편 인물 등록</h3>
+                 <button onClick={() => setIsQuickPersonModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X/></button>
+             </div>
+             
+             <div className="space-y-4">
+                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                     <span className="text-[10px] text-slate-400 font-bold block mb-1">소속 골프장 (자동 선택)</span>
+                     <div className="text-sm font-bold text-slate-700 flex items-center">
+                         <Building2 size={14} className="mr-1.5 text-slate-400"/>
+                         {globalCourses.find(c => c.id === courseId)?.name || '골프장을 먼저 선택하세요'}
+                     </div>
+                 </div>
+
+                 <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">이름 <span className="text-red-500">*</span></label>
+                     <input type="text" className="w-full border rounded-lg p-2" value={quickPerson.name} onChange={(e) => setQuickPerson({...quickPerson, name: e.target.value})} placeholder="홍길동" autoFocus />
+                 </div>
+                 <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">직책</label>
+                     <input type="text" className="w-full border rounded-lg p-2" value={quickPerson.role} onChange={(e) => setQuickPerson({...quickPerson, role: e.target.value})} placeholder="예: 코스팀장" />
+                 </div>
+                 <div>
+                     <label className="block text-xs font-bold text-slate-500 mb-1">연락처</label>
+                     <input type="text" className="w-full border rounded-lg p-2" value={quickPerson.phone} onChange={(e) => setQuickPerson({...quickPerson, phone: e.target.value})} placeholder="010-0000-0000" />
+                 </div>
+                 <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">친밀도</label>
+                        <div className="flex space-x-1">
+                             {[
+                                 { val: '2', label: 'Ally', color: 'bg-green-100 text-green-800' },
+                                 { val: '1', label: 'Friend', color: 'bg-emerald-50 text-emerald-700' },
+                                 { val: '0', label: 'Neutral', color: 'bg-slate-50 text-slate-600' },
+                             ].map(opt => (
+                                 <button
+                                     key={opt.val}
+                                     type="button"
+                                     onClick={() => setQuickPerson({...quickPerson, affinity: opt.val})}
+                                     className={`flex-1 py-1.5 rounded-lg border text-[10px] font-bold transition-all ${
+                                         quickPerson.affinity === opt.val 
+                                         ? `ring-1 ring-brand-500 ${opt.color} border-transparent`
+                                         : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                                     }`}
+                                 >
+                                     {opt.label}
+                                 </button>
+                             ))}
+                        </div>
+                 </div>
+             </div>
+
+             <div className="flex justify-end space-x-2 mt-6 pt-3 border-t border-slate-100">
+                 <button onClick={() => setIsQuickPersonModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50">취소</button>
+                 <button onClick={handleQuickPersonSubmit} className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-brand-700">등록 완료</button>
+             </div>
+          </div>
+        </div>
+      )}
 
       {/* Course Modal (Preserved) */}
       {isCourseModalOpen && (
