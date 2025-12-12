@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary, analyzeMaterialInventory } from '../services/geminiService';
@@ -81,15 +80,15 @@ const CourseDetail: React.FC = () => {
 
   // Financial Logic
   const courseFinancials = useMemo(() => {
-      return financials.filter(f => f.courseId === id).sort((a, b) => b.year - a.year);
+      return financials.filter(f => f.courseId === id).sort((a, b) => Number(b.year) - Number(a.year));
   }, [financials, id]);
 
   const financialComparison = useMemo(() => {
       if (courseFinancials.length < 2) return null;
       const current = courseFinancials[0];
       const prev = courseFinancials[1];
-      const diff = current.revenue - prev.revenue;
-      const growth = ((diff) / prev.revenue) * 100;
+      const diff = Number(current.revenue) - Number(prev.revenue);
+      const growth = ((diff) / Number(prev.revenue)) * 100;
       return {
           diff,
           growth: growth.toFixed(1),
@@ -106,7 +105,7 @@ const CourseDetail: React.FC = () => {
   const availableYears = useMemo(() => {
       const years = new Set(courseMaterials.map(m => m.year || currentYear));
       years.add(currentYear);
-      return Array.from(years).sort((a, b) => b - a);
+      return Array.from(years).sort((a, b) => Number(b) - Number(a));
   }, [courseMaterials, currentYear]);
 
   const filteredMaterials = courseMaterials

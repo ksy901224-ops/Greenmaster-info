@@ -142,28 +142,49 @@ const PersonDetail: React.FC = () => {
       if (!editForm) return;
 
       let finalPerson = { ...editForm };
+      let executeArchive = shouldArchive;
 
-      // Auto-Archiving Logic
-      if (shouldArchive && originalPerson && originalPerson.currentCourseId) {
+      // --- Safety Net: Confirmation if changed but not checked ---
+      if (hasRoleChanged && !executeArchive && originalPerson?.currentCourseId) {
+          const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || '이전 소속';
+          executeArchive = window.confirm(
+              `⚠️ 직책/소속 변경이 감지되었습니다.\n\n'${originalPerson.currentRole} @ ${oldCourseName}' 정보를\n과거 이력(History)으로 보관하시겠습니까?\n\n[확인]: 보관 후 저장 (권장)\n[취소]: 보관하지 않고 덮어쓰기`
+          );
+      }
+
+      // --- Auto-Archiving Logic ---
+      if (executeArchive && originalPerson && originalPerson.currentCourseId) {
           const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || 'Unknown';
           
           // Generate a detailed description for the archived record
           const changes = [];
           if (originalPerson.currentCourseId !== editForm.currentCourseId) {
-            changes.push(`소속 변경`);
+            changes.push(`소속 이동: ${oldCourseName} → ${courses.find(c => c.id === editForm.currentCourseId)?.name || '미정'}`);
           }
           if (originalPerson.currentRole !== editForm.currentRole) {
-            changes.push(`직책 변경`);
+            changes.push(`직책 변경: ${originalPerson.currentRole} → ${editForm.currentRole}`);
           }
 
           const changeReason = `[시스템 자동 보관] ${changes.join(', ')}`;
           
+          // Calculate End Date intelligently
+          // If new role has a specific start date, the old role ended the day before.
+          // Otherwise, it ends today.
+          let endDate = new Date().toISOString().split('T')[0];
+          if (editForm.currentRoleStartDate) {
+              const startObj = new Date(editForm.currentRoleStartDate);
+              if (!isNaN(startObj.getTime())) {
+                  startObj.setDate(startObj.getDate() - 1);
+                  endDate = startObj.toISOString().split('T')[0];
+              }
+          }
+
           const archivedRecord: CareerRecord = {
               courseId: originalPerson.currentCourseId,
               courseName: oldCourseName,
               role: originalPerson.currentRole,
               startDate: originalPerson.currentRoleStartDate || '',
-              endDate: new Date().toISOString().split('T')[0], // Today as end date
+              endDate: endDate,
               description: changeReason
           };
           
@@ -175,7 +196,11 @@ const PersonDetail: React.FC = () => {
       // Clear Draft on Success
       localStorage.removeItem(`GM_DRAFT_PERSON_${person.id}`);
       setIsEditModalOpen(false);
-      alert('인물 정보가 수정되었습니다.' + (shouldArchive ? '\n(이전 경력이 자동으로 과거 이력에 보관되었습니다)' : ''));
+      
+      const msg = executeArchive 
+        ? '인물 정보가 수정되었으며, 이전 경력이 성공적으로 보관되었습니다.' 
+        : '인물 정보가 수정되었습니다.';
+      alert(msg);
   };
 
   // --- DELETE HANDLER ---
@@ -183,8 +208,6 @@ const PersonDetail: React.FC = () => {
       if (window.confirm(`정말로 '${person.name}' 인물 정보를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
           deletePerson(person.id);
           alert('삭제되었습니다.');
-          // Go back to previous page
-          // Simple back implementation via history.back() or navigate to home/list
           window.history.back();
       }
   };
@@ -422,7 +445,7 @@ const PersonDetail: React.FC = () => {
                                 </div>
                                 <div className="flex-1">
                                     <p className="text-xs text-slate-800 font-bold mb-1">
-                                        경력 자동 보관 알림
+                                        경력 자동 보관
                                     </p>
                                     <div className="text-xs text-slate-600 mb-2 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
                                         <div className="flex justify-between mb-1 items-center">
@@ -439,9 +462,9 @@ const PersonDetail: React.FC = () => {
                                             type="checkbox" 
                                             checked={shouldArchive}
                                             onChange={(e) => setShouldArchive(e.target.checked)}
-                                            className="rounded text-brand-600 focus:ring-brand-500"
+                                            className="rounded text-brand-600 focus:ring-brand-500 accent-brand-600 w-4 h-4"
                                         />
-                                        <span className="text-xs text-slate-700 font-medium">이전 정보를 '과거 이력'에 저장 (타임라인 보존)</span>
+                                        <span className="text-xs text-slate-800 font-bold">이전 정보를 '과거 이력'에 저장 (타임라인 보존)</span>
                                     </label>
                                 </div>
                             </div>
@@ -508,7 +531,7 @@ const PersonDetail: React.FC = () => {
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600 pl-3.5">
                                      <div><span className="text-slate-400 text-[10px]">골프장:</span> {courses.find(c => c.id === originalPerson.currentCourseId)?.name}</div>
                                      <div><span className="text-slate-400 text-[10px]">직책:</span> {originalPerson.currentRole}</div>
-                                     <div className="col-span-2"><span className="text-slate-400 text-[10px]">기간:</span> {originalPerson.currentRoleStartDate || '미상'} ~ {new Date().toISOString().split('T')[0]}</div>
+                                     <div className="col-span-2"><span className="text-slate-400 text-[10px]">기간:</span> {originalPerson.currentRoleStartDate || '미상'} ~ </div>
                                      <div className="col-span-2 text-brand-600 italic mt-1 text-[10px]">"{`[시스템 자동 보관] 변경사항 반영됨`}"</div>
                                 </div>
                             </div>

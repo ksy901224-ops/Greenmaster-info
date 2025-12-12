@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2 } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -59,6 +59,11 @@ const WriteLog: React.FC = () => {
   // --- Dynamic Course List & Modal State ---
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
   const [newCourse, setNewCourse] = useState<any>({ name: '', address: '', holes: 18, type: CourseType.PUBLIC, grassType: GrassType.ZOYSIA, area: '', length: '' });
+
+  // --- Filtered People for Log Form ---
+  const filteredPeopleForLog = globalPeople.filter(p => 
+    courseId ? p.currentCourseId === courseId : true
+  );
 
   // --- Initial Data Loading (Draft Check) ---
   useEffect(() => {
@@ -135,8 +140,6 @@ const WriteLog: React.FC = () => {
       // Auto select the new course if in manual mode
       if (activeTab === 'LOG') setCourseId(courseId);
       
-      // Force UI update for AI results
-      // In a real app, 'globalCourses' would update via context, re-rendering the component.
       alert(`${newCourse.name} 골프장이 등록되었습니다.`);
   };
   
@@ -170,7 +173,12 @@ const WriteLog: React.FC = () => {
         notes: personNotes, careers: [] 
     });
     localStorage.removeItem('GM_DRAFT_PERSON');
-    setTimeout(() => { setIsSubmitting(false); alert('인물 등록 완료'); }, 500);
+    setTimeout(() => { 
+        setIsSubmitting(false); 
+        alert('인물 등록 완료'); 
+        // Reset form
+        setPersonName(''); setPersonPhone(''); setPersonRole(''); setPersonCourseId(''); setPersonNotes('');
+    }, 500);
   };
 
   const handleScheduleSubmit = (e: React.FormEvent) => {
@@ -328,7 +336,7 @@ const WriteLog: React.FC = () => {
                         <div className="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-full mb-3"><Sparkles size={32} /></div>
                         <h2 className="text-xl font-bold text-slate-900">AI 문서 분석 및 자동 등록</h2>
                         <p className="text-sm text-slate-500 mt-1">업무 보고서(PDF, Excel 스크린샷, 이미지)를 업로드하면 AI가 내용을 분석해 저장합니다.</p>
-                        <p className="text-xs text-indigo-500 mt-2 font-bold">* 다중 파일 동시 분석 지원</p>
+                        <p className="text-xs text-indigo-500 mt-2 font-bold">* 골프장 자동 매칭 및 다중 파일 분석 지원</p>
                     </div>
 
                     {!isAnalyzing && analysisResults.length === 0 && (
@@ -367,7 +375,7 @@ const WriteLog: React.FC = () => {
                         <div className="py-20 text-center">
                             <Loader2 size={48} className="mx-auto text-indigo-600 animate-spin mb-4" />
                             <h3 className="text-lg font-bold text-slate-800">AI가 문서를 분석 중입니다...</h3>
-                            <p className="text-slate-500 text-sm">내용 추출 및 신규 골프장 식별 중</p>
+                            <p className="text-slate-500 text-sm">내용 추출 및 골프장 DB 대조 중</p>
                         </div>
                     )}
 
@@ -477,12 +485,37 @@ const WriteLog: React.FC = () => {
                         <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] bg-brand-50 text-brand-700 px-2 py-1 rounded font-bold hover:bg-brand-100 transition-colors">+ 신규 등록</button>
                       </div>
                       <div className="relative">
-                        <select className={getSelectClass('courseId')} value={courseId} onChange={(e) => setCourseId(e.target.value)} required>
+                        <select className={getSelectClass('courseId')} value={courseId} onChange={(e) => {
+                            setCourseId(e.target.value);
+                            setContactPerson(''); // Reset contact when course changes
+                        }} required>
                             <option value="">선택하세요</option>
                             {globalCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                         <ChevronDown className="absolute right-4 top-4 text-slate-400 pointer-events-none" size={16}/>
                       </div>
+                    </div>
+
+                    {/* Contact Person (Updated with Datalist) */}
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">관련 인물 (선택)</label>
+                        <div className="relative">
+                            <input 
+                                list="people-list" 
+                                className={getInputClass('contactPerson')} 
+                                value={contactPerson} 
+                                onChange={(e) => setContactPerson(e.target.value)} 
+                                placeholder={courseId ? "골프장 관련 인물 검색 또는 직접 입력" : "골프장을 먼저 선택하세요"}
+                                disabled={!courseId}
+                            />
+                            <datalist id="people-list">
+                                {filteredPeopleForLog.map(p => (
+                                    <option key={p.id} value={p.name}>{p.currentRole}</option>
+                                ))}
+                            </datalist>
+                            <User className="absolute right-4 top-3.5 text-slate-400 pointer-events-none" size={16}/>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1 pl-1">* 목록에 없는 경우 직접 입력하거나 '인물 등록' 탭에서 새로 등록하세요.</p>
                     </div>
 
                     {/* Content */}
@@ -518,7 +551,68 @@ const WriteLog: React.FC = () => {
                             <input type="text" className={getInputClass('personRole')} value={personRole} onChange={(e) => setPersonRole(e.target.value)} placeholder="예: 코스팀장" />
                         </div>
                     </div>
-                    {/* ... shortened for brevity, assume full form inputs exist ... */}
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">연락처</label>
+                            <input type="text" className={getInputClass('personPhone')} value={personPhone} onChange={(e) => setPersonPhone(e.target.value)} placeholder="010-0000-0000" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">입사일</label>
+                            <input type="date" className={getInputClass('personStartDate')} value={personStartDate} onChange={(e) => setPersonStartDate(e.target.value)} />
+                        </div>
+                    </div>
+
+                    {/* Course Select for Person (New Feature) */}
+                    <div>
+                        <div className="flex justify-between items-center mb-2">
+                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">소속 골프장</label>
+                             <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] bg-brand-50 text-brand-700 px-2 py-1 rounded font-bold hover:bg-brand-100 transition-colors">+ 신규 등록</button>
+                        </div>
+                        <div className="relative">
+                            <select 
+                                className={getSelectClass('personCourseId')} 
+                                value={personCourseId} 
+                                onChange={(e) => setPersonCourseId(e.target.value)}
+                            >
+                                <option value="">소속 없음 (프리랜서 등)</option>
+                                {globalCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                            <ChevronDown className="absolute right-4 top-4 text-slate-400 pointer-events-none" size={16}/>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">친밀도 (관계)</label>
+                        <div className="flex space-x-2">
+                             {[
+                                 { val: '2', label: 'Ally', color: 'bg-green-100 text-green-800' },
+                                 { val: '1', label: 'Friendly', color: 'bg-emerald-50 text-emerald-700' },
+                                 { val: '0', label: 'Neutral', color: 'bg-slate-50 text-slate-600' },
+                                 { val: '-1', label: 'Unfriendly', color: 'bg-orange-50 text-orange-700' },
+                                 { val: '-2', label: 'Hostile', color: 'bg-red-50 text-red-700' },
+                             ].map(opt => (
+                                 <button
+                                     key={opt.val}
+                                     type="button"
+                                     onClick={() => setPersonAffinity(opt.val)}
+                                     className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${
+                                         personAffinity === opt.val 
+                                         ? `ring-2 ring-offset-1 ring-brand-500 ${opt.color} border-transparent`
+                                         : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                                     }`}
+                                 >
+                                     {opt.label}
+                                 </button>
+                             ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">메모 / 특징</label>
+                        <textarea rows={3} className={getInputClass('personNotes')} value={personNotes} onChange={(e) => setPersonNotes(e.target.value)} placeholder="성격, 특이사항, 관계 요약 등" />
+                    </div>
+
                     <div className="pt-6 border-t border-slate-100">
                         <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl flex justify-center items-center active:scale-[0.99]">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <UserPlus className="mr-2" />} 인물 저장
@@ -535,7 +629,23 @@ const WriteLog: React.FC = () => {
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">일정 제목 <span className="text-red-500">*</span></label>
                         <input type="text" required className={getInputClass('schedTitle')} value={schedTitle} onChange={(e) => setSchedTitle(e.target.value)} placeholder="미팅, 공사 일정 등" />
                     </div>
-                    {/* ... shortened for brevity ... */}
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">날짜</label>
+                             <input type="date" required className={getInputClass('schedDate')} value={schedDate} onChange={(e) => setSchedDate(e.target.value)} />
+                        </div>
+                        <div>
+                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">시간</label>
+                             <input type="time" required className={getInputClass('schedTime')} value={schedTime} onChange={(e) => setSchedTime(e.target.value)} />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">장소</label>
+                        <input type="text" className={getInputClass('schedLocation')} value={schedLocation} onChange={(e) => setSchedLocation(e.target.value)} placeholder="회의실, 현장 등" />
+                    </div>
+
                     <div className="pt-6 border-t border-slate-100">
                         <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl flex justify-center items-center active:scale-[0.99]">
                              {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CalendarPlus className="mr-2" />} 일정 저장
