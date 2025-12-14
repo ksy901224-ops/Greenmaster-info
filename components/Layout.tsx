@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
-import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, ListChecks, LayoutDashboard, Share2 } from 'lucide-react';
+import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, ListChecks, LayoutDashboard, Share2, Database, Wifi, WifiOff } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole } from '../types';
+import { isMockMode } from '../firebaseConfig';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -168,9 +169,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white/50 backdrop-blur-sm border-t border-slate-200 py-8 text-center text-slate-500 text-sm relative z-10">
-        <p>© 2024 GreenMaster Info System. <span className="hidden sm:inline">All rights reserved.</span></p>
-        <p className="text-xs mt-1 opacity-70">Logged in as <span className="font-medium text-slate-700">{user?.name}</span></p>
+      <footer className="bg-white/50 backdrop-blur-sm border-t border-slate-200 py-6 text-center text-slate-500 text-sm relative z-10">
+        <div className="flex flex-col items-center justify-center space-y-2">
+            <p>© 2024 GreenMaster Info System. <span className="hidden sm:inline">All rights reserved.</span></p>
+            <div className="flex items-center space-x-4 text-xs">
+                <span className="opacity-70">Logged in as <span className="font-medium text-slate-700">{user?.name}</span></span>
+                <div className={`flex items-center px-2 py-0.5 rounded-full border ${!isMockMode ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}>
+                    {isMockMode ? <WifiOff size={10} className="mr-1"/> : <Wifi size={10} className="mr-1"/>}
+                    <span className="font-bold">{isMockMode ? 'Local Mode (Offline)' : 'Live Server (Connected)'}</span>
+                </div>
+            </div>
+        </div>
       </footer>
     </div>
   );
