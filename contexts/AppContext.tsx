@@ -147,14 +147,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setLogs(data as LogEntry[]);
     });
 
-    // 2. Courses - Check against MOCK_COURSES length to force update if new mock data added
-    // CRITICAL FIX: If seeding is triggered, do NOT setCourses with current data to avoid race conditions.
-    // The seed function will trigger this callback again with the full merged data.
+    // 2. Courses
     const unsubCourses = subscribeToCollection('courses', (data) => {
-      if (data.length < MOCK_COURSES.length) { 
-          console.log(`[Auto-Sync] Detected incomplete course data (${data.length} vs ${MOCK_COURSES.length}). Merging...`);
+      if (data.length === 0) { 
           seedCollection('courses', MOCK_COURSES); 
-          return; // Wait for the re-trigger from seedCollection
+          return; 
       } 
       setCourses(data as GolfCourse[]);
     });

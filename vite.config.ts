@@ -22,12 +22,9 @@ export default defineConfig(({ mode }) => {
       }
     },
     define: {
-      // Only manually define API_KEY since it doesn't start with VITE_
-      // Vite automatically exposes VITE_* variables on import.meta.env
+      // Define process.env.API_KEY specifically for Gemini SDK
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
-      
-      // Polyfill process.env for libraries that expect it (like Gemini SDK)
-      // but do not overwrite keys defined above.
+      // Safe polyfill for other libraries relying on process.env
       'process.env': {}
     }
   };

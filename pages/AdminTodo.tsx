@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { getAllTodos, updateTodo, deleteTodo, TodoItem } from '../services/firestoreService';
+import { subscribeToCollection, updateTodo, deleteTodo, TodoItem } from '../services/firestoreService';
 import { Loader2, Trash2, Check, X, Edit2, Save } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole } from '../types';
@@ -20,28 +20,29 @@ const AdminTodo: React.FC = () => {
     }
   }, [user, navigate]);
 
-  const fetchTodos = async () => {
-    setLoading(true);
-    const data = await getAllTodos();
-    setTodos(data);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchTodos();
+    const unsubscribe = subscribeToCollection('todos', (data) => {
+      // Sort in client side since generic subscription doesn't sort
+      const sorted = (data as TodoItem[]).sort((a, b) => {
+        const tA = a.createdAt?.seconds || 0;
+        const tB = b.createdAt?.seconds || 0;
+        return tB - tA;
+      });
+      setTodos(sorted);
+      setLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   const handleDelete = async (id: string) => {
     if (window.confirm('정말 삭제하시겠습니까?')) {
       await deleteTodo(id);
-      fetchTodos();
     }
   };
 
   const handleToggleComplete = async (todo: TodoItem) => {
     if (!todo.id) return;
     await updateTodo(todo.id, { isCompleted: !todo.isCompleted });
-    fetchTodos();
   };
 
   const startEdit = (todo: TodoItem) => {
@@ -57,7 +58,6 @@ const AdminTodo: React.FC = () => {
   const saveEdit = async (id: string) => {
     await updateTodo(id, { text: editText });
     setEditingId(null);
-    fetchTodos();
   };
 
   if (loading) {
@@ -72,7 +72,7 @@ const AdminTodo: React.FC = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">할 일 관리 (Admin)</h1>
-        <p className="text-slate-500 text-sm">데이터베이스에 저장된 모든 사용자의 할 일을 관리합니다.</p>
+        <p className="text-slate-500 text-sm">데이터베이스에 저장된 모든 사용자의 할 일을 실시간으로 관리합니다.</p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
