@@ -8,7 +8,7 @@ import { Department, LogEntry, UserRole } from '../types';
 import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { addTodo } from '../services/firestoreService';
-import { searchAppWithAI } from '../services/geminiService';
+import { searchAppWithAIStream } from '../services/geminiService';
 
 const Dashboard: React.FC = () => {
   const { logs, courses, people, user, canUseAI, canViewFullData, isAdmin, navigate } = useApp();
@@ -64,11 +64,17 @@ const Dashboard: React.FC = () => {
     if (queryOverride) setAiSearchQuery(queryOverride);
 
     setIsAiSearching(true);
-    setAiSearchResult(null);
+    setAiSearchResult(''); // Clear previous result immediately
 
     try {
-      const result = await searchAppWithAI(query, { logs, courses, people });
-      setAiSearchResult(result);
+      // Use the streaming function
+      await searchAppWithAIStream(
+        query, 
+        { logs, courses, people },
+        (chunk) => {
+          setAiSearchResult(prev => (prev || '') + chunk);
+        }
+      );
     } catch (error) {
       setAiSearchResult("검색 중 오류가 발생했습니다.");
     } finally {
@@ -312,6 +318,7 @@ const Dashboard: React.FC = () => {
                     {aiSearchResult ? (
                         <div className="bg-slate-950/50 rounded-xl p-4 text-slate-300 text-sm leading-relaxed border border-slate-700/50 animate-in fade-in slide-in-from-top-2 whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">
                             {aiSearchResult}
+                            {isAiSearching && <span className="inline-block w-1.5 h-4 ml-1 bg-indigo-500 animate-pulse align-middle"></span>}
                         </div>
                     ) : (
                         <div className="flex flex-wrap gap-2">

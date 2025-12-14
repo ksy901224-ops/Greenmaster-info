@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { LogEntry, GolfCourse, Person, GrassType, CourseType, MaterialCategory, MaterialRecord } from '../types';
 
 // Safety check for API Key
@@ -588,13 +588,18 @@ export const getCourseDetailsFromAI = async (courseName: string): Promise<AICour
 
 /**
  * Searches through the application's stored data using Gemini AI.
- * Uses the fast 'gemini-2.5-flash-lite' model for quick lookups.
+ * Updated to use Streaming for better UX and Flash-Lite model for speed.
  */
-export const searchAppWithAI = async (query: string, appContextData: {
-  logs: LogEntry[],
-  courses: GolfCourse[],
-  people: Person[]
-}): Promise<string> => {
+export const searchAppWithAIStream = async (
+  query: string, 
+  appContextData: {
+    logs: LogEntry[],
+    courses: GolfCourse[],
+    people: Person[]
+  },
+  onChunk: (text: string) => void,
+  onComplete?: (fullText: string) => void
+): Promise<void> => {
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("API Key가 필요합니다.");
@@ -637,19 +642,44 @@ export const searchAppWithAI = async (query: string, appContextData: {
   `;
 
   try {
-    const response = await retryOperation(async () => {
-      return await ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite-latest', // Using the fast model as requested
+    const responseStream = await retryOperation(async () => {
+      return await ai.models.generateContentStream({
+        model: 'gemini-2.5-flash-lite-latest', // Using the fast flash-lite model as requested
         contents: prompt,
       });
     });
 
-    return response.text || "답변을 생성할 수 없습니다.";
+    let fullText = '';
+    for await (const chunk of responseStream) {
+      const text = chunk.text;
+      if (text) {
+        fullText += text;
+        onChunk(text);
+      }
+    }
+    
+    if (onComplete) {
+      onComplete(fullText);
+    }
+
   } catch (error) {
     console.error("AI Search Error:", error);
     throw new Error("AI 검색 중 오류가 발생했습니다.");
   }
 };
+
+// Kept for backward compatibility if needed, but redirects to stream version internally or uses blocking
+export const searchAppWithAI = async (query: string, appContextData: {
+  logs: LogEntry[],
+  courses: GolfCourse[],
+  people: Person[]
+}): Promise<string> => {
+  let result = '';
+  await searchAppWithAIStream(query, appContextData, (chunk) => {
+    result += chunk;
+  });
+  return result;
+}
 
 /**
  * Analyzes a person's reputation based on logs and profile data.
