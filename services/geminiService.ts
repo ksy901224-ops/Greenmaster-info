@@ -15,41 +15,72 @@ const getApiKey = () => {
 // Initialize Gemini client with fallback to empty string to prevent startup crash
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
 
-// Helper for retry logic with exponential backoff
+const TIMEOUT_MS = 45000; // 45 Seconds Timeout
+
+// Centralized Error Translator for User-Friendly Messages
+const getFriendlyErrorMessage = (error: any): string => {
+  const msg = error?.message || error?.toString() || '';
+  
+  if (msg.includes('429')) return "⚠️ 요청량이 너무 많습니다. 1분 후 다시 시도해주세요. (Quota Exceeded)";
+  if (msg.includes('401') || msg.includes('403') || msg.includes('API_KEY')) return "⚠️ API 키가 유효하지 않거나 만료되었습니다. 설정을 확인해주세요.";
+  if (msg.includes('500') || msg.includes('503') || msg.includes('overloaded')) return "⚠️ AI 서버가 일시적으로 불안정합니다. 잠시 후 다시 시도해주세요.";
+  if (msg.includes('SAFETY') || msg.includes('blocked')) return "⚠️ 안전 정책(Safety Policy)에 의해 콘텐츠 생성이 차단되었습니다.";
+  if (msg.includes('RECITATION')) return "⚠️ 저작권 보호를 위해 콘텐츠 생성이 중단되었습니다.";
+  if (msg.includes('Timeout') || msg.includes('aborted')) return "⚠️ 요청 시간이 초과되었습니다. 네트워크 상태를 확인하고 다시 시도해주세요.";
+  if (msg.includes('fetch') || msg.includes('network') || msg.includes('Failed to fetch')) return "⚠️ 네트워크 연결 상태를 확인해주세요.";
+  
+  return `⚠️ 오류가 발생했습니다: ${msg.substring(0, 100)}...`;
+};
+
+// Helper for retry logic with exponential backoff and Timeout
 async function retryOperation<T>(
   operation: () => Promise<T>, 
   retries: number = 3, 
   baseDelay: number = 1000
 ): Promise<T> {
   let lastError: any;
+  
   for (let i = 0; i < retries; i++) {
     try {
-      return await operation();
+      // Timeout Promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const id = setTimeout(() => {
+          clearTimeout(id);
+          reject(new Error("Timeout: Operation took too long"));
+        }, TIMEOUT_MS);
+      });
+
+      // Race the operation against the timeout
+      return await Promise.race([operation(), timeoutPromise]);
+
     } catch (error: any) {
       lastError = error;
       const msg = error.message || '';
       
-      // Retry on 429 (Quota), 503 (Overloaded), 500 (Internal), or Fetch failures
+      // Retry conditions (Server errors, Rate Limits, Network, Timeouts)
       const isTransient = 
         msg.includes('429') || 
         msg.includes('503') || 
         msg.includes('500') || 
         msg.includes('INTERNAL') || 
         msg.includes('overloaded') ||
-        msg.includes('fetch');
+        msg.includes('fetch') ||
+        msg.includes('Timeout');
       
       if (isTransient && i < retries - 1) {
-        const delay = baseDelay * Math.pow(2, i);
-        console.warn(`Gemini API Warning (Attempt ${i + 1}/${retries}): ${msg}. Retrying in ${delay}ms...`);
+        // Exponential backoff with Jitter
+        const delay = baseDelay * Math.pow(2, i) + (Math.random() * 1000);
+        console.warn(`Gemini API Warning (Attempt ${i + 1}/${retries}): ${msg}. Retrying in ${Math.floor(delay)}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
       
-      // Don't retry on client errors (400-404)
-      if (msg.includes('400') || msg.includes('401') || msg.includes('403') || msg.includes('404')) {
+      // Stop retrying for client errors or safety blocks
+      if (msg.includes('400') || msg.includes('401') || msg.includes('403') || msg.includes('404') || msg.includes('SAFETY') || msg.includes('RECITATION')) {
         throw error;
       }
       
+      // If not transient and not explicitly skipped, we throw (likely code error)
       throw error;
     }
   }
@@ -121,9 +152,7 @@ export const generateCourseSummary = async (
     return response.text || "요약 생성에 실패했습니다.";
   } catch (error: any) {
     console.error("Gemini API Error:", error);
-    const msg = error.message || '';
-    if (msg.includes('429')) return "요청이 너무 많습니다. 잠시 후 다시 시도해주세요. (429)";
-    return `AI 분석 중 오류가 발생했습니다: ${msg.substring(0, 50)}...`;
+    return getFriendlyErrorMessage(error);
   }
 };
 
@@ -170,7 +199,7 @@ export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
     return response.text || "분석 결과를 생성하지 못했습니다.";
   } catch (error) {
     console.error("Gemini Log Analysis Error:", error);
-    return "AI 분석 중 오류가 발생했습니다.";
+    return getFriendlyErrorMessage(error);
   }
 };
 
@@ -393,18 +422,8 @@ export const analyzeDocument = async (
     }
 
   } catch (error: any) {
-    const msg = error.message || "";
-    
-    // Explicit Error Mapping for User Feedback
-    if (msg.includes("지원하지 않는") || msg.includes("파일 크기")) throw error;
-    if (msg.includes('413') || msg.includes('too large')) throw new Error("파일 크기가 너무 큽니다. (Server 413 Error)");
-    if (msg.includes('400')) throw new Error("잘못된 요청입니다. 파일 형식을 확인하세요. (400 Error)");
-    if (msg.includes('401') || msg.includes('403')) throw new Error("AI 서비스 권한 오류입니다. API Key가 유효하지 않습니다.");
-    if (msg.includes('429')) throw new Error("요청량이 너무 많습니다. 잠시 후 다시 시도하세요. (Quota Exceeded)");
-    if (msg.includes('503') || msg.includes('500')) throw new Error("AI 서비스 서버가 일시적으로 불안정합니다. (Service Unavailable)");
-    
-    console.error("Unhandled Gemini Error:", error);
-    throw new Error(`분석 중 오류 발생: ${msg.substring(0, 100)}...`);
+    // Explicitly throw translated friendly error for UI to display
+    throw new Error(getFriendlyErrorMessage(error));
   }
 };
 
@@ -481,7 +500,7 @@ export const analyzeMaterialInventory = async (
 
   } catch (error: any) {
     console.error("Material Analysis Error:", error);
-    throw new Error("자재 데이터 분석 중 오류가 발생했습니다.");
+    throw new Error(getFriendlyErrorMessage(error));
   }
 };
 
@@ -582,7 +601,7 @@ export const getCourseDetailsFromAI = async (courseName: string): Promise<AICour
 
   } catch (error) {
     console.error("AI Course Search Error:", error);
-    throw new Error("골프장 정보를 가져오는 데 실패했습니다.");
+    throw new Error(getFriendlyErrorMessage(error));
   }
 };
 
@@ -606,8 +625,6 @@ export const searchAppWithAIStream = async (
   }
 
   // Serialize the context data to a string format the AI can understand
-  // Minimizing tokens by selecting only relevant fields could be an optimization,
-  // but sending the JSON structure is usually efficient enough for this scale.
   const contextString = JSON.stringify({
     courses: appContextData.courses.map(c => ({ name: c.name, type: c.type, desc: c.description, issues: c.issues })),
     people: appContextData.people.map(p => ({ name: p.name, role: p.currentRole, courseId: p.currentCourseId, notes: p.notes })),
@@ -664,7 +681,8 @@ export const searchAppWithAIStream = async (
 
   } catch (error) {
     console.error("AI Search Error:", error);
-    throw new Error("AI 검색 중 오류가 발생했습니다.");
+    // Yield error as chunk to notify user via stream
+    onChunk(`\n${getFriendlyErrorMessage(error)}`);
   }
 };
 
@@ -729,6 +747,6 @@ export const generatePersonReputationReport = async (
     return response.text || "평판 보고서를 생성할 수 없습니다.";
   } catch (error: any) {
     console.error("Reputation Analysis Error:", error);
-    return "AI 분석 중 오류가 발생했습니다.";
+    return getFriendlyErrorMessage(error);
   }
 };
