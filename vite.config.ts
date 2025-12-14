@@ -12,17 +12,12 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
     },
     define: {
-      // Safely stringify values to replace process.env.KEY usage in code
+      // Only manually define API_KEY since it doesn't start with VITE_
+      // Vite automatically exposes VITE_* variables on import.meta.env
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
-      'process.env.VITE_FIREBASE_API_KEY': JSON.stringify(env.VITE_FIREBASE_API_KEY || ''),
-      'process.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(env.VITE_FIREBASE_AUTH_DOMAIN || ''),
-      'process.env.VITE_FIREBASE_PROJECT_ID': JSON.stringify(env.VITE_FIREBASE_PROJECT_ID || ''),
-      'process.env.VITE_FIREBASE_STORAGE_BUCKET': JSON.stringify(env.VITE_FIREBASE_STORAGE_BUCKET || ''),
-      'process.env.VITE_FIREBASE_MESSAGING_SENDER_ID': JSON.stringify(env.VITE_FIREBASE_MESSAGING_SENDER_ID || ''),
-      'process.env.VITE_FIREBASE_APP_ID': JSON.stringify(env.VITE_FIREBASE_APP_ID || ''),
       
-      // Fallback: If code accesses process.env directly, provide an empty object to prevent crash
-      // But allow the specific keys above to take precedence via string replacement logic
+      // Polyfill process.env for libraries that expect it, 
+      // but do not overwrite keys defined above.
       'process.env': {}
     }
   };
