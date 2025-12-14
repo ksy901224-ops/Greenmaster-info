@@ -4,7 +4,12 @@ import { LogEntry, GolfCourse, Person, GrassType, CourseType, MaterialCategory, 
 
 // Safety check for API Key
 const getApiKey = () => {
-  return process.env.API_KEY || '';
+  const key = process.env.API_KEY || '';
+  if (!key || key.includes('YOUR_API_KEY')) {
+    console.error("API Key is missing or invalid.");
+    return '';
+  }
+  return key;
 };
 
 // Initialize Gemini client with fallback to empty string to prevent startup crash
@@ -23,8 +28,15 @@ async function retryOperation<T>(
     } catch (error: any) {
       lastError = error;
       const msg = error.message || '';
-      // Retry on 429 (Quota), 503 (Overloaded), 500 (Internal)
-      const isTransient = msg.includes('429') || msg.includes('503') || msg.includes('500') || msg.includes('INTERNAL') || msg.includes('overloaded');
+      
+      // Retry on 429 (Quota), 503 (Overloaded), 500 (Internal), or Fetch failures
+      const isTransient = 
+        msg.includes('429') || 
+        msg.includes('503') || 
+        msg.includes('500') || 
+        msg.includes('INTERNAL') || 
+        msg.includes('overloaded') ||
+        msg.includes('fetch');
       
       if (isTransient && i < retries - 1) {
         const delay = baseDelay * Math.pow(2, i);
@@ -32,6 +44,12 @@ async function retryOperation<T>(
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
+      
+      // Don't retry on client errors (400-404)
+      if (msg.includes('400') || msg.includes('401') || msg.includes('403') || msg.includes('404')) {
+        throw error;
+      }
+      
       throw error;
     }
   }
