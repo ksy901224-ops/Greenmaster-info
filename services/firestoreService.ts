@@ -137,7 +137,8 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
   const q = query(collection(db, collectionName));
   return onSnapshot(q, (snapshot) => {
     // Explicit cast to QuerySnapshot to ensure 'docs' property is accessible
-    const querySnapshot = snapshot as QuerySnapshot<DocumentData>;
+    // Casting through unknown to avoid TS overlap error with DocumentSnapshot
+    const querySnapshot = snapshot as unknown as QuerySnapshot<DocumentData>;
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
     callback(data);
   }, (error) => {
@@ -221,17 +222,9 @@ export const seedCollection = async (collectionName: string, dataArray: any[]) =
         setLocalData(collectionName, dataArray);
         console.log(`[Mock] Seeded ${collectionName} with ${dataArray.length} items`);
     } 
-    // Case 2: Incomplete courses -> Merge new items
-    else if (collectionName === 'courses' && current.length < dataArray.length) {
-        const existingIds = new Set(current.map((c: any) => c.id));
-        const missingItems = dataArray.filter(item => !existingIds.has(item.id));
-        
-        if (missingItems.length > 0) {
-            console.log(`[Mock] Merging ${missingItems.length} missing items into ${collectionName}`);
-            const merged = [...current, ...missingItems];
-            setLocalData(collectionName, merged);
-        }
-    }
+    // Merging logic REMOVED to prevent deleted items from reappearing.
+    // If the user deletes items, we respect that state and do not auto-refill from mock data
+    // unless the collection is completely wiped (handled by Case 1).
     return;
   }
 

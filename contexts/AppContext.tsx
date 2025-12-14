@@ -149,6 +149,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 2. Courses
     const unsubCourses = subscribeToCollection('courses', (data) => {
+      // NOTE: We only seed if the collection is completely empty.
+      // This prevents the "deleted items reappearing" bug where we aggressively merged mock data.
       if (data.length === 0) { 
           seedCollection('courses', MOCK_COURSES); 
           return; 
