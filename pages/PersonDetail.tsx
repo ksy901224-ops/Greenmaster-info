@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud } from 'lucide-react';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
+import { generatePersonReputationReport } from '../services/geminiService';
 
 const PersonDetail: React.FC = () => {
-  const { people, courses, updatePerson, deletePerson, routeParams, navigate } = useApp();
+  const { people, courses, updatePerson, deletePerson, routeParams, navigate, canUseAI, logs } = useApp();
   const id = routeParams.id;
   
   const person = people.find(p => p.id === id);
@@ -18,6 +19,10 @@ const PersonDetail: React.FC = () => {
   // Logic to detect changes for auto-archiving
   const [originalPerson, setOriginalPerson] = useState<Person | null>(null);
   const [shouldArchive, setShouldArchive] = useState(false);
+
+  // Reputation Analysis State
+  const [isAnalyzingReputation, setIsAnalyzingReputation] = useState(false);
+  const [reputationReport, setReputationReport] = useState<string | null>(null);
 
   if (!person) return <div className="p-8 text-center">인물 정보를 찾을 수 없습니다.</div>;
 
@@ -148,7 +153,7 @@ const PersonDetail: React.FC = () => {
       if (hasRoleChanged && !executeArchive && originalPerson?.currentCourseId) {
           const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || '이전 소속';
           executeArchive = window.confirm(
-              `⚠️ 직책/소속 변경이 감지되었습니다.\n\n'${originalPerson.currentRole} @ ${oldCourseName}' 정보를\n과거 이력(History)으로 보관하시겠습니까?\n\n[확인]: 보관 후 저장 (권장)\n[취소]: 보관하지 않고 덮어쓰기`
+              `⚠️ 직책/소속 변경이 감지되었습니다.\n\n'${originalPerson.currentRole} @ ${oldCourseName}' 정보를\n과거 이력(History)으로 보관하시겠습니까?\n\n[확인]: 보관하지 않고 저장 (권장)\n[취소]: 보관하지 않고 덮어쓰기`
           );
       }
 
@@ -212,6 +217,30 @@ const PersonDetail: React.FC = () => {
       }
   };
 
+  // --- REPUTATION ANALYSIS HANDLER ---
+  const handleAnalyzeReputation = async () => {
+      setIsAnalyzingReputation(true);
+      setReputationReport(null);
+      
+      // Filter related logs based on person name (simple matching for now)
+      // In a real app, we'd use ID references, but logs store 'contactPerson' string
+      const relatedLogs = logs.filter(l => 
+          l.content.includes(person.name) || 
+          l.title.includes(person.name) || 
+          l.contactPerson === person.name
+      );
+
+      try {
+          const report = await generatePersonReputationReport(person, relatedLogs);
+          setReputationReport(report);
+      } catch (error) {
+          console.error(error);
+          alert('분석 중 오류가 발생했습니다.');
+      } finally {
+          setIsAnalyzingReputation(false);
+      }
+  };
+
   return (
     <div className="space-y-6">
       {/* Profile Header */}
@@ -243,8 +272,20 @@ const PersonDetail: React.FC = () => {
                         <User size={48} />
                     </div>
                 </div>
-                <div className={`px-4 py-2 rounded-lg border text-sm font-bold ${getAffinityColor(person.affinity)}`}>
-                    {getAffinityText(person.affinity)}
+                <div className="flex gap-2">
+                    {canUseAI && (
+                        <button 
+                            onClick={handleAnalyzeReputation}
+                            disabled={isAnalyzingReputation}
+                            className="flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-bold shadow-md hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                        >
+                            {isAnalyzingReputation ? <Loader2 size={14} className="animate-spin mr-1.5"/> : <ShieldAlert size={14} className="mr-1.5"/>}
+                            {isAnalyzingReputation ? "분석 중..." : "AI 평판/리스크 분석"}
+                        </button>
+                    )}
+                    <div className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center ${getAffinityColor(person.affinity)}`}>
+                        {getAffinityText(person.affinity)}
+                    </div>
                 </div>
             </div>
             
@@ -266,6 +307,25 @@ const PersonDetail: React.FC = () => {
             </div>
         </div>
       </div>
+
+      {/* AI Reputation Report Section */}
+      {reputationReport && (
+          <div className="bg-gradient-to-br from-indigo-50 to-white p-6 rounded-xl shadow-md border border-indigo-100 animate-in slide-in-from-top-4">
+              <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-bold text-indigo-900 flex items-center">
+                      <Sparkles size={20} className="mr-2 text-indigo-600" />
+                      AI 평판 및 리스크 심층 분석 보고서
+                  </h3>
+                  <button onClick={() => setReputationReport(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
+              </div>
+              <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-line bg-white/50 p-4 rounded-lg border border-indigo-50/50">
+                  {reputationReport}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2 text-right">
+                  * 이 보고서는 업무 일지를 바탕으로 AI가 추론한 내용이며, 실제와 다를 수 있습니다.
+              </p>
+          </div>
+      )}
 
       {/* Notes & Relationship */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">

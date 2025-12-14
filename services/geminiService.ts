@@ -632,3 +632,54 @@ export const searchAppWithAI = async (query: string, appContextData: {
     throw new Error("AI 검색 중 오류가 발생했습니다.");
   }
 };
+
+/**
+ * Analyzes a person's reputation based on logs and profile data.
+ * Focuses on relationship dynamics and hidden risks in the narrow golf industry.
+ */
+export const generatePersonReputationReport = async (
+  person: Person,
+  relatedLogs: LogEntry[]
+): Promise<string> => {
+  const apiKey = getApiKey();
+  if (!apiKey) return "API Key가 필요합니다.";
+
+  const logsText = relatedLogs.map(l => `[${l.date}] ${l.title}: ${l.content}`).join('\n');
+
+  const prompt = `
+    당신은 골프장 인사 및 평판 관리 전문가입니다.
+    대상 인물에 대한 정보를 바탕으로, 업계 내 평판과 리스크를 심층 분석해주세요.
+    
+    **[산업 특성]**: 골프장 업계는 매우 좁아 소문이 빠르고, 인간관계(In-work politics)가 비즈니스에 큰 영향을 미칩니다.
+    
+    [대상 인물]
+    - 이름: ${person.name}
+    - 현 직책: ${person.currentRole}
+    - 성향/메모: ${person.notes}
+    - 친밀도 등급: ${person.affinity}
+
+    [관련 업무 기록]
+    ${logsText || "관련된 직접적인 업무 기록이 없습니다. 인물 프로필을 바탕으로 추론하세요."}
+
+    다음 4가지 항목으로 분석 보고서를 작성하세요:
+    1. **평판 요약 (Reputation Overview)**: 업무 역량과 주위 평가를 종합적으로 진단.
+    2. **관계 역학 (Relationship Dynamics)**: 누구와 친하고 누구와 갈등이 있었는가? (우호/적대 관계 식별)
+    3. **잠재적 리스크 (Risk Factors)**: 과거 실수, 갈등 이력, 혹은 이직/배신 가능성 등.
+    4. **관리/대응 전략 (Management Strategy)**: 이 사람을 내 편으로 만들기 위한, 혹은 견제하기 위한 구체적 조언.
+
+    *말투는 객관적이고 전문적인 보고서 톤으로 작성하세요.*
+  `;
+
+  try {
+    const response = await retryOperation(async () => {
+      return await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+      });
+    });
+    return response.text || "평판 보고서를 생성할 수 없습니다.";
+  } catch (error: any) {
+    console.error("Reputation Analysis Error:", error);
+    return "AI 분석 중 오류가 발생했습니다.";
+  }
+};
