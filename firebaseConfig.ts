@@ -2,19 +2,45 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
-// Access environment variables via process.env (injected by Vite define)
-const apiKey = process.env.VITE_FIREBASE_API_KEY;
+// Helper to safely access environment variables in various environments (Vite/Browser/Node)
+const getEnv = (key: string): string => {
+  // 1. Try Vite's import.meta.env
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+      // @ts-ignore
+      return import.meta.env[key];
+    }
+  } catch (e) {
+    // Ignore error
+  }
+
+  // 2. Try process.env (Fallback)
+  try {
+    // Check if process exists and has env
+    if (typeof process !== 'undefined' && process.env && process.env[key]) {
+      return process.env[key];
+    }
+  } catch (e) {
+    // Ignore error
+  }
+
+  return '';
+};
+
+// Access vars
+const apiKey = getEnv('VITE_FIREBASE_API_KEY');
 
 // Check if configured: requires at least an API Key to attempt connection
 export const isMockMode = !apiKey;
 
 const firebaseConfig = {
   apiKey: apiKey,
-  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.VITE_FIREBASE_APP_ID
+  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: getEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getEnv('VITE_FIREBASE_APP_ID')
 };
 
 let app;
