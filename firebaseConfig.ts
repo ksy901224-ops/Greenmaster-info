@@ -34,6 +34,11 @@ const apiKey = getEnv('VITE_FIREBASE_API_KEY');
 // Check if configured: requires at least an API Key to attempt connection
 export const isMockMode = !apiKey;
 
+if (isMockMode) {
+    console.warn("⚠️ [Firebase] Running in Mock Mode. Environment variable VITE_FIREBASE_API_KEY is missing.");
+    console.warn("   If you are in production (Vercel), please check 'Settings > Environment Variables'.");
+}
+
 const firebaseConfig = {
   apiKey: apiKey,
   authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN'),
@@ -50,13 +55,13 @@ if (!isMockMode) {
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
-    console.log("🔥 Firebase initialized successfully (Live Mode)");
+    console.log("🔥 [Firebase] Initialized successfully in Live Mode");
   } catch (e) {
-    console.error("Firebase init failed, falling back to mock mode", e);
+    console.error("❌ [Firebase] Initialization failed:", e);
+    console.error("   Falling back to Mock Mode.");
     db = null;
   }
 } else {
-  console.log("⚠️ Running in Mock Mode (No Firebase Config Found). Data is local only.");
   db = null;
 }
 
