@@ -6,7 +6,7 @@ import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
 // Use process.env.API_KEY directly as per guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Enhanced Document Analysis for Batch and Strategy
+// Enhanced Document Analysis for Master DB Syncing and Strategic Extraction
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
   existingCourseNames: string[] = []
@@ -21,24 +21,30 @@ export const analyzeDocument = async (
       }
   }
 
-  // Prune course list to top 200 for prompt optimization
+  // Prune course list to top 200 for prompt size stability
   const courseListStr = existingCourseNames.slice(0, 200).join(', ');
 
   contentParts.push({
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다.
-      제공된 파일(PDF, 이미지, 텍스트)을 분석하여 구조화된 데이터로 추출하세요.
+      제공된 텍스트/파일을 분석하여 구조화된 골프장 마스터 데이터를 추출하세요.
 
-      [골프장 식별 및 매칭 강화 지침]
-      1. 현재 시스템 주요 마스터 DB 목록 (일부): [${courseListStr}]
-      2. 문서에 나타난 골프장 이름이 마스터 DB의 이름과 부분 일치하거나 유사하다면 반드시 마스터 DB의 '정확한 명칭'으로 통일하세요.
-      3. 목록에 없는 새로운 골프장인 경우에만 추출된 이름을 그대로 사용하고 'course_info'를 작성하세요.
+      [핵심 미션]
+      1. 정확한 정보 추출: 주소, 홀 수, 운영 형태(회원제/대중제), 개장일 등.
+      2. 전략적 분석: 해당 골프장의 현재 문제점(Issues)과 우리 비즈니스 기회(Opportunities)를 도출하세요.
+      3. 명칭 통일: 기존 DB 목록 [${courseListStr}]에 유사한 이름이 있다면 해당 명칭으로 매칭하세요.
 
-      [전략적 분석 강화]
-      4. 'summary_report'에는 상황 분석 및 우리 회사 비즈니스에 미칠 잠재적 기회나 위협을 포함하세요.
-      5. 'tags'는 업계 표준 용어를 5개 이상 포함하세요.
+      [반환 JSON 스키마 가이드]
+      - courseName: 골프장명
+      - description: 골프장 개요 및 특징 설명
+      - course_info: { address, holes, type }
+      - strategic_analysis: {
+          issues: ["이슈1", "이슈2"],
+          opportunities: ["기회1", "기회2"]
+        }
+      - summary_report: 전체 상황 요약 리포트
 
-      반드시 JSON 배열([]) 형식으로 출력하세요.
+      반드시 JSON 배열([]) 형식으로만 출력하세요.
     `
   });
 
@@ -52,13 +58,8 @@ export const analyzeDocument = async (
         items: {
           type: Type.OBJECT,
           properties: {
-            title: { type: Type.STRING },
-            content: { type: Type.STRING },
-            date: { type: Type.STRING },
-            department: { type: Type.STRING },
             courseName: { type: Type.STRING },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-            summary_report: { type: Type.STRING },
+            description: { type: Type.STRING },
             course_info: {
                 type: Type.OBJECT,
                 properties: {
@@ -66,10 +67,19 @@ export const analyzeDocument = async (
                     holes: { type: Type.NUMBER },
                     type: { type: Type.STRING }
                 },
-                nullable: true
-            }
+                required: ["address", "holes", "type"]
+            },
+            strategic_analysis: {
+                type: Type.OBJECT,
+                properties: {
+                    issues: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    opportunities: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["issues", "opportunities"]
+            },
+            summary_report: { type: Type.STRING }
           },
-          required: ["title", "content", "date", "department", "courseName", "tags", "summary_report"]
+          required: ["courseName", "description", "course_info", "strategic_analysis", "summary_report"]
         }
       }
     }
@@ -84,7 +94,6 @@ export const generateCourseSummary = async (
   logs: LogEntry[],
   people: Person[]
 ): Promise<string> => {
-  // Prune logs and people for summary content
   const prunedLogs = logs.slice(0, 15).map(l => `[${l.date}] ${l.title}`).join(', ');
   const prunedPeople = people.slice(0, 10).map(p => `${p.name}(${p.currentRole}, 친밀도:${p.affinity})`).join(' | ');
 
@@ -93,7 +102,7 @@ export const generateCourseSummary = async (
     
     데이터 요약:
     - 지역/규모: ${course.region} / ${course.holes}홀
-    - 현황: ${course.description}
+    - 현황: ${course.description?.substring(0, 500)}
     - 최근 일지 요약: ${prunedLogs}
     - 주요 인물: ${prunedPeople}
 
@@ -117,8 +126,6 @@ export const searchAppWithAIStream = async (
   appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] },
   onChunk: (text: string) => void
 ): Promise<void> => {
-  // Prune context to avoid Maximum Call Stack errors and token limits
-  // Only send the most recent 30 logs and top 50 courses
   const prunedLogs = (appContextData.logs || []).slice(0, 30).map(l => ({ 
     d: l.date, 
     c: l.courseName, 
@@ -146,13 +153,13 @@ export const searchAppWithAIStream = async (
           people: prunedPeople 
       });
   } catch (e) {
-      contextString = "Context could not be stringified due to size or complexity.";
+      contextString = "Context error: Data too large.";
   }
   
-  const prompt = `당신은 GreenMaster 시스템의 AI 비서입니다. 다음 데이터를 바탕으로 사용자의 질문에 답하세요.
+  const prompt = `당신은 GreenMaster AI 비서입니다. 다음 데이터를 바탕으로 사용자의 질문에 답하세요.
   [Context (Pruned)]: ${contextString}
   [Question]: "${query}"
-  답변은 한국어로, 출처(날짜, 골프장명)를 명시하여 친절하게 작성하세요.`;
+  답변은 한국어로, 날짜와 골프장명을 언급하며 구체적으로 작성하세요.`;
 
   const responseStream = await ai.models.generateContentStream({
     model: 'gemini-3-flash-preview',
@@ -166,10 +173,10 @@ export const searchAppWithAIStream = async (
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
   const prompt = `
-    당신은 골프장 관리 전문가입니다. 다음 일지를 분석하세요.
+    당신은 골프장 관리 전문가입니다. 다음 일지를 분석하여 요약, 리스크, 권장 액션 순으로 리포트를 작성하세요.
+    골프장: ${log.courseName}
     제목: ${log.title}
     내용: ${log.content.substring(0, 1000)}
-    골프장: ${log.courseName}
   `;
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
@@ -186,7 +193,7 @@ export const analyzeMaterialInventory = async (
     contents: {
       parts: [
         { inlineData: { mimeType: fileData.mimeType, data: fileData.base64Data } },
-        { text: "골프장 자재 목록 추출 (JSON ARRAY)" }
+        { text: "골프장 자재 목록 추출 (JSON ARRAY: year, category, name, quantity, unit, supplier, notes)" }
       ]
     },
     config: {
@@ -216,9 +223,8 @@ export const generatePersonReputationReport = async (
   person: Person,
   logs: LogEntry[]
 ): Promise<string> => {
-  // Prune logs related to person
   const prunedLogs = logs.slice(0, 10).map(l => `${l.date}: ${l.title}`).join('\n');
-  const prompt = `인물 평판 보고서: ${person.name} (${person.currentRole}). 관련 기록 요약:\n${prunedLogs}`;
+  const prompt = `인물 평판 분석: ${person.name} (${person.currentRole}). 관련 기록 요약:\n${prunedLogs}\n위 정보를 바탕으로 비즈니스 관점의 신뢰도 및 위험요인 보고서를 작성하세요.`;
   
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',

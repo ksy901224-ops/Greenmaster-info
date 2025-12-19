@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord } from '../types';
 import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS } from '../constants';
@@ -34,7 +33,6 @@ interface AppContextType {
   deletePerson: (id: string) => void;
   addExternalEvent: (event: ExternalEvent) => void;
   
-  // New CRUD for Financials & Materials
   addFinancial: (record: FinancialRecord) => void;
   updateFinancial: (record: FinancialRecord) => void;
   deleteFinancial: (id: string) => void;
@@ -43,7 +41,8 @@ interface AppContextType {
   deleteMaterial: (id: string) => void;
 
   refreshLogs: () => void;
-  resetData: () => void; // New Reset Function
+  resetData: () => void;
+  exportAllData: () => void;
   isSimulatedLive: boolean;
   canUseAI: boolean;
   canViewFullData: boolean;
@@ -57,7 +56,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Default Admin for bootstrapping
 const DEFAULT_ADMIN: UserProfile = {
   id: 'admin-01',
   name: '김관리 (System)',
@@ -69,7 +67,6 @@ const DEFAULT_ADMIN: UserProfile = {
 };
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // --- Data State (Now driven by Firestore) ---
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [courses, setCourses] = useState<GolfCourse[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -78,14 +75,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [financials, setFinancials] = useState<FinancialRecord[]>([]);
   const [materials, setMaterials] = useState<MaterialRecord[]>([]);
   
-  // Auth state also synced from Firestore 'users' collection
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [user, setUser] = useState<UserProfile | null>(() => {
     const savedUser = localStorage.getItem('greenmaster_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  // --- Routing State ---
   const [currentPath, setCurrentPath] = useState(window.location.hash.slice(1) || '/');
   const [locationState, setLocationState] = useState<any>(null);
   const [routeParams, setRouteParams] = useState<{ id?: string }>({});
@@ -113,19 +108,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       setRouteParams(parsePath(path));
     };
     window.addEventListener('hashchange', handleHashChange);
-    // Initial parsing
     handleHashChange();
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // --- Helper to record system activity ---
   const logActivity = (
       actionType: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'APPROVE' | 'REJECT', 
       targetType: 'LOG' | 'COURSE' | 'PERSON' | 'USER' | 'FINANCE' | 'MATERIAL', 
       targetName: string,
       details?: string
   ) => {
-      if (!user) return; // Only log authenticated actions
+      if (!user) return;
       const newLog: SystemLog = {
           id: `sys-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
           timestamp: Date.now(),
@@ -139,43 +132,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       saveDocument('system_logs', newLog);
   };
 
-  // --- Firestore Subscriptions ---
   useEffect(() => {
-    // 1. Logs
     const unsubLogs = subscribeToCollection('logs', (data) => {
       if (data.length === 0) { seedCollection('logs', MOCK_LOGS); return; } 
       setLogs(data as LogEntry[]);
     });
 
-    // 2. Courses
     const unsubCourses = subscribeToCollection('courses', (data) => {
-      // NOTE: We only seed if the collection is completely empty.
-      // This prevents the "deleted items reappearing" bug where we aggressively merged mock data.
-      if (data.length === 0) { 
-          seedCollection('courses', MOCK_COURSES); 
-          return; 
-      } 
+      if (data.length === 0) { seedCollection('courses', MOCK_COURSES); return; } 
       setCourses(data as GolfCourse[]);
     });
 
-    // 3. People
     const unsubPeople = subscribeToCollection('people', (data) => {
       if (data.length === 0) { seedCollection('people', MOCK_PEOPLE); return; } 
       setPeople(data as Person[]);
     });
 
-    // 4. Events
     const unsubEvents = subscribeToCollection('external_events', (data) => {
       if (data.length === 0) { seedCollection('external_events', MOCK_EXTERNAL_EVENTS); return; } 
       setExternalEvents(data as ExternalEvent[]);
     });
 
-    // 5. Users
     const unsubUsers = subscribeToCollection('users', (data) => {
       if (data.length === 0) { seedCollection('users', [DEFAULT_ADMIN]); return; } 
       const fetchedUsers = data as UserProfile[];
       setAllUsers(fetchedUsers);
-      // Real-time update of current user permission
       if (user) {
           const updatedSelf = fetchedUsers.find(u => u.id === user.id);
           if (updatedSelf && JSON.stringify(updatedSelf) !== JSON.stringify(user)) {
@@ -185,19 +166,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     });
 
-    // 6. System Logs
     const unsubSystem = subscribeToCollection('system_logs', (data) => {
         const sorted = (data as SystemLog[]).sort((a, b) => b.timestamp - a.timestamp);
         setSystemLogs(sorted);
     });
 
-    // 7. Financials
     const unsubFin = subscribeToCollection('financials', (data) => {
       if (data.length === 0) { seedCollection('financials', MOCK_FINANCIALS); return; }
       setFinancials(data as FinancialRecord[]);
     });
 
-    // 8. Materials
     const unsubMat = subscribeToCollection('materials', (data) => {
       if (data.length === 0) { seedCollection('materials', MOCK_MATERIALS); return; }
       setMaterials(data as MaterialRecord[]);
@@ -208,22 +186,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [user?.id]); 
 
-  // --- Auth Actions ---
   const login = async (email: string): Promise<string | void> => {
     const foundUser = allUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-    
     if (!foundUser) return '등록된 이메일이 아닙니다. 회원가입을 진행해주세요.';
     if (foundUser.status === 'PENDING') return '현재 관리자 승인 대기 중입니다.';
     if (foundUser.status === 'REJECTED') return '가입 요청이 거절되었거나 계정이 차단되었습니다.';
-
     setUser(foundUser);
     localStorage.setItem('greenmaster_user', JSON.stringify(foundUser));
-    
-    const loginLog: SystemLog = {
-        id: `sys-${Date.now()}`, timestamp: Date.now(), userId: foundUser.id, userName: foundUser.name,
-        actionType: 'LOGIN', targetType: 'USER', targetName: 'System Login'
-    };
-    saveDocument('system_logs', loginLog);
+    logActivity('LOGIN', 'USER', 'System Login');
   };
 
   const register = async (name: string, email: string, department: Department) => {
@@ -266,7 +236,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('UPDATE', 'USER', 'Profile', 'User updated own profile');
   };
 
-  // --- CRUD Actions ---
   const addLog = (log: LogEntry) => {
       saveDocument('logs', log);
       logActivity('CREATE', 'LOG', log.title, `${log.courseName} - ${log.department}`);
@@ -298,7 +267,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addPerson = async (newPerson: Person) => {
     const normalize = (s: string) => s.trim().replace(/\s+/g, '').toLowerCase();
     const existing = people.find(p => normalize(p.name) === normalize(newPerson.name));
-
     if (existing) {
         await updateDocument('people', existing.id, { ...existing }); 
         logActivity('UPDATE', 'PERSON', existing.name, 'Merged duplicate entry');
@@ -347,14 +315,47 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('DELETE', 'MATERIAL', target?.name || '자재');
   };
 
-  const refreshLogs = () => {}; 
+  // Fix: Added missing refreshLogs function to satisfy the context interface.
+  // Real-time updates are already handled by subscribeToCollection (onSnapshot), 
+  // but we keep this function to ensure the AppContext value is complete.
+  const refreshLogs = () => {
+    console.log("Real-time synchronization active via Firestore listeners.");
+  };
 
-  // Function to manually reset local storage data to initial mock state
   const resetData = () => {
       if (window.confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
           localStorage.clear();
           window.location.reload();
       }
+  };
+
+  const exportAllData = () => {
+    const dataToExport = {
+      exportedAt: new Date().toISOString(),
+      version: "1.0.4",
+      user: { name: user?.name, email: user?.email, department: user?.department },
+      collections: {
+        logs,
+        courses,
+        people,
+        financials,
+        materials,
+        externalEvents,
+        systemLogs
+      }
+    };
+    
+    const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `GreenMaster_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    logActivity('UPDATE', 'USER', 'Data Export', 'User exported local data backup');
   };
 
   const isSimulatedLive = true;
@@ -371,7 +372,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addExternalEvent,
     addFinancial, updateFinancial, deleteFinancial,
     addMaterial, updateMaterial, deleteMaterial,
-    refreshLogs, resetData, isSimulatedLive,
+    refreshLogs, resetData, exportAllData, isSimulatedLive,
     canUseAI, canViewFullData, isAdmin,
     currentPath, navigate, routeParams, locationState
   };

@@ -1,18 +1,18 @@
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw } from 'lucide-react';
+import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Department, UserRole, UserStatus } from '../types';
 
 const Settings: React.FC = () => {
-  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData } = useApp();
+  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData, exportAllData } = useApp();
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(true);
   const [marketingNotif, setMarketingNotif] = useState(false);
   const [defaultView, setDefaultView] = useState('list');
   const [theme, setTheme] = useState('light');
+  const [isExporting, setIsExporting] = useState(false);
 
-  // --- Profile Edit State ---
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
       name: '',
@@ -20,7 +20,6 @@ const Settings: React.FC = () => {
       role: UserRole.INTERMEDIATE
   });
 
-  // Init profile form
   useEffect(() => {
       if (user) {
           setProfileForm({
@@ -41,6 +40,14 @@ const Settings: React.FC = () => {
           console.error(e);
           alert('수정 중 오류가 발생했습니다.');
       }
+  };
+
+  const handleExport = () => {
+    setIsExporting(true);
+    setTimeout(() => {
+        exportAllData();
+        setIsExporting(false);
+    }, 800);
   };
 
   const cancelEditProfile = () => {
@@ -76,6 +83,28 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="grid gap-6">
+        {/* Intelligence Backup Section */}
+        <div className="bg-indigo-900 rounded-2xl shadow-xl p-6 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-10 opacity-10"><Database size={120} /></div>
+            <div className="relative z-10">
+                <h2 className="text-lg font-bold mb-2 flex items-center">
+                    <ShieldCheck className="mr-2 text-indigo-300" size={24} /> 
+                    인텔리전스 데이터 백업
+                </h2>
+                <p className="text-indigo-100 text-sm mb-6 max-w-md leading-relaxed">
+                    전국 골프장 정보, 인맥 네트워크, 매출 및 자재 현황을 포함한 전체 데이터베이스를 JSON 파일로 내보냅니다. 로컬 백업 및 데이터 분석에 활용하세요.
+                </p>
+                <button 
+                    onClick={handleExport}
+                    disabled={isExporting}
+                    className="bg-white text-indigo-900 px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-all flex items-center shadow-lg active:scale-95 disabled:opacity-50"
+                >
+                    {isExporting ? <RotateCcw size={18} className="mr-2 animate-spin"/> : <Download size={18} className="mr-2"/>}
+                    {isExporting ? '백업 생성 중...' : '데이터 전체 다운로드 (JSON)'}
+                </button>
+            </div>
+        </div>
+
         {/* Account Information */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-2">
@@ -136,10 +165,6 @@ const Settings: React.FC = () => {
                                      <option value={UserRole.SENIOR}>상급자 (Senior)</option>
                                      <option value={UserRole.ADMIN}>관리자 (Admin)</option>
                                  </select>
-                                 <p className="text-[10px] text-orange-500 mt-1 flex items-center">
-                                     <Shield size={10} className="mr-1"/> 
-                                     주의: 권한 변경 시 접근 범위가 즉시 변경됩니다.
-                                 </p>
                              </div>
                          </div>
                      ) : (
@@ -158,24 +183,15 @@ const Settings: React.FC = () => {
 
                  {isEditingProfile ? (
                      <div className="flex flex-col space-y-2 shrink-0 min-w-[100px]">
-                         <button 
-                            onClick={handleUpdateProfile}
-                            className="bg-brand-600 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-brand-700 flex items-center justify-center"
-                         >
+                         <button onClick={handleUpdateProfile} className="bg-brand-600 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-brand-700 flex items-center justify-center">
                              <Save size={14} className="mr-1.5"/> 저장
                          </button>
-                         <button 
-                            onClick={cancelEditProfile}
-                            className="bg-white border border-slate-300 text-slate-600 text-xs font-bold px-3 py-2 rounded-lg hover:bg-slate-50 flex items-center justify-center"
-                         >
+                         <button onClick={cancelEditProfile} className="bg-white border border-slate-300 text-slate-600 text-xs font-bold px-3 py-2 rounded-lg hover:bg-slate-50 flex items-center justify-center">
                              <X size={14} className="mr-1.5"/> 취소
                          </button>
                      </div>
                  ) : (
-                     <button 
-                        onClick={logout}
-                        className="text-sm text-slate-500 hover:text-red-600 font-medium border border-slate-300 bg-white px-4 py-2 rounded-lg transition-colors flex items-center hover:border-red-200 hover:bg-red-50 shrink-0"
-                     >
+                     <button onClick={logout} className="text-sm text-slate-500 hover:text-red-600 font-medium border border-slate-300 bg-white px-4 py-2 rounded-lg transition-colors flex items-center hover:border-red-200 hover:bg-red-50 shrink-0">
                          <LogOut size={16} className="mr-2" /> 로그아웃
                      </button>
                  )}
@@ -191,68 +207,37 @@ const Settings: React.FC = () => {
                     사용자 관리 (관리자 전용)
                 </h2>
                 <p className="text-sm text-slate-500 mb-6">신규 가입 요청을 승인하거나 권한을 수정합니다.</p>
-                
-                <div className="space-y-4">
-                    <h3 className="text-sm font-bold text-slate-700">전체 사용자 목록 ({allUsers.length}명)</h3>
-                    <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-slate-100 text-slate-500 font-medium border-b border-slate-200">
-                                <tr>
-                                    <th className="px-4 py-3">사용자</th>
-                                    <th className="px-4 py-3">부서</th>
-                                    <th className="px-4 py-3">상태</th>
-                                    <th className="px-4 py-3">권한</th>
-                                    <th className="px-4 py-3 text-right">관리</th>
+                <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-100 text-slate-500 font-medium border-b border-slate-200">
+                            <tr>
+                                <th className="px-4 py-3">사용자</th>
+                                <th className="px-4 py-3">부서</th>
+                                <th className="px-4 py-3">상태</th>
+                                <th className="px-4 py-3 text-right">관리</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {allUsers.map((u) => (
+                                <tr key={u.id} className="hover:bg-white transition-colors">
+                                    <td className="px-4 py-3">
+                                        <div className="font-bold text-slate-800">{u.name}</div>
+                                        <div className="text-xs text-slate-500">{u.email}</div>
+                                    </td>
+                                    <td className="px-4 py-3 text-slate-600">{u.department}</td>
+                                    <td className="px-4 py-3">{getStatusBadge(u.status)}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        {u.status === 'PENDING' && (
+                                            <div className="flex justify-end space-x-2">
+                                                <button onClick={() => updateUserStatus(u.id, 'APPROVED')} className="p-1 bg-green-600 text-white rounded hover:bg-green-700"><CheckCircle size={14}/></button>
+                                                <button onClick={() => updateUserStatus(u.id, 'REJECTED')} className="p-1 bg-red-600 text-white rounded hover:bg-red-700"><XCircle size={14}/></button>
+                                            </div>
+                                        )}
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {allUsers.map((u) => (
-                                    <tr key={u.id} className="hover:bg-white transition-colors">
-                                        <td className="px-4 py-3">
-                                            <div className="font-bold text-slate-800">{u.name}</div>
-                                            <div className="text-xs text-slate-500">{u.email}</div>
-                                        </td>
-                                        <td className="px-4 py-3 text-slate-600">{u.department}</td>
-                                        <td className="px-4 py-3">{getStatusBadge(u.status)}</td>
-                                        <td className="px-4 py-3">
-                                            <select 
-                                                value={u.role}
-                                                onChange={(e) => updateUserRole(u.id, e.target.value as UserRole)}
-                                                className="text-xs border-slate-200 rounded py-1 px-2 focus:ring-brand-500"
-                                            >
-                                                <option value={UserRole.JUNIOR}>하급자</option>
-                                                <option value={UserRole.INTERMEDIATE}>중급자</option>
-                                                <option value={UserRole.SENIOR}>상급자</option>
-                                                <option value={UserRole.ADMIN}>관리자</option>
-                                            </select>
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            {u.status === 'PENDING' ? (
-                                                <div className="flex justify-end space-x-2">
-                                                    <button 
-                                                        onClick={() => updateUserStatus(u.id, 'APPROVED')}
-                                                        className="flex items-center px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-                                                        title="승인"
-                                                    >
-                                                        <CheckCircle size={12} className="mr-1"/> 승인
-                                                    </button>
-                                                    <button 
-                                                        onClick={() => updateUserStatus(u.id, 'REJECTED')}
-                                                        className="flex items-center px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-                                                        title="거절"
-                                                    >
-                                                        <XCircle size={12} className="mr-1"/> 거절
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-slate-400">처리완료</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         )}
@@ -261,69 +246,17 @@ const Settings: React.FC = () => {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center pb-2 border-b border-slate-100">
                 <Database className="mr-2 text-brand-600" size={20} /> 
-                데이터 관리
+                데이터 초기화
             </h2>
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-sm font-bold text-slate-800">데이터 초기화 (Reset)</h3>
-                    <p className="text-xs text-slate-500">모든 로컬 데이터를 삭제하고 초기 상태(Mock Data)로 되돌립니다.<br/>골프장 목록이 보이지 않을 때 사용하세요.</p>
+                    <h3 className="text-sm font-bold text-slate-800">로컬 데이터 리셋</h3>
+                    <p className="text-xs text-slate-500">캐시된 정보를 삭제하고 초기 상태로 되돌립니다. 동기화 문제가 있을 때만 사용하세요.</p>
                 </div>
-                <button 
-                    onClick={resetData}
-                    className="flex items-center bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors"
-                >
-                    <RotateCcw size={14} className="mr-1.5" /> 초기화 실행
+                <button onClick={resetData} className="flex items-center bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors">
+                    <RotateCcw size={14} className="mr-1.5" /> 초기화
                 </button>
             </div>
-        </div>
-
-        {/* Notification Settings */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center pb-2 border-b border-slate-100">
-            <Bell className="mr-2 text-brand-600" size={20} /> 
-            알림 설정
-          </h2>
-          
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">주요 업무 알림 (이메일)</h3>
-                <p className="text-xs text-slate-500">계약, 공사 등 주요 업무 업데이트 시 이메일을 수신합니다.</p>
-              </div>
-              <button 
-                onClick={() => setEmailNotif(!emailNotif)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${emailNotif ? 'bg-brand-600' : 'bg-slate-200'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${emailNotif ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">앱 푸시 알림</h3>
-                <p className="text-xs text-slate-500">모바일 기기에서 실시간 알림을 받습니다.</p>
-              </div>
-              <button 
-                onClick={() => setPushNotif(!pushNotif)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${pushNotif ? 'bg-brand-600' : 'bg-slate-200'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${pushNotif ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-800">마케팅 정보 수신</h3>
-                <p className="text-xs text-slate-500">새로운 기능 및 제휴 혜택 정보를 받습니다.</p>
-              </div>
-              <button 
-                onClick={() => setMarketingNotif(!marketingNotif)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 ${marketingNotif ? 'bg-brand-600' : 'bg-slate-200'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-sm ${marketingNotif ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Display Settings */}
@@ -332,51 +265,32 @@ const Settings: React.FC = () => {
             <Monitor className="mr-2 text-brand-600" size={20} /> 
             시스템 테마 설정
           </h2>
-          
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">기본 대시보드 보기</label>
-                    <select 
-                        value={defaultView}
-                        onChange={(e) => setDefaultView(e.target.value)}
-                        className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 text-sm py-2.5"
-                    >
-                        <option value="list">목록형 (리스트)</option>
-                        <option value="calendar">달력형 (캘린더)</option>
-                    </select>
-                    <p className="text-xs text-slate-500 mt-1">기본 화면 모드를 선택합니다.</p>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">테마 모드</label>
-                    <div className="flex space-x-2">
-                        <button 
-                            onClick={() => setTheme('light')}
-                            className={`flex-1 flex items-center justify-center py-2.5 rounded-lg border text-sm font-medium transition-all ${theme === 'light' ? 'bg-brand-50 border-brand-500 text-brand-700 ring-1 ring-brand-500' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                        >
-                            <Sun size={16} className="mr-2" /> 라이트
-                        </button>
-                        <button 
-                            onClick={() => setTheme('dark')}
-                            className={`flex-1 flex items-center justify-center py-2.5 rounded-lg border text-sm font-medium transition-all ${theme === 'dark' ? 'bg-slate-800 border-slate-900 text-white ring-1 ring-slate-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
-                        >
-                            <Moon size={16} className="mr-2" /> 다크
-                        </button>
-                    </div>
-                </div>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">기본 대시보드 보기</label>
+                  <select value={defaultView} onChange={(e) => setDefaultView(e.target.value)} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 text-sm py-2.5">
+                      <option value="list">목록형 (리스트)</option>
+                      <option value="calendar">달력형 (캘린더)</option>
+                  </select>
+              </div>
+              <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">테마 모드</label>
+                  <div className="flex space-x-2">
+                      <button onClick={() => setTheme('light')} className={`flex-1 flex items-center justify-center py-2.5 rounded-lg border text-sm font-medium transition-all ${theme === 'light' ? 'bg-brand-50 border-brand-500 text-brand-700 ring-1 ring-brand-500' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                          <Sun size={16} className="mr-2" /> 라이트
+                      </button>
+                      <button onClick={() => setTheme('dark')} className={`flex-1 flex items-center justify-center py-2.5 rounded-lg border text-sm font-medium transition-all ${theme === 'dark' ? 'bg-slate-800 border-slate-900 text-white ring-1 ring-slate-900' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                          <Moon size={16} className="mr-2" /> 다크
+                      </button>
+                  </div>
+              </div>
           </div>
         </div>
 
-        {/* Save Button */}
         <div className="flex justify-end pt-4">
-            <button 
-                onClick={handleSaveSettings}
-                className="flex items-center bg-brand-600 text-white px-6 py-3 rounded-lg font-bold shadow-md hover:bg-brand-700 transition-all hover:shadow-lg"
-            >
+            <button onClick={handleSaveSettings} className="flex items-center bg-brand-600 text-white px-6 py-3 rounded-lg font-bold shadow-md hover:bg-brand-700 transition-all">
                 <Save size={18} className="mr-2" />
-                설정 저장하기
+                설정 저장
             </button>
         </div>
       </div>

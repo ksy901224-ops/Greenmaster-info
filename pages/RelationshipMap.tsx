@@ -37,7 +37,7 @@ const RelationshipMap: React.FC = () => {
 
   const connections = useMemo(() => {
     const list: any[] = [];
-    if (!people) return list;
+    if (!people || people.length === 0) return list;
 
     people.forEach(p => {
       const matchAffinity = filterAffinity === 'ALL' || p.affinity === filterAffinity;
@@ -88,23 +88,21 @@ const RelationshipMap: React.FC = () => {
   }, [people, filterAffinity, filterDept, filterStatus, searchTerm]);
 
   const hubData = useMemo(() => {
-    if (!courses) return [];
+    if (!courses || courses.length === 0) return [];
     
     const full = courses.map(c => {
       const related = connections.filter(conn => conn.courseId === c.id);
       return { ...c, people: related };
     }).filter(c => c.people.length > 0);
     
-    // SAFEGUARD: LIMIT INITIAL HUB COUNT
-    // If no search term and no specific filters, only show top 30 courses
-    // to prevent stack overflow in React Fiber/DOM depth.
+    // SAFEGUARD: Limit rendering hubs to top 25 when no search is present to avoid browser crash
     const isFiltered = searchTerm !== '' || filterAffinity !== 'ALL' || filterDept !== 'ALL' || filterStatus !== 'ALL';
     if (!isFiltered) {
-        return full.slice(0, 30);
+        return full.slice(0, 20);
     }
     
-    // Even when filtered, limit to 80 to avoid browser crash
-    return full.slice(0, 80);
+    // Even when filtered, limit to 40 hubs to protect call stack
+    return full.slice(0, 40);
   }, [courses, connections, searchTerm, filterAffinity, filterDept, filterStatus]);
 
   const centerX = 400;
@@ -191,10 +189,10 @@ const RelationshipMap: React.FC = () => {
         <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
         
         {/* SAFEGUARD NOTICE */}
-        {hubData.length >= 30 && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-indigo-900/80 text-white px-4 py-2 rounded-full text-xs flex items-center z-50 border border-indigo-500 backdrop-blur-md shadow-lg">
+        {hubData.length >= 20 && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-indigo-900/80 text-white px-4 py-2 rounded-full text-[10px] flex items-center z-50 border border-indigo-500 backdrop-blur-md shadow-lg">
                 <AlertCircle size={14} className="mr-2 text-indigo-300"/> 
-                {searchTerm ? '검색된 항목이 너무 많아 일부만 표시 중입니다.' : '데이터 보호를 위해 주요 30개소만 표시 중입니다. 검색을 이용하세요.'}
+                {searchTerm ? '항목이 너무 많아 상위 일부만 표시됩니다.' : '시스템 보호를 위해 주요 골프장만 표시 중입니다. 검색을 이용하세요.'}
             </div>
         )}
 
@@ -209,7 +207,7 @@ const RelationshipMap: React.FC = () => {
             </svg>
             <div className="absolute transform -translate-x-1/2 -translate-y-1/2 z-10 w-20 h-20 rounded-full bg-brand-600 border-4 border-brand-400 shadow-[0_0_30px_rgba(34,197,94,0.3)] flex flex-col items-center justify-center text-white" style={{ left: centerX, top: centerY }}>
               <Crown size={28} className="text-yellow-300 mb-1" />
-              <span className="text-[9px] font-bold">GreenMaster</span>
+              <span className="text-[9px] font-bold uppercase tracking-widest">GreenMaster</span>
             </div>
 
             {hubData.map((course, idx) => {
@@ -217,8 +215,8 @@ const RelationshipMap: React.FC = () => {
                 const cx = centerX + Math.cos(angle) * hubRadius;
                 const cy = centerY + Math.sin(angle) * hubRadius;
                 
-                // Limit internal people nodes per hub for performance
-                const visiblePeople = course.people.slice(0, 12);
+                // Spoke Optimization: Limit internal nodes per hub to 10
+                const visiblePeople = course.people.slice(0, 10);
                 const personRadius = 75; 
                 
                 return (
@@ -229,8 +227,8 @@ const RelationshipMap: React.FC = () => {
                           onMouseLeave={() => setHoveredNode(null)}
                           onClick={() => navigate(`/courses/${course.id}`)}
                         >
-                            <h3 className="text-xs font-bold text-white truncate">{course.name}</h3>
-                            <span className="text-[9px] text-slate-400 block">{course.people.length}명 연결</span>
+                            <h3 className="text-[10px] font-bold text-white truncate">{course.name}</h3>
+                            <span className="text-[8px] text-slate-400 block">{course.people.length}명 연결</span>
                         </div>
                         {visiblePeople.map((personConn, pIdx) => {
                              const pAngle = (pIdx / visiblePeople.length) * 2 * Math.PI;
@@ -247,17 +245,17 @@ const RelationshipMap: React.FC = () => {
                                     </svg>
                                     <div 
                                       onClick={() => navigate(`/people/${personConn.personId}`)} 
-                                      className={`absolute transform -translate-x-1/2 -translate-y-1/2 w-9 h-9 rounded-full border bg-slate-900 flex items-center justify-center cursor-pointer transition-all ${isHovered ? 'z-50 ring-2 ring-white scale-125' : ''} ${isPast ? 'opacity-70 grayscale-[0.5]' : ''}`} 
+                                      className={`absolute transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full border bg-slate-900 flex items-center justify-center cursor-pointer transition-all ${isHovered ? 'z-50 ring-2 ring-white scale-125 shadow-glow' : ''} ${isPast ? 'opacity-60 grayscale-[0.4]' : ''}`} 
                                       style={{ left: px, top: py, borderColor: affinityColor }} 
                                       onMouseEnter={() => setHoveredNode({type: 'PERSON', id: `${personConn.personId}-${course.id}`})} 
                                       onMouseLeave={() => setHoveredNode(null)}
                                     >
                                         <span className="text-[10px] text-white font-bold">{personConn.personName[0]}</span>
-                                        <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-slate-900" style={{ backgroundColor: affinityColor }}></span>
+                                        <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border border-slate-900 shadow-sm" style={{ backgroundColor: affinityColor }}></span>
                                         {isHovered && (
-                                            <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 w-60 bg-white text-slate-900 p-0 rounded-lg shadow-xl border border-slate-200 z-50 pointer-events-none overflow-hidden animate-in fade-in zoom-in-90">
-                                                <div className="p-3 bg-slate-50 border-b flex justify-between items-center"><span className="font-bold text-sm">{personConn.personName}</span><span className="text-[10px] px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: affinityColor }}>{personConn.personAffinity > 0 ? '우호' : '중립'}</span></div>
-                                                <div className="p-3 space-y-1"><div className="flex items-center text-xs"><MapPin size={12} className="mr-2 text-brand-600" />{course.name}</div><div className="flex items-center text-xs"><Briefcase size={12} className="mr-2 text-brand-600" />{personConn.personRole}</div><div className="text-[10px] bg-slate-100 p-1.5 rounded flex items-center mt-1"><Calendar size={10} className="mr-1.5"/>{getTenure(personConn.startDate, personConn.endDate)}</div></div>
+                                            <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 w-56 bg-white text-slate-900 p-0 rounded-lg shadow-2xl border border-slate-200 z-50 pointer-events-none overflow-hidden animate-in fade-in zoom-in-95">
+                                                <div className="p-2.5 bg-slate-50 border-b flex justify-between items-center"><span className="font-bold text-xs">{personConn.personName}</span><span className="text-[9px] px-1.5 py-0.5 rounded-full text-white font-black" style={{ backgroundColor: affinityColor }}>{personConn.personAffinity > 0 ? '우호' : '중립'}</span></div>
+                                                <div className="p-2.5 space-y-1"><div className="flex items-center text-[10px]"><MapPin size={10} className="mr-1.5 text-brand-600" />{course.name}</div><div className="flex items-center text-[10px]"><Briefcase size={10} className="mr-1.5 text-brand-600" />{personConn.personRole}</div><div className="text-[9px] bg-slate-100 p-1 rounded flex items-center mt-1"><Calendar size={10} className="mr-1.5"/>{getTenure(personConn.startDate, personConn.endDate)}</div></div>
                                             </div>
                                         )}
                                     </div>
@@ -270,16 +268,16 @@ const RelationshipMap: React.FC = () => {
         </div>
       </div>
       
-      <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-6 text-xs text-slate-600 shadow-sm justify-between">
+      <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-col md:flex-row gap-6 text-[10px] text-slate-600 shadow-sm justify-between">
           <div className="flex flex-wrap gap-4 items-center">
              <span className="font-bold flex items-center text-slate-800"><Filter size={14} className="mr-1"/> 범례:</span>
-             <div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-green-500 mr-1.5"></span> 우호적</div>
-             <div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-slate-400 mr-1.5"></span> 중립</div>
-             <div className="flex items-center"><span className="w-2.5 h-2.5 rounded-full bg-red-500 mr-1.5"></span> 적대적</div>
+             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-green-500 mr-1.5"></span> 우호적</div>
+             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-slate-400 mr-1.5"></span> 중립</div>
+             <div className="flex items-center"><span className="w-2 h-2 rounded-full bg-red-500 mr-1.5"></span> 적대적</div>
           </div>
           <div className="flex flex-wrap gap-4 items-center border-l border-slate-200 pl-4">
-             <div className="flex items-center"><span className="w-4 h-px bg-slate-400 mr-1.5"></span> 현직 (실선)</div>
-             <div className="flex items-center"><span className="w-4 h-px border-b border-dashed border-slate-400 mr-1.5"></span> 전직 (점선)</div>
+             <div className="flex items-center"><span className="w-3 h-px bg-slate-400 mr-1.5"></span> 현직 (실선)</div>
+             <div className="flex items-center"><span className="w-3 h-px border-b border-dashed border-slate-400 mr-1.5"></span> 전직 (점선)</div>
           </div>
       </div>
     </div>

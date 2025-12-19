@@ -36,98 +36,20 @@ const setLocalData = (key: string, data: any[]) => {
 
 const notifyListeners = (key: string, data: any[]) => {
   if (listeners[key]) {
-    // Convert Set to Array and iterate carefully to avoid recursion issues
-    Array.from(listeners[key]).forEach(cb => cb(data));
+    // CRITICAL: Use setImmediate-like behavior to break call stack for large dataset propagation
+    setTimeout(() => {
+      if (listeners[key]) {
+        const uniqueData = Array.from(new Map(data.map(item => [item.id, item])).values());
+        Array.from(listeners[key]).forEach(cb => cb(uniqueData));
+      }
+    }, 0);
   }
 };
-
-// --- CRUD Operations ---
-
-export const addTodo = async (text: string, author: string) => {
-  if (isMockMode || !db) {
-    const todos = getLocalData(COLLECTION_NAME);
-    const newTodo = {
-      id: `mock-todo-${Date.now()}`,
-      text,
-      author,
-      isCompleted: false,
-      createdAt: { seconds: Date.now() / 1000 }
-    };
-    setLocalData(COLLECTION_NAME, [newTodo, ...todos]);
-    return;
-  }
-
-  try {
-    await addDoc(collection(db, COLLECTION_NAME), {
-      text,
-      author,
-      isCompleted: false,
-      createdAt: Timestamp.now(),
-    });
-  } catch (error) {
-    console.error("Error adding document: ", error);
-    throw error;
-  }
-};
-
-export const getAllTodos = async (): Promise<TodoItem[]> => {
-  if (isMockMode || !db) {
-    return getLocalData(COLLECTION_NAME) as TodoItem[];
-  }
-
-  try {
-    const q = query(collection(db, COLLECTION_NAME), orderBy("createdAt", "desc"));
-    const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...(doc.data() as any),
-    })) as TodoItem[];
-  } catch (error) {
-    console.error("Error getting documents: ", error);
-    return [];
-  }
-};
-
-export const updateTodo = async (id: string, updates: Partial<TodoItem>) => {
-  if (isMockMode || !db) {
-    const todos = getLocalData(COLLECTION_NAME);
-    const updated = todos.map((t: any) => t.id === id ? { ...t, ...updates } : t);
-    setLocalData(COLLECTION_NAME, updated);
-    return;
-  }
-
-  try {
-    const todoRef = doc(db, COLLECTION_NAME, id);
-    await updateDoc(todoRef, updates);
-  } catch (error) {
-    console.error("Error updating document: ", error);
-    throw error;
-  }
-};
-
-export const deleteTodo = async (id: string) => {
-  if (isMockMode || !db) {
-    const todos = getLocalData(COLLECTION_NAME);
-    const filtered = todos.filter((t: any) => t.id !== id);
-    setLocalData(COLLECTION_NAME, filtered);
-    return;
-  }
-
-  try {
-    await deleteDoc(doc(db, COLLECTION_NAME, id));
-  } catch (error) {
-    console.error("Error deleting document: ", error);
-    throw error;
-  }
-};
-
-// --- Generic Sync Logic ---
 
 export const subscribeToCollection = (collectionName: string, callback: (data: any[]) => void) => {
   if (isMockMode || !db) {
     if (!listeners[collectionName]) listeners[collectionName] = new Set();
     listeners[collectionName].add(callback);
-    // Use setTimeout to decouple the initial callback from the call stack
     const current = getLocalData(collectionName);
     setTimeout(() => callback(current), 0);
     return () => {
@@ -206,6 +128,7 @@ export const deleteDocument = async (collectionName: string, id: string) => {
   }
 };
 
+// ENHANCED SEEDING: Chunk size set to 250 to ensure compliance with Firestore write limits (500)
 export const seedCollection = async (collectionName: string, dataArray: any[]) => {
   if (seedingLocks[collectionName]) return;
   seedingLocks[collectionName] = true;
@@ -220,7 +143,7 @@ export const seedCollection = async (collectionName: string, dataArray: any[]) =
   }
 
   try {
-    const CHUNK_SIZE = 400;
+    const CHUNK_SIZE = 250;
     for (let i = 0; i < dataArray.length; i += CHUNK_SIZE) {
       const chunk = dataArray.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
@@ -229,11 +152,45 @@ export const seedCollection = async (collectionName: string, dataArray: any[]) =
         batch.set(docRef, data);
       });
       await batch.commit();
+      console.log(`[Database Strengthened] Seeded ${i + chunk.length}/${dataArray.length} items to ${collectionName}`);
     }
-    console.log(`Seeded ${collectionName} with ${dataArray.length} items.`);
   } catch (error) {
-    console.error(`Error seeding ${collectionName}:`, error);
+    console.error(`Database Seeding Error for ${collectionName}:`, error);
   } finally {
     seedingLocks[collectionName] = false;
   }
+};
+
+export const addTodo = async (text: string, author: string) => {
+  if (isMockMode || !db) {
+    const todos = getLocalData(COLLECTION_NAME);
+    const newTodo = {
+      id: `mock-todo-${Date.now()}`,
+      text,
+      author,
+      isCompleted: false,
+      createdAt: { seconds: Date.now() / 1000 }
+    };
+    setLocalData(COLLECTION_NAME, [newTodo, ...todos]);
+    return;
+  }
+  await addDoc(collection(db, COLLECTION_NAME), { text, author, isCompleted: false, createdAt: Timestamp.now() });
+};
+
+export const updateTodo = async (id: string, updates: Partial<TodoItem>) => {
+  if (isMockMode || !db) {
+    const todos = getLocalData(COLLECTION_NAME);
+    setLocalData(COLLECTION_NAME, todos.map((t: any) => t.id === id ? { ...t, ...updates } : t));
+    return;
+  }
+  await updateDoc(doc(db, COLLECTION_NAME, id), updates);
+};
+
+export const deleteTodo = async (id: string) => {
+  if (isMockMode || !db) {
+    const todos = getLocalData(COLLECTION_NAME);
+    setLocalData(COLLECTION_NAME, todos.filter((t: any) => t.id !== id));
+    return;
+  }
+  await deleteDoc(doc(db, COLLECTION_NAME, id));
 };
