@@ -27,12 +27,13 @@ export const analyzeDocument = async (
   contentParts.push({
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다.
-      제공된 텍스트/파일을 분석하여 구조화된 골프장 마스터 데이터를 추출하세요.
+      제공된 텍스트/파일(PDF, 이미지)을 분석하여 구조화된 골프장 마스터 데이터를 추출하세요.
 
-      [핵심 미션]
-      1. 정확한 정보 추출: 주소, 홀 수, 운영 형태(회원제/대중제), 개장일 등.
-      2. 전략적 분석: 해당 골프장의 현재 문제점(Issues)과 우리 비즈니스 기회(Opportunities)를 도출하세요.
+      [추출 목표]
+      1. 정확한 정보 추출: 골프장 이름, 주소, 홀 수, 운영 형태(회원제/대중제/체력단련장).
+      2. 대량 데이터 대응: 문서 내의 표(Table)나 목록 형식을 모두 찾아내어 개별 객체로 변환하세요.
       3. 명칭 통일: 기존 DB 목록 [${courseListStr}]에 유사한 이름이 있다면 해당 명칭으로 매칭하세요.
+      4. 전략 분석: 각 골프장의 지역적 특징이나 최근 이슈를 분석하여 'issues'와 'opportunities'를 도출하세요.
 
       [반환 JSON 스키마 가이드]
       - courseName: 골프장명
@@ -44,7 +45,7 @@ export const analyzeDocument = async (
         }
       - summary_report: 전체 상황 요약 리포트
 
-      반드시 JSON 배열([]) 형식으로만 출력하세요.
+      반드시 JSON 배열([]) 형식으로만 출력하세요. 데이터가 많을 경우 누락 없이 모든 골프장을 추출하세요.
     `
   });
 
@@ -120,7 +121,7 @@ export const generateCourseSummary = async (
   return response.text;
 };
 
-// Search App with AI Streaming - PRUNED CONTEXT TO PREVENT STACK OVERFLOW
+// Search App with AI Streaming
 export const searchAppWithAIStream = async (
   query: string, 
   appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] },

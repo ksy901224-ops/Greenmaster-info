@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord } from '../types';
 import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS } from '../constants';
@@ -315,9 +316,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('DELETE', 'MATERIAL', target?.name || '자재');
   };
 
-  // Fix: Added missing refreshLogs function to satisfy the context interface.
-  // Real-time updates are already handled by subscribeToCollection (onSnapshot), 
-  // but we keep this function to ensure the AppContext value is complete.
   const refreshLogs = () => {
     console.log("Real-time synchronization active via Firestore listeners.");
   };

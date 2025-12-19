@@ -15,7 +15,7 @@ const CourseList: React.FC = () => {
 
   const filteredCourses = useMemo(() => {
     return courses.filter(c => {
-      const matchSearch = c.name.includes(searchTerm) || c.address.includes(searchTerm);
+      const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.address.toLowerCase().includes(searchTerm.toLowerCase());
       const matchRegion = selectedRegion === '전체' || c.region === selectedRegion;
       return matchSearch && matchRegion;
     });
@@ -48,14 +48,14 @@ const CourseList: React.FC = () => {
 
       {/* Region Filter Chips */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-          <div className="p-2 bg-white rounded-lg border border-slate-200 mr-2 text-slate-400">
+          <div className="p-2 bg-white rounded-lg border border-slate-200 mr-2 text-slate-400 flex-shrink-0">
               <Filter size={16}/>
           </div>
           {regions.map(r => (
               <button
                 key={r}
                 onClick={() => setSelectedRegion(r as any)}
-                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${
                     selectedRegion === r 
                     ? 'bg-brand-600 text-white shadow-md transform scale-105' 
                     : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'

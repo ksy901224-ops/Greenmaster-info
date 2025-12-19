@@ -128,7 +128,7 @@ export const deleteDocument = async (collectionName: string, id: string) => {
   }
 };
 
-// ENHANCED SEEDING: Chunk size set to 250 to ensure compliance with Firestore write limits (500)
+// ENHANCED SEEDING: Recursive chunking for 590+ records (Max 500 limit for Firestore)
 export const seedCollection = async (collectionName: string, dataArray: any[]) => {
   if (seedingLocks[collectionName]) return;
   seedingLocks[collectionName] = true;
@@ -152,10 +152,10 @@ export const seedCollection = async (collectionName: string, dataArray: any[]) =
         batch.set(docRef, data);
       });
       await batch.commit();
-      console.log(`[Database Strengthened] Seeded ${i + chunk.length}/${dataArray.length} items to ${collectionName}`);
+      console.log(`[Sync Intelligence] Processed ${i + chunk.length}/${dataArray.length} items for ${collectionName}`);
     }
   } catch (error) {
-    console.error(`Database Seeding Error for ${collectionName}:`, error);
+    console.error(`Sync Intelligence Error for ${collectionName}:`, error);
   } finally {
     seedingLocks[collectionName] = false;
   }
