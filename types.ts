@@ -29,7 +29,6 @@ export interface UserProfile {
 export enum CourseType {
   MEMBER = '회원제',
   PUBLIC = '대중제',
-  MILITARY = '체력단련장',
 }
 
 export enum GrassType {
@@ -39,7 +38,7 @@ export enum GrassType {
   MIXED = '혼합',
 }
 
-export type Region = '서울' | '부산' | '대구' | '인천' | '광주' | '대전' | '울산' | '세종' | '경기' | '강원' | '충북' | '충남' | '전북' | '전남' | '경북' | '경남' | '제주' | '기타';
+export type Region = '서울' | '경기' | '강원' | '충북' | '충남' | '전북' | '전남' | '경북' | '경남' | '제주' | '인천' | '부산' | '대구' | '울산' | '대전' | '광주' | '세종' | '기타';
 
 export interface GolfCourse {
   id: string;
@@ -49,8 +48,19 @@ export interface GolfCourse {
   type: CourseType;
   openYear: string;
   address: string;
-  grassType: GrassType;
-  area: string;
+  grassType: GrassType; // Default/Primary
+  grassInfo?: {
+    green: string;
+    tee: string;
+    fairway: string;
+  };
+  area: string; // Display string
+  areaInfo?: {
+    total: string;
+    green: string;
+    tee: string;
+    fairway: string;
+  };
   length?: string;
   description: string;
   lat?: number;
@@ -85,11 +95,6 @@ export interface Person {
   careers: CareerRecord[];
   affinity: AffinityLevel;
   notes: string;
-  // 컨설팅을 위한 추가 필드
-  influenceLevel?: number; // 1~5 (낮음~높음)
-  keyInterests?: string[]; // 핵심 관심 키워드
-  isDecisionMaker?: boolean; // 의사결정권자 여부
-  politicalRelation?: string; // 사내 인맥 관계
 }
 
 export interface LogEntry {

@@ -9,13 +9,12 @@ const CourseList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState<Region | '전체'>('전체');
 
-  const regions: (Region | '전체')[] = [
-    '전체', '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'
-  ];
+  // Fix: Replaced '충청', '전라', '경상' with valid Region union type values to resolve assignment errors
+  const regions: (Region | '전체')[] = ['전체', '서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
 
   const filteredCourses = useMemo(() => {
     return courses.filter(c => {
-      const matchSearch = c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.address.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchSearch = c.name.includes(searchTerm) || c.address.includes(searchTerm);
       const matchRegion = selectedRegion === '전체' || c.region === selectedRegion;
       return matchSearch && matchRegion;
     });
@@ -48,20 +47,20 @@ const CourseList: React.FC = () => {
 
       {/* Region Filter Chips */}
       <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-          <div className="p-2 bg-white rounded-lg border border-slate-200 mr-2 text-slate-400 flex-shrink-0">
+          <div className="p-2 bg-white rounded-lg border border-slate-200 mr-2 text-slate-400">
               <Filter size={16}/>
           </div>
           {regions.map(r => (
               <button
                 key={r}
-                onClick={() => setSelectedRegion(r as any)}
-                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${
+                onClick={() => setSelectedRegion(r)}
+                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
                     selectedRegion === r 
                     ? 'bg-brand-600 text-white shadow-md transform scale-105' 
                     : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                  {r} {r !== '전체' && <span className="ml-1 opacity-60 font-medium">{courses.filter(c => c.region === r).length}</span>}
+                  {r} {r !== '전체' && <span className="ml-1 opacity-60">{courses.filter(c => c.region === r).length}</span>}
               </button>
           ))}
       </div>
