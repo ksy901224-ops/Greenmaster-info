@@ -14,6 +14,7 @@ const COLLECTION_NAME = "todos";
 
 // --- MOCK SYSTEM FOR OFFLINE MODE ---
 const listeners: Record<string, Set<(data: any[]) => void>> = {};
+const seedingLocks: Record<string, boolean> = {};
 
 const getLocalData = (key: string): any[] => {
   try {
@@ -25,13 +26,18 @@ const getLocalData = (key: string): any[] => {
 };
 
 const setLocalData = (key: string, data: any[]) => {
-  localStorage.setItem(`gm_mock_${key}`, JSON.stringify(data));
-  notifyListeners(key, data);
+  try {
+    localStorage.setItem(`gm_mock_${key}`, JSON.stringify(data));
+    notifyListeners(key, data);
+  } catch (e) {
+    console.error("Storage error:", e);
+  }
 };
 
 const notifyListeners = (key: string, data: any[]) => {
   if (listeners[key]) {
-    listeners[key].forEach(cb => cb(data));
+    // Convert Set to Array and iterate carefully to avoid recursion issues
+    Array.from(listeners[key]).forEach(cb => cb(data));
   }
 };
 
@@ -117,18 +123,13 @@ export const deleteTodo = async (id: string) => {
 
 // --- Generic Sync Logic ---
 
-// 1. Subscribe (Real-time Sync)
 export const subscribeToCollection = (collectionName: string, callback: (data: any[]) => void) => {
   if (isMockMode || !db) {
-    // Register listener
     if (!listeners[collectionName]) listeners[collectionName] = new Set();
     listeners[collectionName].add(callback);
-    
-    // Initial call
+    // Use setTimeout to decouple the initial callback from the call stack
     const current = getLocalData(collectionName);
-    callback(current);
-
-    // Return unsubscribe function
+    setTimeout(() => callback(current), 0);
     return () => {
       if (listeners[collectionName]) listeners[collectionName].delete(callback);
     };
@@ -136,8 +137,6 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
 
   const q = query(collection(db, collectionName));
   return onSnapshot(q, (snapshot) => {
-    // Explicit cast to QuerySnapshot to ensure 'docs' property is accessible
-    // Casting through unknown to avoid TS overlap error with DocumentSnapshot
     const querySnapshot = snapshot as unknown as QuerySnapshot<DocumentData>;
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
     callback(data);
@@ -146,18 +145,15 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
   });
 };
 
-// 2. Save (Add or Overwrite if ID exists)
 export const saveDocument = async (collectionName: string, data: any) => {
   if (isMockMode || !db) {
     const items = getLocalData(collectionName);
     const existingIndex = items.findIndex((i: any) => i.id === data.id);
-    
     let newItems;
     if (existingIndex >= 0) {
         newItems = [...items];
         newItems[existingIndex] = { ...newItems[existingIndex], ...data };
     } else {
-        // Ensure ID
         const newItem = { ...data, id: data.id || `mock-${collectionName}-${Date.now()}` };
         newItems = [...items, newItem];
     }
@@ -166,7 +162,7 @@ export const saveDocument = async (collectionName: string, data: any) => {
   }
 
   try {
-    if (data.id && !data.id.startsWith('temp-')) {
+    if (data.id && !data.id.startsWith('temp-') && !data.id.startsWith('mock-')) {
        await setDoc(doc(db, collectionName, data.id), data, { merge: true });
     } else {
        const { id, ...rest } = data; 
@@ -178,7 +174,6 @@ export const saveDocument = async (collectionName: string, data: any) => {
   }
 };
 
-// 3. Update
 export const updateDocument = async (collectionName: string, id: string, data: any) => {
   if (isMockMode || !db) {
     const items = getLocalData(collectionName);
@@ -195,7 +190,6 @@ export const updateDocument = async (collectionName: string, id: string, data: a
   }
 };
 
-// 4. Delete
 export const deleteDocument = async (collectionName: string, id: string) => {
   if (isMockMode || !db) {
     const items = getLocalData(collectionName);
@@ -212,31 +206,34 @@ export const deleteDocument = async (collectionName: string, id: string) => {
   }
 };
 
-// 5. Seed (Initial Data Upload)
 export const seedCollection = async (collectionName: string, dataArray: any[]) => {
+  if (seedingLocks[collectionName]) return;
+  seedingLocks[collectionName] = true;
+
   if (isMockMode || !db) {
     const current = getLocalData(collectionName);
-    
-    // Case 1: Empty collection -> Full seed
     if (current.length === 0) {
         setLocalData(collectionName, dataArray);
-        console.log(`[Mock] Seeded ${collectionName} with ${dataArray.length} items`);
-    } 
-    // Merging logic REMOVED to prevent deleted items from reappearing.
-    // If the user deletes items, we respect that state and do not auto-refill from mock data
-    // unless the collection is completely wiped (handled by Case 1).
+    }
+    seedingLocks[collectionName] = false;
     return;
   }
 
   try {
-    const batch = writeBatch(db);
-    dataArray.forEach(data => {
-      const docRef = data.id ? doc(db, collectionName, data.id) : doc(collection(db, collectionName));
-      batch.set(docRef, data);
-    });
-    await batch.commit();
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < dataArray.length; i += CHUNK_SIZE) {
+      const chunk = dataArray.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(data => {
+        const docRef = data.id ? doc(db, collectionName, data.id) : doc(collection(db, collectionName));
+        batch.set(docRef, data);
+      });
+      await batch.commit();
+    }
     console.log(`Seeded ${collectionName} with ${dataArray.length} items.`);
   } catch (error) {
     console.error(`Error seeding ${collectionName}:`, error);
+  } finally {
+    seedingLocks[collectionName] = false;
   }
 };

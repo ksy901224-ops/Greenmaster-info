@@ -1,17 +1,17 @@
 
 export enum Department {
   SALES = '영업',
-  RESEARCH = '연구소', // 임상시험 등
-  CONSTRUCTION = '건설사업', // 견적, 공사
+  RESEARCH = '연구소', 
+  CONSTRUCTION = '건설사업',
   CONSULTING = '컨설팅',
-  MANAGEMENT = '관리', // 인사 이동 등
+  MANAGEMENT = '관리',
 }
 
 export enum UserRole {
-  SENIOR = '상급자 (Senior)',       // 모든 권한 + AI 사용
-  INTERMEDIATE = '중급자 (Intermediate)', // 데이터 조회/등록 가능, AI 불가
-  JUNIOR = '하급자 (Junior)',       // 골프장 이슈만 조회 가능
-  ADMIN = '시스템 관리자 (Admin)',   // (Legacy compatibility, acts as Senior)
+  SENIOR = '상급자 (Senior)',
+  INTERMEDIATE = '중급자 (Intermediate)',
+  JUNIOR = '하급자 (Junior)',
+  ADMIN = '시스템 관리자 (Admin)',
 }
 
 export type UserStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -23,7 +23,7 @@ export interface UserProfile {
   role: UserRole;
   department: Department;
   avatar?: string;
-  status: UserStatus; // New field for approval workflow
+  status: UserStatus;
 }
 
 export enum CourseType {
@@ -38,20 +38,23 @@ export enum GrassType {
   MIXED = '혼합',
 }
 
+export type Region = '서울' | '경기' | '강원' | '충청' | '전라' | '경상' | '제주' | '기타';
+
 export interface GolfCourse {
   id: string;
   name: string;
+  region: Region; // Added for 590+ management
   holes: number;
   type: CourseType;
   openYear: string;
   address: string;
   grassType: GrassType;
-  area: string; // e.g., "30만평 (991,735 m²)"
-  length?: string; // Added: Total course length (e.g., "7,200 yds")
-  description: string; // Basic spec info
+  area: string;
+  length?: string;
+  description: string;
   lat?: number;
   lng?: number;
-  issues?: string[]; // Added: History of major issues derived from logs
+  issues?: string[];
 }
 
 export interface CareerRecord {
@@ -59,16 +62,16 @@ export interface CareerRecord {
   courseName: string;
   role: string;
   startDate: string;
-  endDate?: string; // If undefined, currently employed
-  description?: string; // Key achievements or issues
+  endDate?: string;
+  description?: string;
 }
 
 export enum AffinityLevel {
-  HOSTILE = -2, // 적대적
+  HOSTILE = -2,
   UNFRIENDLY = -1,
   NEUTRAL = 0,
   FRIENDLY = 1,
-  ALLY = 2, // 매우 우호적
+  ALLY = 2,
 }
 
 export interface Person {
@@ -76,11 +79,11 @@ export interface Person {
   name: string;
   phone: string;
   currentRole: string;
-  currentRoleStartDate?: string; // When they started this specific role
-  currentCourseId?: string; // If currently working at a known course
+  currentRoleStartDate?: string;
+  currentCourseId?: string;
   careers: CareerRecord[];
   affinity: AffinityLevel;
-  notes: string; // Relationship details, personality, etc.
+  notes: string;
 }
 
 export interface LogEntry {
@@ -88,15 +91,15 @@ export interface LogEntry {
   date: string;
   author: string;
   department: Department;
-  courseId: string; // Link to GolfCourse
-  courseName: string; // Denormalized for easier display
+  courseId: string;
+  courseName: string;
   title: string;
   content: string;
   imageUrls?: string[];
-  tags?: string[]; // e.g., "issue", "urgent", "contract"
-  contactPerson?: string; // Added to help tracking people
-  createdAt?: number; // Added: Creation Timestamp
-  updatedAt?: number; // Added: Last Modification Timestamp
+  tags?: string[];
+  contactPerson?: string;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 export type EventType = 'MEETING' | 'VISIT' | 'CONSTRUCTION' | 'OTHER';
@@ -105,16 +108,14 @@ export interface ExternalEvent {
   id: string;
   title: string;
   date: string;
-  source: 'Google' | 'Outlook' | 'Manual'; // Added Manual
+  source: 'Google' | 'Outlook' | 'Manual';
   time?: string;
   location?: string;
-  // Linkage fields
   type?: EventType; 
   courseId?: string; 
   personId?: string;
 }
 
-// --- NEW: System Audit Log ---
 export interface SystemLog {
   id: string;
   timestamp: number;
@@ -122,21 +123,19 @@ export interface SystemLog {
   userName: string;
   actionType: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'APPROVE' | 'REJECT';
   targetType: 'LOG' | 'COURSE' | 'PERSON' | 'USER' | 'FINANCE' | 'MATERIAL';
-  targetName: string; // e.g., Log Title or Person Name
+  targetName: string;
   details?: string;
 }
 
-// --- NEW: Financial Management ---
 export interface FinancialRecord {
   id: string;
   courseId: string;
   year: number;
-  revenue: number; // Annual Revenue in KRW
-  profit?: number; // Operating Profit in KRW
+  revenue: number;
+  profit?: number;
   updatedAt: number;
 }
 
-// --- NEW: Material Management ---
 export enum MaterialCategory {
   PESTICIDE = '농약',
   FERTILIZER = '비료',
@@ -147,12 +146,12 @@ export enum MaterialCategory {
 export interface MaterialRecord {
   id: string;
   courseId: string;
-  year: number; // Added for year-based filtering
+  year: number;
   category: MaterialCategory;
-  name: string; // Product Name
+  name: string;
   supplier?: string;
-  quantity: number; // Current Stock or Annual Usage
-  unit: string; // kg, L, bags, etc.
-  lastUpdated: string; // YYYY-MM-DD
+  quantity: number;
+  unit: string;
+  lastUpdated: string;
   notes?: string;
 }
