@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { LogEntry, Department, UserRole } from '../types';
-import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target } from 'lucide-react';
+import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, TrendingUp } from 'lucide-react';
 import { analyzeLogEntry } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -11,11 +11,11 @@ interface LogCardProps {
 
 const getDeptBadgeStyle = (dept: Department) => {
   switch (dept) {
-    case Department.SALES: return 'bg-blue-50 text-blue-700 border-blue-200 ring-blue-500/20';
-    case Department.RESEARCH: return 'bg-purple-50 text-purple-700 border-purple-200 ring-purple-500/20';
-    case Department.CONSTRUCTION: return 'bg-orange-50 text-orange-700 border-orange-200 ring-orange-500/20';
-    case Department.CONSULTING: return 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-500/20';
-    default: return 'bg-slate-50 text-slate-700 border-slate-200 ring-slate-500/20';
+    case Department.SALES: return 'bg-brand-50 text-brand-700 border-brand-200 ring-brand-500/10';
+    case Department.RESEARCH: return 'bg-purple-50 text-purple-700 border-purple-200 ring-purple-500/10';
+    case Department.CONSTRUCTION: return 'bg-orange-50 text-orange-700 border-orange-200 ring-orange-500/10';
+    case Department.CONSULTING: return 'bg-emerald-50 text-emerald-700 border-emerald-200 ring-emerald-500/10';
+    default: return 'bg-slate-50 text-slate-700 border-slate-200 ring-slate-500/10';
   }
 };
 
@@ -49,7 +49,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (window.confirm("정말로 이 업무 기록을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")) {
+    if (window.confirm("정말로 이 업무 기록을 삭제하시겠습니까?")) {
       deleteLog(log.id);
     }
   };
@@ -58,8 +58,6 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
     e.preventDefault();
     e.stopPropagation();
     
-    // PRUNE log carefully to ensure it's a plain object with only necessary fields
-    // This prevents Structured Clone failures (Maximum call stack size exceeded)
     const sanitizedLog = {
         id: log.id,
         date: log.date,
@@ -78,7 +76,6 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
     navigate('/write', { log: sanitizedLog });
   };
 
-  // Structured parser for Gemini output
   const renderStructuredInsight = (text: string) => {
     const parts = text.split(/(?=\d+\.\s\*\*)/);
     return parts.map((part, index) => {
@@ -111,85 +108,105 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   };
 
   const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SENIOR;
-  const shouldTruncate = log.content.length > 100;
+  const isSales = log.department === Department.SALES;
+  const shouldTruncate = log.content.length > 150;
 
   return (
     <>
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 hover:border-brand-300 hover:shadow-lg transition-all duration-300 group relative flex flex-col h-full transform hover:-translate-y-1">
-        <div className="flex justify-between items-start mb-3">
+      <div className={`bg-white rounded-[2rem] border p-6 transition-all duration-300 group relative flex flex-col h-full transform hover:-translate-y-1 ${isSales ? 'border-brand-100 shadow-sm hover:border-brand-300 hover:shadow-xl' : 'border-slate-200 shadow-sm hover:shadow-lg'}`}>
+        
+        {isSales && (
+            <div className="absolute -top-3 left-6 px-3 py-1 bg-brand-600 text-white text-[9px] font-black rounded-full shadow-lg uppercase tracking-tighter flex items-center">
+                <TrendingUp size={10} className="mr-1" /> Sales Opportunity
+            </div>
+        )}
+
+        <div className="flex justify-between items-start mb-4">
           <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ring-1 inset-0 ${getDeptBadgeStyle(log.department)}`}>{log.department}</span>
-            <span className="text-xs text-slate-400 font-medium flex items-center"><span className="mx-1.5">•</span> {log.courseName}</span>
+            <span className={`text-[10px] font-black px-3 py-1 rounded-full border ring-2 ring-offset-2 ring-transparent transition-all ${getDeptBadgeStyle(log.department)}`}>{log.department}</span>
+            <span className="text-[10px] text-slate-400 font-bold bg-slate-50 px-2 py-0.5 rounded-md flex items-center"><Calendar size={10} className="mr-1"/> {log.date}</span>
           </div>
-          <div className="flex items-center">
-            <div className="flex items-center text-xs text-slate-400 font-mono">{log.date}</div>
+          <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {isAdmin && (
-              <div className="flex items-center space-x-1 ml-3 bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
-                <button onClick={handleEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="수정"><Edit2 size={14} /></button>
-                <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="삭제"><Trash2 size={14} /></button>
-              </div>
+              <>
+                <button onClick={handleEdit} className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-xl transition-all"><Edit2 size={14} /></button>
+                <button onClick={handleDelete} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 size={14} /></button>
+              </>
             )}
           </div>
         </div>
-        <h3 className="text-lg font-bold text-slate-800 mb-2 leading-tight group-hover:text-brand-700 transition-colors">{log.title}</h3>
-        <div className={`relative text-slate-600 text-sm leading-relaxed whitespace-pre-line overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[1000px] mb-4' : 'max-h-20 mb-1'}`}>
+
+        <h3 className="text-lg font-black text-slate-800 mb-3 leading-tight group-hover:text-brand-700 transition-colors tracking-tight">{log.title}</h3>
+        
+        <div className={`relative text-slate-600 text-[13px] leading-relaxed whitespace-pre-line overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[1000px] mb-6' : 'max-h-24 mb-2'}`}>
             {log.content}
-            {!isExpanded && shouldTruncate && <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white via-white/90 to-transparent cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }} />}
+            {!isExpanded && shouldTruncate && <div className="absolute bottom-0 left-0 w-full h-16 bg-gradient-to-t from-white via-white/80 to-transparent cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }} />}
         </div>
+
         {shouldTruncate && (
-          <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} className="flex items-center text-xs font-bold text-slate-400 hover:text-brand-600 mb-4 transition-colors focus:outline-none w-fit">
-            {isExpanded ? <>접기 <ChevronUp size={14} className="ml-1"/></> : <>더 읽기 <ChevronDown size={14} className="ml-1"/></>}
+          <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} className="flex items-center text-[11px] font-black text-slate-400 hover:text-brand-600 mb-6 transition-colors uppercase tracking-widest">
+            {isExpanded ? <>Collapse <ChevronUp size={14} className="ml-1"/></> : <>Read Full Log <ChevronDown size={14} className="ml-1"/></>}
           </button>
         )}
+
         {log.imageUrls && log.imageUrls.length > 0 && (
-          <div className="flex overflow-x-auto space-x-2 mb-4 pb-2 no-scrollbar">
+          <div className="flex overflow-x-auto space-x-3 mb-6 pb-2 no-scrollbar">
             {log.imageUrls.map((url, idx) => (
-              <img key={idx} src={url} alt="Attachment" className="h-24 w-24 object-cover rounded-lg flex-shrink-0 border border-slate-100 shadow-sm hover:scale-105 transition-transform" />
+              <img key={idx} src={url} alt="Attachment" className="h-28 w-28 object-cover rounded-2xl flex-shrink-0 border border-slate-100 shadow-sm hover:scale-105 transition-transform cursor-zoom-in" />
             ))}
           </div>
         )}
-        <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
+
+        <div className="mt-auto pt-5 border-t border-slate-100 flex items-center justify-between">
           <div className="flex items-center space-x-2 overflow-hidden flex-1 flex-wrap gap-y-2">
             {log.tags?.map((tag, idx) => (
-              <span key={idx} className="flex items-center text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md font-medium border border-slate-200">
-                <Tag size={10} className="mr-1 opacity-70" /> {tag}
+              <span key={idx} className="flex items-center text-[9px] text-slate-500 bg-slate-50 px-2 py-1 rounded-lg font-bold border border-slate-200 uppercase tracking-tighter">
+                <Tag size={10} className="mr-1 opacity-50" /> {tag}
               </span>
             ))}
+            {log.contactPerson && (
+              <span className="flex items-center text-[9px] text-brand-600 bg-brand-50 px-2 py-1 rounded-lg font-bold border border-brand-100 uppercase tracking-tighter">
+                <User size={10} className="mr-1" /> {log.contactPerson}
+              </span>
+            )}
           </div>
-          <div className="flex items-center space-x-3 shrink-0 ml-2">
-              <span className="text-xs text-slate-400 flex items-center bg-slate-50 px-2 py-1 rounded-full"><User size={10} className="mr-1"/> {log.author}</span>
+          <div className="flex items-center space-x-3 shrink-0 ml-4">
               {canUseAI && (
-                  <button onClick={handleAnalyze} disabled={isLoading} className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-all shadow-sm ${showInsight ? 'bg-purple-100 text-purple-700 border-purple-200 ring-2 ring-purple-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-gradient-to-r hover:from-purple-500 hover:to-indigo-500 hover:text-white hover:border-transparent'}`}>
-                      {isLoading ? <Loader2 size={12} className="animate-spin mr-1" /> : <Sparkles size={12} className="mr-1" />}
-                      {isLoading ? '분석 중...' : 'AI Insight'}
+                  <button onClick={handleAnalyze} disabled={isLoading} className={`flex items-center text-[11px] font-black px-4 py-2 rounded-xl border transition-all shadow-sm ${showInsight ? 'bg-indigo-600 text-white border-transparent ring-4 ring-indigo-500/20' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-900 hover:text-white hover:border-transparent'}`}>
+                      {isLoading ? <Loader2 size={12} className="animate-spin mr-2" /> : <Sparkles size={12} className="mr-2" />}
+                      {isLoading ? 'ANALYZING...' : 'AI INSIGHT'}
                   </button>
               )}
           </div>
         </div>
       </div>
+
       {showInsight && insight && !isLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowInsight(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200 max-h-[90vh] ring-1 ring-white/20" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-gradient-to-r from-purple-700 to-indigo-800 p-5 flex justify-between items-center shrink-0">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowInsight(false)}>
+          <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-300 max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-slate-900 p-8 flex justify-between items-center shrink-0">
                <div className="flex items-center text-white">
-                  <div className="bg-white/20 p-2 rounded-xl mr-3 shadow-inner"><Sparkles className="text-amber-300" size={24} /></div>
-                  <div><h3 className="font-bold text-lg leading-none tracking-tight">AI Insight Report</h3><p className="text-xs text-purple-200 mt-1 opacity-90 font-medium">Powered by Gemini</p></div>
+                  <div className="bg-white/10 p-3 rounded-2xl mr-4 shadow-inner"><Sparkles className="text-indigo-400" size={32} /></div>
+                  <div>
+                    <h3 className="font-black text-2xl leading-none tracking-tight">AI 전략 분석 리포트</h3>
+                    <p className="text-[10px] text-slate-400 mt-2 uppercase tracking-[0.2em] font-black">Generated by GreenMaster Gemini-3 Intelligence</p>
+                  </div>
                </div>
-               <button onClick={() => setShowInsight(false)} className="text-white/70 hover:text-white hover:bg-white/10 p-2 rounded-full transition-colors"><X size={20} /></button>
+               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-3 rounded-full transition-all"><X size={24} /></button>
             </div>
-            <div className="p-6 overflow-y-auto custom-scrollbar bg-slate-50/30">
-                <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm flex items-start gap-4">
-                   <div className="p-2.5 bg-slate-100 rounded-lg text-slate-500"><Info size={20} /></div>
+            <div className="p-8 overflow-y-auto custom-scrollbar bg-slate-50/50">
+                <div className="bg-white border border-slate-200 rounded-[1.5rem] p-6 mb-8 shadow-sm flex items-start gap-5">
+                   <div className="p-3 bg-slate-100 rounded-2xl text-slate-500 shadow-inner"><Info size={24} /></div>
                    <div className="flex-1">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between"><span>분석 대상</span><span className="text-slate-400 font-mono font-normal">{log.date}</span></div>
-                      <div className="font-bold text-slate-800 text-sm mb-0.5">{log.courseName} <span className="font-normal text-slate-400">| {log.department}</span></div>
-                      <div className="text-xs text-slate-600 line-clamp-1">{log.title}</div>
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.1em] mb-2 flex items-center justify-between"><span>분석 대상 레코드</span><span className="text-slate-400 font-mono font-normal">{log.date}</span></div>
+                      <div className="font-black text-slate-900 text-lg mb-1">{log.courseName} <span className="font-normal text-slate-400 text-sm">| {log.department}</span></div>
+                      <div className="text-sm text-slate-600 line-clamp-1 italic font-medium">"{log.title}"</div>
                    </div>
                 </div>
-                <div className="space-y-1">{renderStructuredInsight(insight)}</div>
+                <div className="space-y-2">{renderStructuredInsight(insight)}</div>
             </div>
-            <div className="p-4 bg-white border-t border-slate-100 flex justify-end shrink-0">
-               <button onClick={() => setShowInsight(false)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-colors text-sm shadow-md hover:shadow-lg transform active:scale-95 flex items-center"><CheckCircle size={16} className="mr-2" />확인 및 닫기</button>
+            <div className="p-6 bg-white border-t border-slate-100 flex justify-end shrink-0">
+               <button onClick={() => setShowInsight(false)} className="px-8 py-4 bg-slate-900 hover:bg-black text-white font-black rounded-2xl transition-all text-sm shadow-xl hover:shadow-2xl transform active:scale-95 flex items-center uppercase tracking-widest"><CheckCircle size={18} className="mr-3" /> Report Confirmed</button>
             </div>
           </div>
         </div>

@@ -85,6 +85,11 @@ export interface Person {
   careers: CareerRecord[];
   affinity: AffinityLevel;
   notes: string;
+  // 컨설팅을 위한 추가 필드
+  influenceLevel?: number; // 1~5 (낮음~높음)
+  keyInterests?: string[]; // 핵심 관심 키워드
+  isDecisionMaker?: boolean; // 의사결정권자 여부
+  politicalRelation?: string; // 사내 인맥 관계
 }
 
 export interface LogEntry {
