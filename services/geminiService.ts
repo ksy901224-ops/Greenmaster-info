@@ -27,24 +27,21 @@ export const analyzeDocument = async (
   contentParts.push({
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다.
-      제공된 텍스트/파일을 분석하여 구조화된 골프장 마스터 데이터를 추출하세요.
+      제공된 텍스트/파일을 분석하여 구조화된 업무 리포트 데이터를 추출하세요.
 
-      [핵심 미션]
-      1. 정확한 정보 추출: 주소, 홀 수, 운영 형태(회원제/대중제), 개장일 등.
-      2. 전략적 분석: 해당 골프장의 현재 문제점(Issues)과 우리 비즈니스 기회(Opportunities)를 도출하세요.
-      3. 명칭 통일: 기존 DB 목록 [${courseListStr}]에 유사한 이름이 있다면 해당 명칭으로 매칭하세요.
+      [추출 미션]
+      1. 핵심 요약(brief_summary): 해당 문서의 가장 중요한 내용을 1~2문장으로 압축하세요.
+      2. 상세 내용(detailed_content): 원문의 맥락과 수치, 구체적인 진행 상황을 누락 없이 구조화하여 작성하세요.
+      3. 정보 추출: 골프장명, 날짜, 부서, 제목, 관련 인물 등을 정확히 찾아내세요.
+      4. 전략적 분석: 문제점(Issues)과 기회 요인을 도출하세요.
+      5. 명칭 매칭: 기존 DB 목록 [${courseListStr}] 중 유사한 이름이 있다면 해당 명칭으로 통일하세요.
 
-      [반환 JSON 스키마 가이드]
-      - courseName: 골프장명
-      - description: 골프장 개요 및 특징 설명
-      - course_info: { address, holes, type }
-      - strategic_analysis: {
-          issues: ["이슈1", "이슈2"],
-          opportunities: ["기회1", "기회2"]
-        }
-      - summary_report: 전체 상황 요약 리포트
+      [골프장 정보(course_info) 추출 특이사항]
+      - 지역(region): 반드시 다음 값 중 하나로만 매핑하세요: 서울, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주, 인천, 부산, 대구, 울산, 대전, 광주, 세종, 기타. (예: "강원도" -> "강원")
+      - 홀수(holes): 문서에 언급된 코스 규모(9, 18, 27, 36 등)를 숫자로 추출하세요.
+      - 운영형태(type): '회원제' 또는 '대중제' 여부를 판단하세요.
 
-      반드시 JSON 배열([]) 형식으로만 출력하세요.
+      반드시 제공된 JSON 스키마에 맞춰 배열([]) 형식으로 출력하세요.
     `
   });
 
@@ -58,16 +55,22 @@ export const analyzeDocument = async (
         items: {
           type: Type.OBJECT,
           properties: {
-            courseName: { type: Type.STRING },
-            description: { type: Type.STRING },
+            courseName: { type: Type.STRING, description: "골프장 명칭" },
+            date: { type: Type.STRING, description: "YYYY-MM-DD 형식의 날짜" },
+            department: { type: Type.STRING, description: "부서명 (영업, 연구소, 건설사업, 컨설팅 중 하나)" },
+            title: { type: Type.STRING, description: "문서의 핵심 제목" },
+            brief_summary: { type: Type.STRING, description: "비즈니스 관점의 핵심 요약 (1~2문장)" },
+            detailed_content: { type: Type.STRING, description: "본문의 모든 정보를 포함한 상세 서술 내용" },
+            contact_person: { type: Type.STRING, description: "언급된 주요 인물 성함" },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "관련 태그 리스트" },
             course_info: {
                 type: Type.OBJECT,
                 properties: {
-                    address: { type: Type.STRING },
-                    holes: { type: Type.NUMBER },
-                    type: { type: Type.STRING }
-                },
-                required: ["address", "holes", "type"]
+                    address: { type: Type.STRING, description: "상세 주소" },
+                    region: { type: Type.STRING, description: "광역 자치단체 명칭 (예: 경기, 강원)" },
+                    holes: { type: Type.NUMBER, description: "홀 수" },
+                    type: { type: Type.STRING, description: "운영 형태 (회원제/대중제)" }
+                }
             },
             strategic_analysis: {
                 type: Type.OBJECT,
@@ -76,10 +79,9 @@ export const analyzeDocument = async (
                     opportunities: { type: Type.ARRAY, items: { type: Type.STRING } }
                 },
                 required: ["issues", "opportunities"]
-            },
-            summary_report: { type: Type.STRING }
+            }
           },
-          required: ["courseName", "description", "course_info", "strategic_analysis", "summary_report"]
+          required: ["courseName", "title", "brief_summary", "detailed_content", "date"]
         }
       }
     }
