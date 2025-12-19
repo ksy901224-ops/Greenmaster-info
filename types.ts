@@ -29,6 +29,7 @@ export interface UserProfile {
 export enum CourseType {
   MEMBER = '회원제',
   PUBLIC = '대중제',
+  MILITARY = '체력단련장',
 }
 
 export enum GrassType {
@@ -38,12 +39,12 @@ export enum GrassType {
   MIXED = '혼합',
 }
 
-export type Region = '서울' | '경기' | '강원' | '충청' | '전라' | '경상' | '제주' | '기타';
+export type Region = '서울' | '부산' | '대구' | '인천' | '광주' | '대전' | '울산' | '세종' | '경기' | '강원' | '충북' | '충남' | '전북' | '전남' | '경북' | '경남' | '제주' | '기타';
 
 export interface GolfCourse {
   id: string;
   name: string;
-  region: Region; // Added for 590+ management
+  region: Region;
   holes: number;
   type: CourseType;
   openYear: string;

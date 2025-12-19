@@ -294,7 +294,7 @@ const WriteLog: React.FC = () => {
           name: item.courseName,
           address: item.course_info?.address || '',
           holes: item.course_info?.holes || 18,
-          type: item.course_info?.type?.includes('회원') ? CourseType.MEMBER : CourseType.PUBLIC,
+          type: item.course_info?.type?.includes('회원') ? CourseType.MEMBER : item.course_info?.type?.includes('체력') ? CourseType.MILITARY : CourseType.PUBLIC,
           grassType: GrassType.ZOYSIA,
           area: '',
           description: 'AI 자동 분석을 통해 등록된 골프장입니다.',
@@ -781,6 +781,7 @@ const WriteLog: React.FC = () => {
                          <select className="w-full border rounded-lg p-2" value={newCourse.type} onChange={(e) => handleCourseChange('type', e.target.value)}>
                              <option value="회원제">회원제</option>
                              <option value="대중제">대중제</option>
+                             <option value="체력단련장">체력단련장</option>
                          </select>
                      </div>
                  </div>
