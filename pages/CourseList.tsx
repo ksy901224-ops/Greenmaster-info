@@ -1,126 +1,140 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, ArrowRight, Filter } from 'lucide-react';
+import { Search, MapPin, ArrowRight, Filter, Grid, List as ListIcon, X, SlidersHorizontal, ChevronDown, Check } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Region } from '../types';
+import { Region, CourseType, GrassType } from '../types';
 
 const CourseList: React.FC = () => {
   const { courses, navigate } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRegion, setSelectedRegion] = useState<Region | '전체'>('전체');
+  const [selectedType, setSelectedType] = useState<CourseType | '전체'>('전체');
+  const [selectedHoles, setSelectedHoles] = useState<string | '전체'>('전체');
+  const [selectedGrass, setSelectedGrass] = useState<GrassType | '전체'>('전체');
+  
+  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Fix: Replaced '충청', '전라', '경상' with valid Region union type values to resolve assignment errors
-  const regions: (Region | '전체')[] = ['전체', '서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'];
+  const regions: (Region | '전체')[] = ['전체', '서울', '경기', '인천', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '세종', '부산', '대구', '울산', '대전', '광주'];
 
   const filteredCourses = useMemo(() => {
     return courses.filter(c => {
       const matchSearch = c.name.includes(searchTerm) || c.address.includes(searchTerm);
       const matchRegion = selectedRegion === '전체' || c.region === selectedRegion;
-      return matchSearch && matchRegion;
+      const matchType = selectedType === '전체' || c.type === selectedType;
+      const matchGrass = selectedGrass === '전체' || c.grassType === selectedGrass;
+      
+      let matchHoles = true;
+      if (selectedHoles !== '전체') {
+        if (selectedHoles === '9H') matchHoles = c.holes <= 9;
+        else if (selectedHoles === '18H') matchHoles = c.holes === 18;
+        else if (selectedHoles === '27H+') matchHoles = c.holes >= 27;
+      }
+      
+      return matchSearch && matchRegion && matchType && matchHoles && matchGrass;
     });
-  }, [courses, searchTerm, selectedRegion]);
+  }, [courses, searchTerm, selectedRegion, selectedType, selectedHoles, selectedGrass]);
 
-  const getGradient = (id: string) => {
-      const colors = ['from-emerald-500 to-teal-700', 'from-green-600 to-emerald-800', 'from-teal-500 to-cyan-700', 'from-lime-600 to-green-800'];
-      const index = id.charCodeAt(id.length - 1) % colors.length;
-      return colors[index];
+  const resetFilters = () => {
+      setSelectedRegion('전체');
+      setSelectedType('전체');
+      setSelectedHoles('전체');
+      setSelectedGrass('전체');
+      setSearchTerm('');
   };
+
+  const activeFilterCount = [selectedRegion, selectedType, selectedHoles, selectedGrass].filter(f => f !== '전체').length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900">전국 골프장 마스터 DB</h1>
-            <p className="text-slate-500 text-sm">전국 590여 개소 골프장의 상세 정보를 통합 관리합니다.</p>
+            <div className="inline-flex items-center space-x-2 bg-brand-50 text-brand-700 px-3 py-1 rounded-full text-xs font-bold mb-3 border border-brand-100"><Filter size={12}/><span>Master Intelligence DB</span></div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">전국 골프장 마스터 DB</h1>
+            <p className="text-slate-500 text-sm mt-1">총 {courses.length}개소의 데이터를 관리합니다.</p>
         </div>
-        <div className="relative w-full md:w-80 shadow-sm">
-          <input
-            type="text"
-            placeholder="골프장 명, 주소 검색..."
-            className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <Search className="absolute left-4 top-3.5 text-slate-400" size={20} />
-        </div>
-      </div>
-
-      {/* Region Filter Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
-          <div className="p-2 bg-white rounded-lg border border-slate-200 mr-2 text-slate-400">
-              <Filter size={16}/>
-          </div>
-          {regions.map(r => (
-              <button
-                key={r}
-                onClick={() => setSelectedRegion(r)}
-                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-                    selectedRegion === r 
-                    ? 'bg-brand-600 text-white shadow-md transform scale-105' 
-                    : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                  {r} {r !== '전체' && <span className="ml-1 opacity-60">{courses.filter(c => c.region === r).length}</span>}
-              </button>
-          ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCourses.map(course => (
-          <div 
-             key={course.id} 
-             onClick={() => navigate(`/courses/${course.id}`)}
-             className="block group h-full cursor-pointer"
-          >
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl hover:border-brand-200 transition-all duration-300 h-full flex flex-col transform hover:-translate-y-1">
-              <div className={`h-24 bg-gradient-to-r ${getGradient(course.id)} p-5 flex flex-col justify-end relative`}>
-                  <div className="absolute top-4 right-4 flex gap-2">
-                    <span className="bg-white/20 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-bold text-white border border-white/20">
-                        {course.region}
-                    </span>
-                    <span className="bg-white/20 backdrop-blur-sm px-2 py-0.5 rounded text-[10px] font-bold text-white border border-white/20">
-                        {course.type}
-                    </span>
-                  </div>
-                  <h3 className="text-lg font-bold text-white tracking-tight">{course.name}</h3>
-              </div>
-              
-              <div className="p-5 flex-grow flex flex-col">
-                <div className="flex items-center text-slate-500 text-xs mb-4">
-                    <MapPin size={12} className="mr-1 shrink-0" /> <span className="truncate">{course.address}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 mb-4 py-3 border-y border-slate-50">
-                    <div>
-                        <div className="text-[10px] text-slate-400 font-bold uppercase">홀 수</div>
-                        <div className="text-sm font-bold text-slate-700">{course.holes}홀</div>
-                    </div>
-                    <div>
-                        <div className="text-[10px] text-slate-400 font-bold uppercase">개장</div>
-                        <div className="text-sm font-bold text-slate-700">{course.openYear}년</div>
-                    </div>
-                </div>
-
-                <div className="mt-auto flex items-center justify-between pt-2">
-                    <span className="text-[10px] font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded">
-                        {course.grassType}
-                    </span>
-                    <span className="text-xs font-bold text-slate-400 group-hover:text-brand-600 flex items-center transition-colors">
-                        상세보기 <ArrowRight size={14} className="ml-1 transition-transform group-hover:translate-x-1"/>
-                    </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
         
-        {filteredCourses.length === 0 && (
-           <div className="col-span-full py-20 text-center bg-slate-50 rounded-3xl border border-dashed border-slate-200">
-             <Search size={40} className="mx-auto mb-4 text-slate-300" />
-             <p className="text-slate-500 font-medium">검색 결과가 없습니다.</p>
-           </div>
-        )}
+        <div className="flex items-center gap-3">
+             <div className="relative flex-grow md:w-80 shadow-soft">
+                <input type="text" placeholder="골프장 이름 또는 주소 검색..." className="w-full pl-11 pr-4 py-3.5 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-brand-500/5 outline-none transition-all font-medium text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                <Search className="absolute left-4 top-4 text-slate-400" size={18} />
+             </div>
+             <button onClick={() => setIsFilterExpanded(!isFilterExpanded)} className={`p-3.5 rounded-2xl border transition-all flex items-center gap-2 font-bold text-sm ${isFilterExpanded || activeFilterCount > 0 ? 'bg-brand-600 border-brand-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <SlidersHorizontal size={18}/><span className="hidden sm:inline">필터</span>
+                {activeFilterCount > 0 && <span className="bg-white text-brand-700 w-5 h-5 rounded-full flex items-center justify-center text-[10px]">{activeFilterCount}</span>}
+             </button>
+        </div>
       </div>
+
+      {isFilterExpanded && (
+          <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-xl animate-in slide-in-from-top-4 duration-300">
+              <div className="flex justify-between items-center mb-6">
+                  <h3 className="font-bold text-slate-800 flex items-center"><Filter size={16} className="mr-2 text-brand-600"/> 상세 검색 필터</h3>
+                  <button onClick={resetFilters} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center"><X size={14} className="mr-1"/> 초기화</button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">지역</label>
+                      <select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold">{regions.map(r => <option key={r} value={r}>{r}</option>)}</select>
+                  </div>
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">운영 형태</label>
+                      <select value={selectedType} onChange={(e) => setSelectedType(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold"><option value="전체">전체</option><option value={CourseType.MEMBER}>회원제</option><option value={CourseType.PUBLIC}>대중제</option></select>
+                  </div>
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">규모</label>
+                      <select value={selectedHoles} onChange={(e) => setSelectedHoles(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold"><option value="전체">전체 규모</option><option value="9H">9홀 이하</option><option value="18H">18홀</option><option value="27H+">27홀 이상</option></select>
+                  </div>
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">주요 잔디</label>
+                      <select value={selectedGrass} onChange={(e) => setSelectedGrass(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold"><option value="전체">전체 종</option><option value={GrassType.ZOYSIA}>한국잔디</option><option value={GrassType.BENTGRASS}>벤트그라스</option><option value={GrassType.KENTUCKY}>켄터키</option></select>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      <div className="flex justify-between items-center px-1">
+          <p className="text-xs text-slate-400 font-bold">검색 결과: <span className="text-brand-600">{filteredCourses.length}</span> 건</p>
+          <div className="flex bg-slate-200/50 p-1 rounded-lg">
+                <button onClick={() => setViewMode('grid')} className={`p-1.5 rounded-md ${viewMode === 'grid' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400'}`}><Grid size={16}/></button>
+                <button onClick={() => setViewMode('list')} className={`p-1.5 rounded-md ${viewMode === 'list' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400'}`}><ListIcon size={16}/></button>
+          </div>
+      </div>
+
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredCourses.map(course => (
+                <div key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1">
+                    <div className={`h-24 bg-gradient-to-br from-brand-500 to-brand-700 p-6 flex flex-col justify-end`}>
+                        <h3 className="text-xl font-black text-white">{course.name}</h3>
+                    </div>
+                    <div className="p-6">
+                        <div className="flex items-center text-slate-400 text-[11px] font-bold mb-4"><MapPin size={12} className="mr-1.5 text-brand-500" /> <span className="truncate">{course.address}</span></div>
+                        <div className="flex justify-between text-xs font-bold text-slate-700 border-t pt-4"><span>{course.holes} Holes</span><span>{course.type}</span></div>
+                    </div>
+                </div>
+            ))}
+        </div>
+      ) : (
+          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+              <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest border-b border-slate-100">
+                      <tr><th className="px-6 py-4">골프장 명칭</th><th className="px-6 py-4">지역</th><th className="px-6 py-4">규모</th><th className="px-6 py-4">구분</th><th className="px-6 py-4 text-right">관리</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                      {filteredCourses.map(course => (
+                          <tr key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="hover:bg-brand-50/30 transition-colors cursor-pointer group">
+                              <td className="px-6 py-4 font-black text-slate-900">{course.name}</td>
+                              <td className="px-6 py-4 text-slate-700 font-medium">{course.region}</td>
+                              <td className="px-6 py-4 font-bold text-slate-600">{course.holes}H</td>
+                              <td className="px-6 py-4"><span className={`text-[10px] font-black px-2 py-0.5 rounded ${course.type === CourseType.MEMBER ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>{course.type}</span></td>
+                              <td className="px-6 py-4 text-right"><ArrowRight size={18} className="text-slate-300 group-hover:text-brand-600 ml-auto"/></td>
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
+          </div>
+      )}
     </div>
   );
 };

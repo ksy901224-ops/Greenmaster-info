@@ -5,7 +5,7 @@ import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Enhanced Document Analysis for Master DB Syncing and Log Extraction
+// Enhanced Document Analysis for Master DB Bulk Ingestion and Log Extraction
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
   existingCourseNames: string[] = []
@@ -20,25 +20,25 @@ export const analyzeDocument = async (
       }
   }
 
-  const courseListStr = existingCourseNames.slice(0, 200).join(', ');
+  // Optimize context for matching
+  const courseListStr = existingCourseNames.slice(0, 300).join(', ');
 
   contentParts.push({
     text: `
-      당신은 대한민국 골프장 비즈니스 인텔리전스 및 데이터 관리 전문가입니다.
-      제공된 파일(PDF, 이미지, 텍스트)에서 정보를 추출하여 구조화된 JSON 데이터로 변환하세요.
+      당신은 대한민국 골프장 비즈니스 데이터 및 인프라 관리 전문가입니다.
+      제공된 파일(PDF, 이미지, 텍스트)에서 정보를 정밀하게 추출하여 JSON 데이터로 변환하세요.
       
-      정보는 두 가지 유형으로 분류됩니다:
-      1. 마스터 정보: 골프장의 주소, 지역, 홀수, 운영 형태 등 고정 데이터.
-      2. 업무/활동 정보: 특정 날짜에 발생한 업무 일지, 현황 보고, 이슈 등.
+      [분석 목표]
+      1. 마스터 정보: 골프장의 공식 명칭, 지역, 상세 주소, 홀 수(Holes), 운영 형태(회원제/대중제).
+      2. 업무 정보: 해당 골프장에서 발생한 특정 날짜의 업무 내용, 이슈, 담당자 등.
 
-      [추출 규칙]
-      - 각 항목을 개별 골프장 단위로 객체를 생성하세요.
-      - 기존 DB 목록 [${courseListStr}]과 대조하여 동일 골프장인지 판단하세요.
-      - 지역(region): 반드시 '서울, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주, 인천, 부산, 대구, 울산, 대전, 광주, 세종, 기타' 중 하나로 매핑하세요.
-      - 날짜: YYYY-MM-DD 형식을 유지하세요.
-      - 부서(department): '영업', '연구소', '건설사업', '컨설팅', '관리' 중 선택하세요.
+      [추출 및 매칭 규칙]
+      - 기존 DB 목록: [${courseListStr}]
+      - 위 목록에 명칭이 포함되어 있으면 기존 골프장으로 간주하고, 없으면 신규(New)로 표시할 준비를 하세요.
+      - 지역(region): 반드시 '서울, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주, 인천, 부산, 대구, 울산, 대전, 광주, 세종, 기타' 중 하나로 정확히 매핑하세요.
+      - 날짜: YYYY-MM-DD 형식을 엄격히 준수하세요.
 
-      반드시 제공된 JSON 스키마에 맞춰 배열([]) 형식으로 출력하세요.
+      반드시 제공된 JSON 스키마 배열([]) 형식으로만 답변하세요.
     `
   });
 
@@ -53,32 +53,25 @@ export const analyzeDocument = async (
           type: Type.OBJECT,
           properties: {
             courseName: { type: Type.STRING, description: "골프장 명칭" },
-            title: { type: Type.STRING, description: "항목의 제목 또는 일지 제목" },
+            title: { type: Type.STRING, description: "업무 제목" },
             date: { type: Type.STRING, description: "발생일 (YYYY-MM-DD)" },
-            department: { type: Type.STRING, description: "담당 부서" },
-            brief_summary: { type: Type.STRING, description: "핵심 요약 (한 문장)" },
-            detailed_content: { type: Type.STRING, description: "상세 업무 내용 또는 특징 설명" },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "관련 키워드 태그" },
+            department: { type: Type.STRING, description: "담당 부서 (영업, 연구소, 건설사업, 컨설팅, 관리)" },
+            brief_summary: { type: Type.STRING, description: "업무 내용의 핵심 요약" },
+            detailed_content: { type: Type.STRING, description: "추출된 전체 상세 내용" },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING } },
             contact_person: { type: Type.STRING, description: "관련 인물 성함" },
             course_info: {
                 type: Type.OBJECT,
                 properties: {
                     address: { type: Type.STRING, description: "상세 주소" },
-                    region: { type: Type.STRING, description: "행정구역 (예: 경기, 강원)" },
+                    region: { type: Type.STRING, description: "행정구역" },
                     holes: { type: Type.NUMBER, description: "홀 수" },
-                    type: { type: Type.STRING, description: "운영 형태 (회원제/대중제/체력단련장)" },
-                    openYear: { type: Type.STRING, description: "개장년도 (YYYY)" },
+                    type: { type: Type.STRING, description: "운영 형태" },
+                    openYear: { type: Type.STRING, description: "개장년도" },
                     area: { type: Type.STRING, description: "총 면적" }
                 }
             },
-            strategic_analysis: {
-                type: Type.OBJECT,
-                properties: {
-                    issues: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    opportunities: { type: Type.ARRAY, items: { type: Type.STRING } }
-                }
-            },
-            description: { type: Type.STRING, description: "골프장 전반에 대한 AI 분석 평" }
+            description: { type: Type.STRING, description: "해당 골프장에 대한 AI의 종합적인 특징 설명" }
           },
           required: ["courseName", "title", "date", "brief_summary"]
         }
@@ -89,7 +82,7 @@ export const analyzeDocument = async (
   return JSON.parse(response.text);
 };
 
-// Course Strategy Summary Enhancement
+// ... (existing code below remains same)
 export const generateCourseSummary = async (
   course: GolfCourse,
   logs: LogEntry[],
@@ -120,7 +113,6 @@ export const generateCourseSummary = async (
   return response.text;
 };
 
-// Search App with AI Streaming
 export const searchAppWithAIStream = async (
   query: string, 
   appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] },
