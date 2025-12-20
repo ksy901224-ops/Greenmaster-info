@@ -3,10 +3,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
 
-// Use process.env.API_KEY directly as per guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Enhanced Document Analysis for Master DB Syncing and Strategic Extraction
+// Enhanced Document Analysis for Master DB Syncing and Log Extraction
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
   existingCourseNames: string[] = []
@@ -21,25 +20,23 @@ export const analyzeDocument = async (
       }
   }
 
-  // Prune course list to top 200 for prompt size stability
   const courseListStr = existingCourseNames.slice(0, 200).join(', ');
 
   contentParts.push({
     text: `
-      당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다.
-      제공된 텍스트/파일을 분석하여 구조화된 업무 리포트 데이터를 추출하세요.
+      당신은 대한민국 골프장 비즈니스 인텔리전스 및 데이터 관리 전문가입니다.
+      제공된 파일(PDF, 이미지, 텍스트)에서 정보를 추출하여 구조화된 JSON 데이터로 변환하세요.
+      
+      정보는 두 가지 유형으로 분류됩니다:
+      1. 마스터 정보: 골프장의 주소, 지역, 홀수, 운영 형태 등 고정 데이터.
+      2. 업무/활동 정보: 특정 날짜에 발생한 업무 일지, 현황 보고, 이슈 등.
 
-      [추출 미션]
-      1. 핵심 요약(brief_summary): 해당 문서의 가장 중요한 내용을 1~2문장으로 압축하세요.
-      2. 상세 내용(detailed_content): 원문의 맥락과 수치, 구체적인 진행 상황을 누락 없이 구조화하여 작성하세요.
-      3. 정보 추출: 골프장명, 날짜, 부서, 제목, 관련 인물 등을 정확히 찾아내세요.
-      4. 전략적 분석: 문제점(Issues)과 기회 요인을 도출하세요.
-      5. 명칭 매칭: 기존 DB 목록 [${courseListStr}] 중 유사한 이름이 있다면 해당 명칭으로 통일하세요.
-
-      [골프장 정보(course_info) 추출 특이사항]
-      - 지역(region): 반드시 다음 값 중 하나로만 매핑하세요: 서울, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주, 인천, 부산, 대구, 울산, 대전, 광주, 세종, 기타. (예: "강원도" -> "강원")
-      - 홀수(holes): 문서에 언급된 코스 규모(9, 18, 27, 36 등)를 숫자로 추출하세요.
-      - 운영형태(type): '회원제' 또는 '대중제' 여부를 판단하세요.
+      [추출 규칙]
+      - 각 항목을 개별 골프장 단위로 객체를 생성하세요.
+      - 기존 DB 목록 [${courseListStr}]과 대조하여 동일 골프장인지 판단하세요.
+      - 지역(region): 반드시 '서울, 경기, 강원, 충북, 충남, 전북, 전남, 경북, 경남, 제주, 인천, 부산, 대구, 울산, 대전, 광주, 세종, 기타' 중 하나로 매핑하세요.
+      - 날짜: YYYY-MM-DD 형식을 유지하세요.
+      - 부서(department): '영업', '연구소', '건설사업', '컨설팅', '관리' 중 선택하세요.
 
       반드시 제공된 JSON 스키마에 맞춰 배열([]) 형식으로 출력하세요.
     `
@@ -56,20 +53,22 @@ export const analyzeDocument = async (
           type: Type.OBJECT,
           properties: {
             courseName: { type: Type.STRING, description: "골프장 명칭" },
-            date: { type: Type.STRING, description: "YYYY-MM-DD 형식의 날짜" },
-            department: { type: Type.STRING, description: "부서명 (영업, 연구소, 건설사업, 컨설팅 중 하나)" },
-            title: { type: Type.STRING, description: "문서의 핵심 제목" },
-            brief_summary: { type: Type.STRING, description: "비즈니스 관점의 핵심 요약 (1~2문장)" },
-            detailed_content: { type: Type.STRING, description: "본문의 모든 정보를 포함한 상세 서술 내용" },
-            contact_person: { type: Type.STRING, description: "언급된 주요 인물 성함" },
-            tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "관련 태그 리스트" },
+            title: { type: Type.STRING, description: "항목의 제목 또는 일지 제목" },
+            date: { type: Type.STRING, description: "발생일 (YYYY-MM-DD)" },
+            department: { type: Type.STRING, description: "담당 부서" },
+            brief_summary: { type: Type.STRING, description: "핵심 요약 (한 문장)" },
+            detailed_content: { type: Type.STRING, description: "상세 업무 내용 또는 특징 설명" },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "관련 키워드 태그" },
+            contact_person: { type: Type.STRING, description: "관련 인물 성함" },
             course_info: {
                 type: Type.OBJECT,
                 properties: {
                     address: { type: Type.STRING, description: "상세 주소" },
-                    region: { type: Type.STRING, description: "광역 자치단체 명칭 (예: 경기, 강원)" },
+                    region: { type: Type.STRING, description: "행정구역 (예: 경기, 강원)" },
                     holes: { type: Type.NUMBER, description: "홀 수" },
-                    type: { type: Type.STRING, description: "운영 형태 (회원제/대중제)" }
+                    type: { type: Type.STRING, description: "운영 형태 (회원제/대중제/체력단련장)" },
+                    openYear: { type: Type.STRING, description: "개장년도 (YYYY)" },
+                    area: { type: Type.STRING, description: "총 면적" }
                 }
             },
             strategic_analysis: {
@@ -77,11 +76,11 @@ export const analyzeDocument = async (
                 properties: {
                     issues: { type: Type.ARRAY, items: { type: Type.STRING } },
                     opportunities: { type: Type.ARRAY, items: { type: Type.STRING } }
-                },
-                required: ["issues", "opportunities"]
-            }
+                }
+            },
+            description: { type: Type.STRING, description: "골프장 전반에 대한 AI 분석 평" }
           },
-          required: ["courseName", "title", "brief_summary", "detailed_content", "date"]
+          required: ["courseName", "title", "date", "brief_summary"]
         }
       }
     }
@@ -101,7 +100,6 @@ export const generateCourseSummary = async (
 
   const prompt = `
     당신은 골프장 운영 컨설턴트입니다. '${course.name}' 골프장에 대한 데이터 분석 리포트를 작성하세요.
-    
     데이터 요약:
     - 지역/규모: ${course.region} / ${course.holes}홀
     - 현황: ${course.description?.substring(0, 500)}
@@ -109,9 +107,9 @@ export const generateCourseSummary = async (
     - 주요 인물: ${prunedPeople}
 
     요구사항:
-    1. **현황 진단**: 현재 코스 및 운영 상태를 진단하세요.
-    2. **관계 전략**: 주요 인물들과의 친밀도를 바탕으로 한 비즈니스 접근법을 제시하세요.
-    3. **Action Plan**: 향후 핵심 업무 3가지를 제시하세요.
+    1. 현황 진단
+    2. 관계 전략
+    3. Action Plan
   `;
 
   const response = await ai.models.generateContent({
@@ -122,7 +120,7 @@ export const generateCourseSummary = async (
   return response.text;
 };
 
-// Search App with AI Streaming - PRUNED CONTEXT TO PREVENT STACK OVERFLOW
+// Search App with AI Streaming
 export const searchAppWithAIStream = async (
   query: string, 
   appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] },
@@ -147,21 +145,16 @@ export const searchAppWithAIStream = async (
     a: p.affinity 
   }));
 
-  let contextString = "";
-  try {
-      contextString = JSON.stringify({ 
-          logs: prunedLogs, 
-          courses: prunedCourses, 
-          people: prunedPeople 
-      });
-  } catch (e) {
-      contextString = "Context error: Data too large.";
-  }
+  const contextString = JSON.stringify({ 
+      logs: prunedLogs, 
+      courses: prunedCourses, 
+      people: prunedPeople 
+  });
   
   const prompt = `당신은 GreenMaster AI 비서입니다. 다음 데이터를 바탕으로 사용자의 질문에 답하세요.
-  [Context (Pruned)]: ${contextString}
+  [Context]: ${contextString}
   [Question]: "${query}"
-  답변은 한국어로, 날짜와 골프장명을 언급하며 구체적으로 작성하세요.`;
+  답변은 한국어로 작성하세요.`;
 
   const responseStream = await ai.models.generateContentStream({
     model: 'gemini-3-flash-preview',
@@ -174,12 +167,7 @@ export const searchAppWithAIStream = async (
 };
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
-  const prompt = `
-    당신은 골프장 관리 전문가입니다. 다음 일지를 분석하여 요약, 리스크, 권장 액션 순으로 리포트를 작성하세요.
-    골프장: ${log.courseName}
-    제목: ${log.title}
-    내용: ${log.content.substring(0, 1000)}
-  `;
+  const prompt = `일지 분석 리포트: ${log.courseName} - ${log.title}\n${log.content.substring(0, 1000)}`;
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: prompt,
@@ -226,8 +214,7 @@ export const generatePersonReputationReport = async (
   logs: LogEntry[]
 ): Promise<string> => {
   const prunedLogs = logs.slice(0, 10).map(l => `${l.date}: ${l.title}`).join('\n');
-  const prompt = `인물 평판 분석: ${person.name} (${person.currentRole}). 관련 기록 요약:\n${prunedLogs}\n위 정보를 바탕으로 비즈니스 관점의 신뢰도 및 위험요인 보고서를 작성하세요.`;
-  
+  const prompt = `인물 평판 분석: ${person.name} (${person.currentRole}). 관련 기록 요약:\n${prunedLogs}`;
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
