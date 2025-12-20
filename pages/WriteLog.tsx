@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -40,7 +40,7 @@ const WriteLog: React.FC = () => {
 
   // --- Quick Person Add State (For Log Tab) ---
   const [isQuickPersonModalOpen, setIsQuickPersonModalOpen] = useState(false);
-  const [quickPerson, setQuickPerson] = useState({ name: '', role: '', phone: '', affinity: '0' });
+  const [quickPerson, setQuickPerson] = useState({ name: '', role: '', phone: '', affinity: '0', courseId: '' });
 
   // --- Schedule Form State ---
   const [schedTitle, setSchedTitle] = useState('');
@@ -136,6 +136,13 @@ const WriteLog: React.FC = () => {
       return () => clearTimeout(timer);
   }, [logDate, dept, courseId, title, content, tags, contactPerson, editingLog, isAutoSaveEnabled, activeTab]);
 
+  // Handle Quick Person Modal Open
+  useEffect(() => {
+    if (isQuickPersonModalOpen) {
+        setQuickPerson(prev => ({ ...prev, courseId: courseId }));
+    }
+  }, [isQuickPersonModalOpen, courseId]);
+
   // --- Handlers ---
 
   const handleCourseChange = (f: string, v: any) => { setNewCourse((p: any) => ({...p, [f]: v})) };
@@ -184,7 +191,7 @@ const WriteLog: React.FC = () => {
         setIsSubmitting(false); 
         alert('인물 등록 완료'); 
         // Reset form
-        setPersonName(''); setPersonPhone(''); setPersonRole(''); setPersonCourseId(''); setPersonNotes('');
+        setPersonName(''); setPersonPhone(''); setPersonRole(''); setPersonCourseId(''); setPersonNotes(''); setPersonAffinity('0');
     }, 500);
   };
 
@@ -198,14 +205,14 @@ const WriteLog: React.FC = () => {
           name: quickPerson.name,
           phone: quickPerson.phone,
           currentRole: quickPerson.role,
-          currentCourseId: courseId, // Automatically link to the selected course in Log tab
+          currentCourseId: quickPerson.courseId,
           affinity: parseInt(quickPerson.affinity) as AffinityLevel,
           notes: '업무 일지 작성 중 간편 등록됨',
           careers: []
       });
       setContactPerson(quickPerson.name); // Auto-fill the input
       setIsQuickPersonModalOpen(false);
-      setQuickPerson({ name: '', role: '', phone: '', affinity: '0' });
+      setQuickPerson({ name: '', role: '', phone: '', affinity: '0', courseId: '' });
       alert('인물이 등록되었습니다.');
   };
 
@@ -590,14 +597,21 @@ ${item.detailed_content}
                         }} className="text-[10px] bg-brand-50 text-brand-700 px-2 py-1 rounded font-bold hover:bg-brand-100 transition-colors">+ 신규 등록</button>
                       </div>
                       <div className="relative">
-                        <select className={getSelectClass('courseId')} value={courseId} onChange={(e) => {
-                            setCourseId(e.target.value);
-                            setContactPerson(''); // Reset contact when course changes
-                        }} required>
-                            <option value="">선택하세요</option>
-                            {globalCourses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-4 top-4 text-slate-400 pointer-events-none" size={16}/>
+                        <input 
+                            list="courses-list-logs"
+                            className={getInputClass('courseId')} 
+                            value={globalCourses.find(c => c.id === courseId)?.name || ''} 
+                            onChange={(e) => {
+                                const found = globalCourses.find(c => c.name === e.target.value);
+                                setCourseId(found ? found.id : '');
+                                setContactPerson('');
+                            }}
+                            placeholder="골프장 검색..."
+                        />
+                        <datalist id="courses-list-logs">
+                            {globalCourses.map(c => <option key={c.id} value={c.name} />)}
+                        </datalist>
+                        <Building2 className="absolute right-4 top-3.5 text-slate-400 pointer-events-none" size={16}/>
                       </div>
                     </div>
 
@@ -651,23 +665,81 @@ ${item.detailed_content}
                 </form>
             )}
 
-            {/* PERSON TAB & SCHEDULE TAB maintained for consistency */}
+            {/* PERSON TAB */}
             {activeTab === 'PERSON' && (
                 <form onSubmit={handlePersonSubmit} className="space-y-6">
                     <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center"><UserPlus className="mr-2 text-slate-400"/> 인물 등록</h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1.5">이름 <span className="text-red-500">*</span></label>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">이름 <span className="text-red-500">*</span></label>
                             <input type="text" required className={getInputClass('personName')} value={personName} onChange={(e) => setPersonName(e.target.value)} placeholder="홍길동" />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1.5">직책</label>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">직책</label>
                             <input type="text" className={getInputClass('personRole')} value={personRole} onChange={(e) => setPersonRole(e.target.value)} placeholder="예: 코스팀장" />
                         </div>
                     </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">소속 골프장</label>
+                            <div className="relative">
+                                <input 
+                                    list="courses-list-person"
+                                    className={getInputClass('personCourseId')} 
+                                    value={globalCourses.find(c => c.id === personCourseId)?.name || ''} 
+                                    onChange={(e) => {
+                                        const found = globalCourses.find(c => c.name === e.target.value);
+                                        setPersonCourseId(found ? found.id : '');
+                                    }}
+                                    placeholder="검색하여 선택..."
+                                />
+                                <datalist id="courses-list-person">
+                                    {globalCourses.map(c => <option key={c.id} value={c.name} />)}
+                                </datalist>
+                                <Building2 className="absolute right-4 top-3.5 text-slate-400 pointer-events-none" size={16}/>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">연락처</label>
+                            <input type="text" className={getInputClass('personPhone')} value={personPhone} onChange={(e) => setPersonPhone(e.target.value)} placeholder="010-0000-0000" />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">친밀도 (관계성)</label>
+                        <div className="flex space-x-2 overflow-x-auto pb-1 no-scrollbar">
+                            {[
+                                { val: '2', label: 'Ally', color: 'bg-green-100 text-green-800' },
+                                { val: '1', label: 'Friendly', color: 'bg-emerald-50 text-emerald-700' },
+                                { val: '0', label: 'Neutral', color: 'bg-slate-50 text-slate-600' },
+                                { val: '-1', label: 'Unfriendly', color: 'bg-orange-50 text-orange-700' },
+                                { val: '-2', label: 'Hostile', color: 'bg-red-50 text-red-700' },
+                            ].map(opt => (
+                                <button
+                                    key={opt.val}
+                                    type="button"
+                                    onClick={() => setPersonAffinity(opt.val)}
+                                    className={`px-4 py-2 rounded-xl border text-xs font-bold transition-all whitespace-nowrap ${
+                                        personAffinity === opt.val
+                                        ? `ring-2 ring-offset-1 ring-brand-500 ${opt.color} border-transparent shadow-md`
+                                        : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">특징 및 메모</label>
+                        <textarea rows={4} className={getInputClass('personNotes')} value={personNotes} onChange={(e) => setPersonNotes(e.target.value)} placeholder="성격, 전공, 이전 소속에서의 이슈 등 참고 사항" />
+                    </div>
+
                     <div className="pt-6 border-t border-slate-100">
-                        <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 flex justify-center items-center">
-                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <UserPlus className="mr-2" />} 인물 저장
+                        <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg hover:bg-slate-800 flex justify-center items-center active:scale-[0.99] shadow-lg">
+                            {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <UserPlus className="mr-2" />} 인물 정보 저장
                         </button>
                     </div>
                 </form>
@@ -689,23 +761,49 @@ ${item.detailed_content}
             )}
       </div>
 
-      {/* Quick Person Modal maintained */}
+      {/* Quick Person Modal - Enhanced with Role and Course selection */}
       {isQuickPersonModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in zoom-in-95">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-             <div className="flex justify-between items-center mb-4 border-b pb-3">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl overflow-hidden flex flex-col">
+             <div className="flex justify-between items-center mb-4 border-b pb-3 shrink-0">
                  <h3 className="font-bold text-lg flex items-center"><UserPlus size={18} className="mr-2 text-brand-600"/>간편 인물 등록</h3>
                  <button onClick={() => setIsQuickPersonModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X/></button>
              </div>
-             <div className="space-y-4">
+             <div className="space-y-4 overflow-y-auto max-h-[60vh] px-1 py-1">
                  <div>
-                     <label className="block text-xs font-bold text-slate-500 mb-1">이름 <span className="text-red-500">*</span></label>
-                     <input type="text" className="w-full border rounded-lg p-2" value={quickPerson.name} onChange={(e) => setQuickPerson({...quickPerson, name: e.target.value})} placeholder="홍길동" autoFocus />
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">성함 <span className="text-red-500">*</span></label>
+                     <input type="text" className="w-full border rounded-xl p-3 text-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 outline-none transition-all" value={quickPerson.name} onChange={(e) => setQuickPerson({...quickPerson, name: e.target.value})} placeholder="홍길동" autoFocus />
                  </div>
-                 <div className="flex justify-end space-x-2 mt-6 pt-3 border-t border-slate-100">
-                     <button onClick={() => setIsQuickPersonModalOpen(false)} className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50">취소</button>
-                     <button onClick={handleQuickPersonSubmit} className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-brand-700">등록 완료</button>
+                 <div>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">직책</label>
+                     <input type="text" className="w-full border rounded-xl p-3 text-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 outline-none transition-all" value={quickPerson.role} onChange={(e) => setQuickPerson({...quickPerson, role: e.target.value})} placeholder="예: 코스팀장" />
                  </div>
+                 <div>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">소속 골프장</label>
+                     <div className="relative">
+                        <input 
+                            list="quick-courses-list"
+                            className="w-full border rounded-xl p-3 text-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 outline-none transition-all"
+                            value={globalCourses.find(c => c.id === quickPerson.courseId)?.name || ''} 
+                            onChange={(e) => {
+                                const found = globalCourses.find(c => c.name === e.target.value);
+                                setQuickPerson({...quickPerson, courseId: found ? found.id : ''});
+                            }}
+                            placeholder="골프장 검색..."
+                        />
+                        <datalist id="quick-courses-list">
+                            {globalCourses.map(c => <option key={c.id} value={c.name} />)}
+                        </datalist>
+                     </div>
+                 </div>
+                 <div>
+                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">연락처</label>
+                     <input type="text" className="w-full border rounded-xl p-3 text-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 outline-none transition-all" value={quickPerson.phone} onChange={(e) => setQuickPerson({...quickPerson, phone: e.target.value})} placeholder="010-0000-0000" />
+                 </div>
+             </div>
+             <div className="flex justify-end space-x-2 mt-6 pt-4 border-t border-slate-100 shrink-0">
+                 <button onClick={() => setIsQuickPersonModalOpen(false)} className="px-5 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-800 transition-colors">취소</button>
+                 <button onClick={handleQuickPersonSubmit} className="px-6 py-2.5 bg-brand-600 text-white rounded-xl text-sm font-bold shadow-lg hover:bg-brand-700 transition-all active:scale-95">등록 완료</button>
              </div>
           </div>
         </div>
