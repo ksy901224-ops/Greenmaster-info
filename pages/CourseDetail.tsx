@@ -2,7 +2,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary, analyzeMaterialInventory } from '../services/geminiService';
-import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown } from 'lucide-react';
+// Removed duplicate imports and added TrendingDown
+import { 
+  Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, 
+  Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, 
+  Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, 
+  Clock, Activity, AlertOctagon, Send, RotateCcw, Package, Droplets, 
+  Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, 
+  ArrowUpRight, Percent, ArrowDownRight, ChevronDown, TrendingDown 
+} from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -181,7 +189,12 @@ const CourseDetail: React.FC = () => {
   };
 
   const openEditModal = () => {
-      setEditForm({ ...course, issues: course.issues ? [...course.issues] : [] });
+      setEditForm({ 
+        ...course, 
+        issues: course.issues ? [...course.issues] : [],
+        grassInfo: course.grassInfo ? { ...course.grassInfo } : { green: '', tee: '', fairway: '' },
+        areaInfo: course.areaInfo ? { ...course.areaInfo } : { total: '', green: '', tee: '', fairway: '' }
+      });
       setIsEditModalOpen(true);
   };
 
@@ -335,7 +348,6 @@ const CourseDetail: React.FC = () => {
 
         {canViewFullData && activeTab === 'MANAGEMENT' && (
           <div className="space-y-8 animate-in fade-in duration-300">
-              
               {/* Financial Dashboard Header */}
               <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-soft overflow-hidden relative">
                   <div className="absolute top-0 right-0 w-80 h-80 bg-blue-50 rounded-full -mr-32 -mt-32 opacity-40 blur-3xl"></div>
@@ -629,7 +641,6 @@ const CourseDetail: React.FC = () => {
                                       {isAdmin && (
                                           <td className="px-8 py-5 text-right">
                                               <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end space-x-2">
-                                                  {/* Fix: Explicitly map fields to match matForm state type and handle optional fields */}
                                                   <button onClick={() => { 
                                                       setEditingMat(mat); 
                                                       setMatForm({ 
@@ -856,7 +867,7 @@ const CourseDetail: React.FC = () => {
       {/* Edit Course Info Modal */}
       {isEditModalOpen && editForm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
                 <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <h3 className="font-black text-xl text-slate-900 flex items-center tracking-tight"><Database size={24} className="mr-3 text-brand-600"/> 골프장 마스터 정보 관리</h3>
                     <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-1.5 hover:bg-slate-200 rounded-xl"><X size={28} /></button>
@@ -879,16 +890,6 @@ const CourseDetail: React.FC = () => {
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Year of Establishment</label>
                                 <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.openYear} onChange={(e) => setEditForm({...editForm, openYear: e.target.value})} placeholder="예: 2004" />
                             </div>
-                        </div>
-                    </div>
-
-                    <div className="space-y-6">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><Map size={14} className="mr-2 text-brand-500"/> Site and Scale Details</h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Detailed Address</label>
-                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} />
-                            </div>
                             <div>
                                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Total Holes</label>
                                 <input type="number" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.holes} onChange={(e) => setEditForm({...editForm, holes: Number(e.target.value)})} />
@@ -904,10 +905,59 @@ const CourseDetail: React.FC = () => {
                     </div>
 
                     <div className="space-y-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><Sprout size={14} className="mr-2 text-brand-500"/> Grass Specification</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Green Grass</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.grassInfo?.green} onChange={(e) => handleNestedEditChange('grassInfo', 'green', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Tee Grass</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.grassInfo?.tee} onChange={(e) => handleNestedEditChange('grassInfo', 'tee', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Fairway Grass</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.grassInfo?.fairway} onChange={(e) => handleNestedEditChange('grassInfo', 'fairway', e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><Map size={14} className="mr-2 text-brand-500"/> Area Breakdown</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Total Site Area</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.areaInfo?.total} onChange={(e) => { 
+                                    handleNestedEditChange('areaInfo', 'total', e.target.value);
+                                    setEditForm(prev => prev ? {...prev, area: e.target.value} : null);
+                                }} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Green Total Area</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.areaInfo?.green} onChange={(e) => handleNestedEditChange('areaInfo', 'green', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Tee Total Area</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.areaInfo?.tee} onChange={(e) => handleNestedEditChange('areaInfo', 'tee', e.target.value)} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Fairway Total Area</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.areaInfo?.fairway} onChange={(e) => handleNestedEditChange('areaInfo', 'fairway', e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><FileText size={14} className="mr-2 text-brand-500"/> Operational Context</h4>
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Strategic Course Summary</label>
-                            <textarea className="w-full rounded-2xl border-slate-200 text-sm font-medium h-32 p-4 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm leading-relaxed" value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} />
+                        <div className="grid grid-cols-1 gap-6">
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Detailed Address</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Strategic Course Summary</label>
+                                <textarea className="w-full rounded-2xl border-slate-200 text-sm font-medium h-32 p-4 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm leading-relaxed" value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} />
+                            </div>
                         </div>
                     </div>
 

@@ -57,23 +57,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   const handleEdit = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    const sanitizedLog = {
-        id: log.id,
-        date: log.date,
-        author: log.author,
-        department: log.department,
-        courseId: log.courseId,
-        courseName: log.courseName,
-        title: log.title,
-        content: log.content,
-        tags: [...(log.tags || [])],
-        contactPerson: log.contactPerson,
-        createdAt: log.createdAt,
-        updatedAt: log.updatedAt
-    };
-    
-    navigate('/write', { log: sanitizedLog });
+    navigate('/write', { log: { ...log, tags: [...(log.tags || [])] } });
   };
 
   const renderStructuredInsight = (text: string) => {
@@ -165,14 +149,14 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
                <div className="flex items-center text-white">
                   <div className="bg-brand-500/20 p-2 rounded-xl mr-3 shadow-inner"><Sparkles className="text-brand-400" size={24} /></div>
                   <div>
-                      <h3 className="font-bold text-lg leading-none tracking-tight">AI Insight Report</h3>
+                      <h3 className="font-bold text-lg leading-none tracking-tight text-white">AI Insight Report</h3>
                       <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-black">Strategic Intelligence Analysis</p>
                   </div>
                </div>
-               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-2 rounded-full transition-colors"><X size={20} /></button>
+               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-2 rounded-full transition-colors focus:outline-none"><X size={20} /></button>
             </div>
             
-            <div className="p-6 overflow-y-auto custom-scrollbar bg-white">
+            <div className="p-6 overflow-y-auto custom-scrollbar bg-white flex-1">
                 <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-6 shadow-inner flex items-start gap-4">
                    <div className="p-2.5 bg-white rounded-lg text-slate-400 shadow-sm border border-slate-100"><Info size={20} /></div>
                    <div className="flex-1 overflow-hidden">

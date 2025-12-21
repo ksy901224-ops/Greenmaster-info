@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson, LockIcon } from 'lucide-react';
+import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson, LockIcon, AlertTriangle } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Department, UserRole, UserStatus } from '../types';
 
@@ -81,28 +81,6 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="grid gap-6">
-        {/* Intelligence Backup Section */}
-        <div className="bg-indigo-900 rounded-2xl shadow-xl p-6 text-white relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-10 opacity-10"><Database size={120} /></div>
-            <div className="relative z-10">
-                <h2 className="text-lg font-bold mb-2 flex items-center">
-                    <ShieldCheck className="mr-2 text-indigo-300" size={24} /> 
-                    인텔리전스 데이터 백업
-                </h2>
-                <p className="text-indigo-100 text-sm mb-6 max-w-md leading-relaxed">
-                    전국 골프장 정보, 인맥 네트워크, 매출 및 자재 현황을 포함한 전체 데이터베이스를 JSON 파일로 내보냅니다. 로컬 백업 및 데이터 분석에 활용하세요.
-                </p>
-                <button 
-                    onClick={handleExport}
-                    disabled={isExporting}
-                    className="bg-white text-indigo-900 px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-all flex items-center shadow-lg active:scale-95 disabled:opacity-50"
-                >
-                    {isExporting ? <RotateCcw size={18} className="mr-2 animate-spin"/> : <Download size={18} className="mr-2"/>}
-                    {isExporting ? '백업 생성 중...' : '데이터 전체 다운로드 (JSON)'}
-                </button>
-            </div>
-        </div>
-
         {/* Account Information */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-2">
@@ -263,20 +241,54 @@ const Settings: React.FC = () => {
             </div>
         )}
 
-        {/* Data Management (Debug) */}
+        {/* Intelligence Data Management Section */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
             <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center pb-2 border-b border-slate-100">
                 <Database className="mr-2 text-brand-600" size={20} /> 
-                데이터 초기화
+                인텔리전스 데이터 관리
             </h2>
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-sm font-bold text-slate-800">로컬 데이터 리셋</h3>
-                    <p className="text-xs text-slate-500">캐시된 정보를 삭제하고 초기 상태로 되돌립니다. 동기화 문제가 있을 때만 사용하세요.</p>
+            
+            <div className="space-y-6">
+                {/* Export Backup Option */}
+                <div className="flex items-center justify-between p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                    <div className="flex-1 mr-6">
+                        <div className="flex items-center mb-1">
+                            <Download size={18} className="mr-2 text-indigo-600" />
+                            <h3 className="text-sm font-bold text-slate-800">전체 데이터 백업 (Export JSON)</h3>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                            전국 골프장 정보, 인맥 네트워크, 매출 및 자재 현황 등 시스템의 모든 데이터베이스를 단일 JSON 파일로 내려받습니다. 로컬 백업 및 오프라인 분석 용도로 활용하세요.
+                        </p>
+                    </div>
+                    <button 
+                        onClick={handleExport}
+                        disabled={isExporting}
+                        className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all flex items-center shadow-md shadow-indigo-200 active:scale-95 disabled:opacity-50 shrink-0"
+                    >
+                        {isExporting ? <RotateCcw size={14} className="mr-2 animate-spin"/> : <Download size={14} className="mr-2"/>}
+                        {isExporting ? '생성 중...' : 'JSON 다운로드'}
+                    </button>
                 </div>
-                <button onClick={resetData} className="flex items-center bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-xs font-bold hover:bg-red-100 transition-colors">
-                    <RotateCcw size={14} className="mr-1.5" /> 초기화
-                </button>
+
+                {/* Reset Debug Option */}
+                <div className="flex items-center justify-between p-5 bg-red-50/30 rounded-2xl border border-red-100 border-dashed">
+                    <div className="flex-1 mr-6">
+                        <div className="flex items-center mb-1">
+                            <AlertTriangle size={18} className="mr-2 text-red-500" />
+                            <h3 className="text-sm font-bold text-slate-800">로컬 목(Mock) 데이터 초기화 (Debug Tool)</h3>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                            브라우저 캐시에 저장된 모든 로컬 데이터를 삭제하고 공장 초기화 상태로 되돌립니다. <span className="font-bold text-red-600">이 작업은 복구할 수 없는 개발용 디버그 도구입니다.</span>
+                        </p>
+                    </div>
+                    <button 
+                        onClick={resetData} 
+                        className="flex items-center bg-white border border-red-200 text-red-600 px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-red-50 transition-colors shadow-sm active:scale-95 shrink-0"
+                    >
+                        <RotateCcw size={14} className="mr-2" />
+                        시스템 리셋
+                    </button>
+                </div>
             </div>
         </div>
 

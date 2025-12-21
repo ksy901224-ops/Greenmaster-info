@@ -1,11 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History } from 'lucide-react';
-import { AffinityLevel, Person, CareerRecord } from '../types';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History as HistoryIcon } from 'lucide-react';
+import { AffinityLevel, Person, CareerRecord, CourseType, GrassType, Region } from '../types';
 import { useApp } from '../contexts/AppContext';
 import { generatePersonReputationReport } from '../services/geminiService';
 
 const PersonDetail: React.FC = () => {
-  const { people, courses, updatePerson, deletePerson, routeParams, navigate, canUseAI, logs } = useApp();
+  const { people, courses, updatePerson, deletePerson, addCourse, routeParams, navigate, canUseAI, logs } = useApp();
   const id = routeParams.id;
   
   const person = people.find(p => p.id === id);
@@ -14,9 +15,12 @@ const PersonDetail: React.FC = () => {
   // Edit State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Person | null>(null);
-  
   const [originalPerson, setOriginalPerson] = useState<Person | null>(null);
   const [shouldArchive, setShouldArchive] = useState(false);
+
+  // New Course Modal State (inside Person Edit)
+  const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
+  const [newCourseForm, setNewCourseForm] = useState({ name: '', region: '경기' as Region, holes: 18 });
 
   // Reputation Analysis State
   const [isAnalyzingReputation, setIsAnalyzingReputation] = useState(false);
@@ -26,7 +30,7 @@ const PersonDetail: React.FC = () => {
 
   const currentCourse = courses.find(c => c.id === person.currentCourseId);
 
-  // Detect critical role fields changes
+  // Detect critical role fields changes for auto-archive logic
   const hasRoleChanged = editForm && originalPerson && (
     editForm.currentCourseId !== originalPerson.currentCourseId || 
     editForm.currentRole !== originalPerson.currentRole
@@ -62,7 +66,7 @@ const PersonDetail: React.FC = () => {
   };
 
   const openEditModal = () => {
-      setEditForm({ ...person });
+      setEditForm({ ...person, careers: [...person.careers] });
       setOriginalPerson({ ...person });
       setShouldArchive(false);
       setIsEditModalOpen(true);
@@ -90,9 +94,38 @@ const PersonDetail: React.FC = () => {
   const updateCareerField = (index: number, field: keyof CareerRecord, value: string) => {
       if (editForm) {
           const newCareers = [...editForm.careers];
-          newCareers[index] = { ...newCareers[index], [field]: value };
+          const updatedRecord = { ...newCareers[index], [field]: value };
+          
+          // If courseName is changed, try to find and link courseId automatically
+          if (field === 'courseName') {
+              const matchedCourse = courses.find(c => c.name === value);
+              updatedRecord.courseId = matchedCourse ? matchedCourse.id : '';
+          }
+          
+          newCareers[index] = updatedRecord;
           setEditForm({...editForm, careers: newCareers});
       }
+  };
+
+  const handleQuickAddCourse = () => {
+      if (!newCourseForm.name.trim()) return;
+      const newId = `c-quick-${Date.now()}`;
+      addCourse({
+          id: newId,
+          name: newCourseForm.name,
+          region: newCourseForm.region,
+          holes: newCourseForm.holes,
+          type: CourseType.PUBLIC,
+          openYear: new Date().getFullYear().toString(),
+          address: `${newCourseForm.region} 신규 등록 골프장`,
+          grassType: GrassType.ZOYSIA,
+          area: '정보없음',
+          description: '인물 정보 등록 중 즉시 추가됨',
+          issues: []
+      });
+      setIsCourseModalOpen(false);
+      setNewCourseForm({ name: '', region: '경기', holes: 18 });
+      alert(`'${newCourseForm.name}' 골프장이 마스터 DB에 등록되었습니다.`);
   };
 
   const saveEdit = () => {
@@ -100,25 +133,23 @@ const PersonDetail: React.FC = () => {
 
       let finalPerson = { ...editForm };
       
+      // AUTO-ARCHIVE LOGIC
       if (shouldArchive && originalPerson && originalPerson.currentCourseId) {
-          const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || 'Unknown';
-          const changeReason = `[시스템 자동 보관] 직책/소속 변경 이력 기록됨`;
-          
-          let endDate = new Date().toISOString().split('T')[0];
+          const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || '미지정';
           const archivedRecord: CareerRecord = {
               courseId: originalPerson.currentCourseId,
               courseName: oldCourseName,
               role: originalPerson.currentRole,
               startDate: originalPerson.currentRoleStartDate || '',
-              endDate: endDate,
-              description: changeReason
+              endDate: new Date().toISOString().split('T')[0],
+              description: `[시스템 자동 보관] 소속/직책 변경됨`
           };
           finalPerson.careers = [archivedRecord, ...finalPerson.careers];
       }
 
       updatePerson(finalPerson);
       setIsEditModalOpen(false);
-      alert('인물 정보가 성공적으로 업데이트되었습니다.');
+      alert('인물 정보가 업데이트되었습니다.');
   };
 
   const handleDelete = () => {
@@ -142,6 +173,8 @@ const PersonDetail: React.FC = () => {
       }
   };
 
+  const regions: Region[] = ['서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '인천', '부산', '대구', '울산', '대전', '광주', '세종', '기타'];
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Profile Header */}
@@ -163,7 +196,7 @@ const PersonDetail: React.FC = () => {
                     {canUseAI && (
                         <button onClick={handleAnalyzeReputation} disabled={isAnalyzingReputation} className="flex items-center px-6 py-3 rounded-2xl bg-slate-900 text-white text-sm font-black shadow-xl hover:bg-slate-800 transition-all disabled:opacity-50 active:scale-95 ring-1 ring-white/10">
                             {isAnalyzingReputation ? <Loader2 size={16} className="animate-spin mr-2"/> : <Sparkles size={16} className="mr-2 text-brand-400"/>}
-                            {isAnalyzingReputation ? "분석 리포트 생성 중..." : "AI 평판/리스크 분석"}
+                            {isAnalyzingReputation ? "분석 중..." : "AI 평판/리스크 분석"}
                         </button>
                     )}
                     <div className={`px-6 py-3 rounded-2xl border text-sm font-black flex items-center shadow-sm uppercase tracking-wider ${getAffinityColor(person.affinity)}`}>
@@ -183,7 +216,7 @@ const PersonDetail: React.FC = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 pt-8 border-t border-slate-100 text-sm font-medium text-slate-500">
                 <div className="flex items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><Phone size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-bold">{person.phone}</span></div>
-                <div className="flex items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><Calendar size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-bold">재직 기간: {person.currentRoleStartDate ? `${person.currentRoleStartDate} ~ 현재` : '정보 미입력'}</span></div>
+                <div className="flex items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><Calendar size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-bold">재직일: {person.currentRoleStartDate ? `${person.currentRoleStartDate} ~ 현재` : '정보 없음'}</span></div>
             </div>
         </div>
       </div>
@@ -195,24 +228,20 @@ const PersonDetail: React.FC = () => {
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="text-xl font-black flex items-center tracking-tight">
                         <FileWarning size={24} className="mr-3 text-amber-400" />
-                        AI Strategic Reputation Dossier
+                        AI Strategic Reputation Report
                     </h3>
                     <button onClick={() => setReputationReport(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={20}/></button>
                 </div>
                 <div className="text-indigo-100 text-base leading-relaxed whitespace-pre-line font-medium custom-scrollbar max-h-[400px] overflow-y-auto pr-4">
                     {reputationReport}
                 </div>
-                <div className="mt-8 pt-6 border-t border-white/10 flex items-center text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
-                    <ShieldAlert size={14} className="mr-2"/> CONFIDENTIAL DATA: GREENMASTER INTELLIGENCE UNIT ONLY
-                </div>
               </div>
           </div>
       )}
 
-      {/* Main Content Grid */}
+      {/* Career History Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Notes */}
-          <div className="lg:col-span-1 space-y-6">
+          <div className="lg:col-span-1">
               <div className="bg-white p-8 rounded-[2rem] shadow-soft border border-slate-200">
                   <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center tracking-tight">
                       <HeartHandshake size={20} className="mr-3 text-brand-600" /> 관계 전략 및 특징
@@ -223,15 +252,14 @@ const PersonDetail: React.FC = () => {
               </div>
           </div>
 
-          {/* Timeline */}
           <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] shadow-soft border border-slate-200">
             <h3 className="text-lg font-black text-slate-900 mb-8 flex items-center tracking-tight">
-                <Briefcase size={20} className="mr-3 text-brand-600" /> 커리어 히스토리
+                <Briefcase size={20} className="mr-3 text-brand-600" /> 커리어 타임라인
             </h3>
             
             <div className="relative border-l-2 border-slate-100 ml-3 space-y-8 pb-4">
-                <div className="relative pl-10 animate-in fade-in slide-in-from-left-4">
-                    <div className="absolute -left-[11px] top-1.5 w-5 h-5 rounded-full bg-brand-500 border-4 border-white shadow-md ring-4 ring-brand-500/10"></div>
+                <div className="relative pl-10">
+                    <div className="absolute -left-[11px] top-1.5 w-5 h-5 rounded-full bg-brand-500 border-4 border-white shadow-md"></div>
                     <div className="bg-brand-50/50 border border-brand-100 rounded-3xl p-6 shadow-sm">
                         <span className="text-[9px] font-black bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-widest mb-3 inline-block">CURRENT ROLE</span>
                         <h4 className="font-black text-slate-900 text-xl mb-1">{currentCourse?.name || '소속 미지정'}</h4>
@@ -258,7 +286,7 @@ const PersonDetail: React.FC = () => {
                                 </div>
                                 {isExpanded && (
                                     <div className="mt-5 pt-5 border-t border-slate-50 animate-in fade-in slide-in-from-top-2">
-                                        <p className="text-slate-600 text-sm leading-relaxed">{career.description || '상세 이력 내용이 없습니다.'}</p>
+                                        <p className="text-slate-600 text-sm leading-relaxed">{career.description || '이력 정보가 없습니다.'}</p>
                                     </div>
                                 )}
                             </div>
@@ -269,109 +297,151 @@ const PersonDetail: React.FC = () => {
           </div>
       </div>
 
-       {/* Enhanced Edit Modal with Auto-Archive */}
+       {/* Edit Modal with Auto-Archive Trigger */}
        {isEditModalOpen && editForm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
                 <div className="px-10 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
                     <h3 className="font-black text-xl text-slate-900 flex items-center tracking-tight">
-                        <Edit2 size={24} className="mr-3 text-brand-600"/> 인물 정보 정밀 수정
+                        <Edit2 size={24} className="mr-3 text-brand-600"/> 인물 정보 편집 및 발령
                     </h3>
-                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-slate-200 rounded-full"><X size={28} /></button>
+                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-slate-200 rounded-full focus:outline-none"><X size={28} /></button>
                 </div>
                 
-                <div className="p-10 space-y-10 overflow-y-auto custom-scrollbar">
-                    {/* Basic Section */}
+                <div className="p-10 space-y-8 overflow-y-auto custom-scrollbar flex-1">
                     <div className="grid grid-cols-2 gap-6">
-                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">인물 성명</label>
-                            <input type="text" className="w-full rounded-2xl border-slate-200 text-base font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.name} onChange={(e) => handleEditChange('name', e.target.value)} />
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">성명</label>
+                            <input type="text" className="w-full rounded-2xl border-slate-200 p-4 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm font-bold" value={editForm.name} onChange={(e) => handleEditChange('name', e.target.value)} />
                         </div>
                         <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">연락처 (Phone)</label>
-                            <input type="text" className="w-full rounded-2xl border-slate-200 text-base font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.phone} onChange={(e) => handleEditChange('phone', e.target.value)} />
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">연락처</label>
+                            <input type="text" className="w-full rounded-2xl border-slate-200 p-4 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm font-bold" value={editForm.phone} onChange={(e) => handleEditChange('phone', e.target.value)} />
                         </div>
                     </div>
 
-                    {/* Current Employment Status Section */}
-                    <div className="bg-slate-50/80 p-8 rounded-[2rem] border border-slate-200 relative group">
-                        <div className="flex justify-between items-center mb-6">
-                             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center">
-                                 <Building2 size={14} className="mr-2 text-brand-600"/> 현직 발령 정보 (Current Role)
-                             </h4>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+                            <div className="flex items-center"><Building2 size={14} className="mr-2 text-brand-600"/> 현재 소속 발령 정보</div>
+                            <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-brand-600 hover:underline text-[9px] font-black uppercase">목록에 없나요? 신규 등록</button>
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">소속 골프장</label>
-                                <select className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 bg-white shadow-sm" value={editForm.currentCourseId || ''} onChange={(e) => handleEditChange('currentCourseId', e.target.value)}>
-                                    <option value="">소속 미지정</option>
+                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장 선택</label>
+                                <select className="w-full rounded-2xl border-slate-200 p-4 bg-white focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm font-bold" value={editForm.currentCourseId || ''} onChange={(e) => handleEditChange('currentCourseId', e.target.value)}>
+                                    <option value="">미지정</option>
                                     {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">현직 직책</label>
-                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm bg-white" value={editForm.currentRole} onChange={(e) => handleEditChange('currentRole', e.target.value)} />
-                            </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">발령일 (Start Date)</label>
-                                <input type="date" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm bg-white" value={editForm.currentRoleStartDate || ''} onChange={(e) => handleEditChange('currentRoleStartDate', e.target.value)} />
+                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">현직 직책</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 p-4 bg-white focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm font-bold" value={editForm.currentRole} onChange={(e) => handleEditChange('currentRole', e.target.value)} />
                             </div>
                         </div>
 
-                        {/* AUTO-ARCHIVE PROMPT: Show when changes detected */}
+                        {/* AUTO-ARCHIVE CONFIRMATION */}
                         {hasRoleChanged && originalPerson?.currentCourseId && (
-                            <div className="mt-8 bg-brand-50 p-6 rounded-3xl border border-brand-200 shadow-soft animate-in slide-in-from-top-4">
-                                <div className="flex items-start gap-4">
-                                    <div className="bg-white p-3 rounded-2xl text-brand-600 shadow-sm border border-brand-100"><Archive size={24}/></div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-black text-brand-900 mb-2">변경 사항이 감지되었습니다. 이전 경력을 보관하시겠습니까?</p>
-                                        <div className="bg-white/50 p-4 rounded-xl text-xs font-bold text-slate-600 mb-4 border border-brand-100 space-y-1">
-                                            <div className="flex justify-between"><span className="text-slate-400">Previous:</span> <span>{courses.find(c=>c.id===originalPerson.currentCourseId)?.name} / {originalPerson.currentRole}</span></div>
-                                            <div className="flex justify-between text-brand-700"><span className="opacity-50">Proposed:</span> <span>{courses.find(c=>c.id===editForm.currentCourseId)?.name} / {editForm.currentRole}</span></div>
-                                        </div>
-                                        <label className="flex items-center space-x-3 cursor-pointer select-none group/check">
-                                            <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${shouldArchive ? 'bg-brand-600 border-brand-600 text-white shadow-lg' : 'bg-white border-slate-300'}`}>
-                                                {shouldArchive && <CheckCircle size={14}/>}
-                                            </div>
-                                            <input type="checkbox" checked={shouldArchive} onChange={(e) => setShouldArchive(e.target.checked)} className="hidden" />
-                                            <span className="text-xs font-black text-slate-800 uppercase tracking-tight group-hover/check:text-brand-700">Yes, archive previous role to History</span>
-                                        </label>
-                                    </div>
+                            <div className="mt-6 bg-amber-50 p-4 rounded-2xl border border-amber-200 flex items-start gap-4 animate-in slide-in-from-top-2">
+                                <div className="p-2 bg-white rounded-xl text-amber-600 shadow-sm"><Archive size={20}/></div>
+                                <div className="flex-1">
+                                    <p className="text-xs font-bold text-amber-900 mb-2">소속 또는 직책의 변경이 감지되었습니다. 이전 정보를 경력 히스토리로 자동 보관하시겠습니까?</p>
+                                    <label className="flex items-center space-x-2 cursor-pointer select-none">
+                                        <input type="checkbox" checked={shouldArchive} onChange={(e) => setShouldArchive(e.target.checked)} className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300" />
+                                        <span className="text-xs font-black text-amber-700 uppercase tracking-tighter">Yes, Archive previous role to History</span>
+                                    </label>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    <div className="space-y-6">
+                    <div className="space-y-4">
                         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center"><History size={14} className="mr-2 text-brand-500"/> 경력 타임라인 (Career History)</h4>
-                            <button type="button" onClick={addCareerToForm} className="text-[10px] font-black bg-slate-900 text-white px-4 py-2 rounded-xl shadow-lg hover:bg-slate-800 transition-all active:scale-95 flex items-center"><Plus size={14} className="mr-1.5"/> ADD RECORD</button>
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center"><HistoryIcon size={14} className="mr-2 text-brand-600"/> 과거 경력 이력 관리</h4>
+                            <button type="button" onClick={addCareerToForm} className="text-[10px] font-black bg-slate-900 text-white px-3 py-1.5 rounded-xl shadow-lg hover:bg-slate-800 transition-all active:scale-95 flex items-center"><Plus size={14} className="mr-1"/> ADD RECORD</button>
                         </div>
                         <div className="space-y-4">
                             {editForm.careers.map((career, idx) => (
-                                <div key={idx} className="relative bg-slate-50/50 p-6 rounded-3xl border border-slate-200 group transition-all hover:border-slate-400">
-                                    <button onClick={() => removeCareerFromForm(idx)} className="absolute -right-3 -top-3 bg-white text-red-400 hover:text-red-600 p-2 rounded-xl border border-slate-200 shadow-xl opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
-                                    <div className="grid grid-cols-2 gap-4 mb-4">
-                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Golf Course</label><input type="text" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.courseName} onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)} /></div>
-                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Position / Role</label><input type="text" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.role} onChange={(e) => updateCareerField(idx, 'role', e.target.value)} /></div>
+                                <div key={idx} className="relative bg-slate-50 p-5 rounded-2xl border border-slate-200 group transition-all hover:border-slate-300">
+                                    <button onClick={() => removeCareerFromForm(idx)} className="absolute -right-2 -top-2 bg-white text-red-400 hover:text-red-600 p-1.5 rounded-lg border border-slate-200 shadow-md opacity-0 group-hover:opacity-100 transition-all focus:outline-none"><Trash2 size={14} /></button>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">골프장 (Master DB 연동)</label>
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    list="courses-list-careers"
+                                                    placeholder="골프장 명칭 검색..." 
+                                                    className="flex-1 text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" 
+                                                    value={career.courseName} 
+                                                    onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)} 
+                                                />
+                                                <button type="button" onClick={() => { setNewCourseForm({ ...newCourseForm, name: career.courseName }); setIsCourseModalOpen(true); }} className="p-2.5 bg-white border border-slate-200 rounded-xl text-brand-600 hover:bg-brand-50" title="신규 등록"><Plus size={16}/></button>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">수행 직책 / 업무</label>
+                                            <input type="text" placeholder="직책 / 업무" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.role} onChange={(e) => updateCareerField(idx, 'role', e.target.value)} />
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Start Date</label><input type="text" placeholder="YYYY-MM" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.startDate} onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)} /></div>
-                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">End Date</label><input type="text" placeholder="YYYY-MM" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.endDate || ''} onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)} /></div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <input type="text" placeholder="시작일(YYYY-MM)" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.startDate} onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)} />
+                                        <input type="text" placeholder="종료일(YYYY-MM)" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.endDate || ''} onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)} />
                                     </div>
+                                    {career.courseId && <div className="mt-2 text-[9px] text-brand-600 font-bold flex items-center px-1"><CheckCircle size={10} className="mr-1"/> 마스터 DB 골프장과 연결됨 (ID: {career.courseId})</div>}
                                 </div>
                             ))}
                         </div>
+                        <datalist id="courses-list-careers">
+                            {courses.map(c => <option key={c.id} value={c.name} />)}
+                        </datalist>
+                    </div>
+                    
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">특징 및 전략 메모</label>
+                        <textarea className="w-full rounded-2xl border-slate-200 p-4 h-32 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm font-medium leading-relaxed" value={editForm.notes} onChange={(e) => handleEditChange('notes', e.target.value)} />
                     </div>
                 </div>
                 
                 <div className="p-10 border-t border-slate-100 bg-slate-50 flex justify-end space-x-4 shrink-0 shadow-inner">
-                    <button onClick={() => setIsEditModalOpen(false)} className="px-8 py-3.5 text-sm font-black text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-widest">DISCARD</button>
-                    <button onClick={saveEdit} className="px-12 py-3.5 text-sm font-black text-white bg-slate-900 rounded-2xl hover:bg-slate-800 flex items-center shadow-xl transform active:scale-95 transition-all uppercase tracking-[0.1em]"><CheckCircle size={20} className="mr-3 text-brand-400" /> APPLY ALL CHANGES</button>
+                    <button onClick={() => setIsEditModalOpen(false)} className="px-8 py-3.5 text-sm font-black text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-widest">취소</button>
+                    <button onClick={saveEdit} className="px-12 py-3.5 text-sm font-black text-white bg-slate-900 rounded-2xl hover:bg-slate-800 flex items-center shadow-xl transform active:scale-95 transition-all uppercase tracking-widest"><CheckCircle size={20} className="mr-3 text-brand-400" /> 변경 사항 적용</button>
                 </div>
             </div>
         </div>
+      )}
+
+      {/* Quick Add Course Modal (Nested) */}
+      {isCourseModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md animate-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-brand-50">
+                      <h4 className="font-black text-lg text-brand-900 flex items-center tracking-tight"><Building2 size={20} className="mr-2"/> 신규 골프장 마스터 등록</h4>
+                      <button onClick={() => setIsCourseModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-5">
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">골프장 명칭 *</label>
+                          <input type="text" required className="w-full rounded-xl border-slate-200 p-3.5 text-sm font-bold shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.name} onChange={e => setNewCourseForm({...newCourseForm, name: e.target.value})} placeholder="공식 명칭 입력" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">지역</label>
+                              <select className="w-full rounded-xl border-slate-200 p-3.5 text-sm font-bold shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.region} onChange={e => setNewCourseForm({...newCourseForm, region: e.target.value as Region})}>
+                                  {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">홀 수</label>
+                              <input type="number" className="w-full rounded-xl border-slate-200 p-3.5 text-sm font-bold shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.holes} onChange={e => setNewCourseForm({...newCourseForm, holes: parseInt(e.target.value)})} />
+                          </div>
+                      </div>
+                      <div className="pt-4">
+                          <button onClick={handleQuickAddCourse} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm shadow-xl hover:bg-slate-800 transition-all flex justify-center items-center">
+                              <CheckCircle size={18} className="mr-2 text-brand-400" /> MASTER DB에 즉시 등록
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
       )}
     </div>
   );
