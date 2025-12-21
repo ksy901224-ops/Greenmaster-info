@@ -1,4 +1,3 @@
-
 // @google/genai service for intelligence processing
 import { GoogleGenAI, Type, GenerateContentResponse, Chat } from "@google/genai";
 import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
@@ -121,12 +120,14 @@ export const createChatSession = (
     - 최근 업무 히스토리: ${JSON.stringify(prunedLogs)}
   `;
 
+  // Fix: The Thinking Config is only available for the Gemini 3 and 2.5 series models.
+  // Updated from 'gemini-flash-lite-latest' to 'gemini-3-flash-preview'.
   return ai.chats.create({
-    model: 'gemini-flash-lite-latest',
+    model: 'gemini-3-flash-preview',
     config: {
       systemInstruction: systemInstruction,
       temperature: 0.5,
-      thinkingConfig: { thinkingBudget: 2000 }
+      thinkingConfig: { thinkingBudget: 24576 }
     },
   });
 };
@@ -139,7 +140,7 @@ export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
 위 내용을 분석하여 1) 핵심 요약, 2) 업계 관점에서의 함의, 3) 후속 조치(Next Steps)를 제시하세요.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-flash-lite-latest',
+    model: 'gemini-3-flash-preview',
     contents: prompt,
   });
   return response.text || "분석 실패";
@@ -191,7 +192,8 @@ export const generatePersonReputationReport = async (
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 8000 } }
+    // Fix: Max thinking budget for Pro models provides deeper reasoning.
+    config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;
 };
@@ -207,7 +209,8 @@ export const generateCourseSummary = async (
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 4000 } }
+    // Fix: Max thinking budget for Pro models provides deeper reasoning.
+    config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;
 };

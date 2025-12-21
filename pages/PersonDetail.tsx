@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye } from 'lucide-react';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
 import { generatePersonReputationReport } from '../services/geminiService';
@@ -16,7 +15,6 @@ const PersonDetail: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Person | null>(null);
   
-  // Logic to detect changes for auto-archiving
   const [originalPerson, setOriginalPerson] = useState<Person | null>(null);
   const [shouldArchive, setShouldArchive] = useState(false);
 
@@ -28,13 +26,12 @@ const PersonDetail: React.FC = () => {
 
   const currentCourse = courses.find(c => c.id === person.currentCourseId);
 
-  // Detect if critical role fields have changed
+  // Detect critical role fields changes
   const hasRoleChanged = editForm && originalPerson && (
     editForm.currentCourseId !== originalPerson.currentCourseId || 
     editForm.currentRole !== originalPerson.currentRole
   );
 
-  // Automatically enable archiving when role/course changes
   useEffect(() => {
     if (hasRoleChanged) {
         setShouldArchive(true);
@@ -45,11 +42,8 @@ const PersonDetail: React.FC = () => {
 
   const toggleExpanded = (index: number) => {
     const newSet = new Set(expandedItems);
-    if (newSet.has(index)) {
-      newSet.delete(index);
-    } else {
-      newSet.add(index);
-    }
+    if (newSet.has(index)) newSet.delete(index);
+    else newSet.add(index);
     setExpandedItems(newSet);
   };
 
@@ -68,56 +62,20 @@ const PersonDetail: React.FC = () => {
   };
 
   const openEditModal = () => {
-      // Check for Draft
-      const draftKey = `GM_DRAFT_PERSON_${person.id}`;
-      const savedDraft = localStorage.getItem(draftKey);
-
-      if (savedDraft) {
-          try {
-              setEditForm(JSON.parse(savedDraft));
-          } catch(e) {
-              setEditForm({ ...person });
-          }
-      } else {
-          setEditForm({ ...person });
-      }
-      
-      setOriginalPerson({ ...person }); // Store snapshot
+      setEditForm({ ...person });
+      setOriginalPerson({ ...person });
       setShouldArchive(false);
       setIsEditModalOpen(true);
   };
 
-  const closeEditModal = () => {
-      // Clear Draft on explicit cancel
-      localStorage.removeItem(`GM_DRAFT_PERSON_${person.id}`);
-      setIsEditModalOpen(false);
-  };
-
   const handleEditChange = (field: keyof Person, value: any) => {
-      if (editForm) {
-          const newState = { ...editForm, [field]: value };
-          setEditForm(newState);
-          // Autosave
-          localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
-      }
+      if (editForm) setEditForm({ ...editForm, [field]: value });
   };
 
-  // Helper for Career Management in Edit Mode
   const addCareerToForm = () => {
     if (editForm) {
-        const newCareer: CareerRecord = {
-            courseId: '',
-            courseName: '',
-            role: '',
-            startDate: '',
-            endDate: '',
-            description: ''
-        };
-        const newCareers = [newCareer, ...editForm.careers];
-        setEditForm({...editForm, careers: newCareers});
-        // Autosave
-        const newState = { ...editForm, careers: newCareers };
-        localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
+        const newCareer: CareerRecord = { courseId: '', courseName: '', role: '', startDate: '', endDate: '', description: '' };
+        setEditForm({...editForm, careers: [newCareer, ...editForm.careers]});
     }
   };
 
@@ -126,9 +84,6 @@ const PersonDetail: React.FC = () => {
         const newCareers = [...editForm.careers];
         newCareers.splice(index, 1);
         setEditForm({...editForm, careers: newCareers});
-        // Autosave
-        const newState = { ...editForm, careers: newCareers };
-        localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
     }
   };
 
@@ -137,9 +92,6 @@ const PersonDetail: React.FC = () => {
           const newCareers = [...editForm.careers];
           newCareers[index] = { ...newCareers[index], [field]: value };
           setEditForm({...editForm, careers: newCareers});
-          // Autosave
-          const newState = { ...editForm, careers: newCareers };
-          localStorage.setItem(`GM_DRAFT_PERSON_${person.id}`, JSON.stringify(newState));
       }
   };
 
@@ -147,43 +99,12 @@ const PersonDetail: React.FC = () => {
       if (!editForm) return;
 
       let finalPerson = { ...editForm };
-      let executeArchive = shouldArchive;
-
-      // --- Safety Net: Confirmation if changed but not checked ---
-      if (hasRoleChanged && !executeArchive && originalPerson?.currentCourseId) {
-          const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || '이전 소속';
-          executeArchive = window.confirm(
-              `⚠️ 직책/소속 변경이 감지되었습니다.\n\n'${originalPerson.currentRole} @ ${oldCourseName}' 정보를\n과거 이력(History)으로 보관하시겠습니까?\n\n[확인]: 보관하지 않고 저장 (권장)\n[취소]: 보관하지 않고 덮어쓰기`
-          );
-      }
-
-      // --- Auto-Archiving Logic ---
-      if (executeArchive && originalPerson && originalPerson.currentCourseId) {
+      
+      if (shouldArchive && originalPerson && originalPerson.currentCourseId) {
           const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || 'Unknown';
+          const changeReason = `[시스템 자동 보관] 직책/소속 변경 이력 기록됨`;
           
-          // Generate a detailed description for the archived record
-          const changes = [];
-          if (originalPerson.currentCourseId !== editForm.currentCourseId) {
-            changes.push(`소속 이동: ${oldCourseName} → ${courses.find(c => c.id === editForm.currentCourseId)?.name || '미정'}`);
-          }
-          if (originalPerson.currentRole !== editForm.currentRole) {
-            changes.push(`직책 변경: ${originalPerson.currentRole} → ${editForm.currentRole}`);
-          }
-
-          const changeReason = `[시스템 자동 보관] ${changes.join(', ')}`;
-          
-          // Calculate End Date intelligently
-          // If new role has a specific start date, the old role ended the day before.
-          // Otherwise, it ends today.
           let endDate = new Date().toISOString().split('T')[0];
-          if (editForm.currentRoleStartDate) {
-              const startObj = new Date(editForm.currentRoleStartDate);
-              if (!isNaN(startObj.getTime())) {
-                  startObj.setDate(startObj.getDate() - 1);
-                  endDate = startObj.toISOString().split('T')[0];
-              }
-          }
-
           const archivedRecord: CareerRecord = {
               courseId: originalPerson.currentCourseId,
               courseName: oldCourseName,
@@ -192,49 +113,29 @@ const PersonDetail: React.FC = () => {
               endDate: endDate,
               description: changeReason
           };
-          
-          // Add to top of career list
           finalPerson.careers = [archivedRecord, ...finalPerson.careers];
       }
 
       updatePerson(finalPerson);
-      // Clear Draft on Success
-      localStorage.removeItem(`GM_DRAFT_PERSON_${person.id}`);
       setIsEditModalOpen(false);
-      
-      const msg = executeArchive 
-        ? '인물 정보가 수정되었으며, 이전 경력이 성공적으로 보관되었습니다.' 
-        : '인물 정보가 수정되었습니다.';
-      alert(msg);
+      alert('인물 정보가 성공적으로 업데이트되었습니다.');
   };
 
-  // --- DELETE HANDLER ---
   const handleDelete = () => {
-      if (window.confirm(`정말로 '${person.name}' 인물 정보를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+      if (window.confirm(`정말로 '${person.name}' 인물 정보를 삭제하시겠습니까?`)) {
           deletePerson(person.id);
-          alert('삭제되었습니다.');
-          window.history.back();
+          navigate('/courses');
       }
   };
 
-  // --- REPUTATION ANALYSIS HANDLER ---
   const handleAnalyzeReputation = async () => {
       setIsAnalyzingReputation(true);
       setReputationReport(null);
-      
-      // Filter related logs based on person name (simple matching for now)
-      // In a real app, we'd use ID references, but logs store 'contactPerson' string
-      const relatedLogs = logs.filter(l => 
-          l.content.includes(person.name) || 
-          l.title.includes(person.name) || 
-          l.contactPerson === person.name
-      );
-
+      const relatedLogs = logs.filter(l => l.content.includes(person.name) || l.title.includes(person.name) || l.contactPerson === person.name);
       try {
           const report = await generatePersonReputationReport(person, relatedLogs);
           setReputationReport(report);
       } catch (error) {
-          console.error(error);
           alert('분석 중 오류가 발생했습니다.');
       } finally {
           setIsAnalyzingReputation(false);
@@ -242,461 +143,232 @@ const PersonDetail: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-500">
       {/* Profile Header */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
-        <div className="bg-brand-900 h-24 relative">
-             <div className="absolute top-4 right-4 flex space-x-2">
-                 {/* Delete Button (Trash) */}
-                 <button 
-                    onClick={handleDelete}
-                    className="bg-white/20 hover:bg-red-500/80 text-white p-2 rounded-full backdrop-blur-sm transition-colors"
-                    title="인물 정보 삭제"
-                 >
-                    <Trash2 size={18} />
-                 </button>
-                 {/* Edit Button */}
-                 <button 
-                    onClick={openEditModal}
-                    className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-full backdrop-blur-sm transition-colors"
-                    title="인물 정보 수정"
-                 >
-                    <Edit2 size={18} />
-                 </button>
+      <div className="bg-white rounded-[2rem] shadow-soft border border-slate-200 overflow-hidden relative">
+        <div className="bg-slate-900 h-28 relative">
+             <div className="absolute top-6 right-6 flex space-x-2 z-20">
+                 <button onClick={handleDelete} className="bg-white/10 hover:bg-red-500 text-white p-2.5 rounded-xl backdrop-blur-md transition-all border border-white/10 shadow-lg" title="삭제"><Trash2 size={20} /></button>
+                 <button onClick={openEditModal} className="bg-white/10 hover:bg-brand-600 text-white p-2.5 rounded-xl backdrop-blur-md transition-all border border-white/10 shadow-lg" title="수정"><Edit2 size={20} /></button>
              </div>
         </div>
-        <div className="px-6 pb-6 relative">
-            <div className="flex justify-between items-end -mt-10 mb-4">
-                <div className="bg-white p-1 rounded-full">
-                    <div className="bg-slate-200 rounded-full w-24 h-24 flex items-center justify-center text-slate-500 border-4 border-white">
-                        <User size={48} />
+        <div className="px-10 pb-10 relative">
+            <div className="flex flex-col md:flex-row justify-between items-end -mt-12 mb-6 gap-6">
+                <div className="bg-white p-1.5 rounded-[2.5rem] shadow-xl">
+                    <div className="bg-slate-100 rounded-[2.2rem] w-32 h-32 flex items-center justify-center text-slate-400 border-4 border-white shadow-inner">
+                        <User size={64} />
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-3">
                     {canUseAI && (
-                        <button 
-                            onClick={handleAnalyzeReputation}
-                            disabled={isAnalyzingReputation}
-                            className="flex items-center px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-bold shadow-md hover:bg-slate-900 transition-colors disabled:opacity-50 ring-1 ring-slate-700"
-                        >
-                            {isAnalyzingReputation ? <Loader2 size={14} className="animate-spin mr-1.5"/> : <Eye size={14} className="mr-1.5"/>}
-                            {isAnalyzingReputation ? "평판 조회 중..." : "평판/리스크 조회 (대외비)"}
+                        <button onClick={handleAnalyzeReputation} disabled={isAnalyzingReputation} className="flex items-center px-6 py-3 rounded-2xl bg-slate-900 text-white text-sm font-black shadow-xl hover:bg-slate-800 transition-all disabled:opacity-50 active:scale-95 ring-1 ring-white/10">
+                            {isAnalyzingReputation ? <Loader2 size={16} className="animate-spin mr-2"/> : <Sparkles size={16} className="mr-2 text-brand-400"/>}
+                            {isAnalyzingReputation ? "분석 리포트 생성 중..." : "AI 평판/리스크 분석"}
                         </button>
                     )}
-                    <div className={`px-4 py-2 rounded-lg border text-sm font-bold flex items-center ${getAffinityColor(person.affinity)}`}>
+                    <div className={`px-6 py-3 rounded-2xl border text-sm font-black flex items-center shadow-sm uppercase tracking-wider ${getAffinityColor(person.affinity)}`}>
                         {getAffinityText(person.affinity)}
                     </div>
                 </div>
             </div>
             
-            <h1 className="text-2xl font-bold text-slate-900">{person.name}</h1>
-            <p className="text-slate-600 font-medium mb-4 flex items-center">
-                {person.currentRole} @ {currentCourse?.name || '소속 없음'} 
-                {person.currentRoleStartDate && <span className="ml-2 text-xs font-normal bg-slate-100 px-2 py-0.5 rounded text-slate-500">(입사: {person.currentRoleStartDate})</span>}
-            </p>
+            <div className="space-y-1">
+                <h1 className="text-3xl font-black text-slate-900 tracking-tight">{person.name}</h1>
+                <p className="text-brand-700 font-bold text-lg flex items-center">
+                    <Building2 size={18} className="mr-2 opacity-70"/> {currentCourse?.name || '소속 정보 없음'}
+                    <span className="mx-3 text-slate-300 font-normal">|</span>
+                    <span className="text-slate-600">{person.currentRole}</span>
+                </p>
+            </div>
             
-            <div className="flex flex-col space-y-2 text-sm text-slate-500">
-                <div className="flex items-center">
-                    <Phone size={16} className="mr-3 text-slate-400" />
-                    {person.phone}
-                </div>
-                <div className="flex items-center">
-                    <MapPin size={16} className="mr-3 text-slate-400" />
-                    {currentCourse?.address || '-'}
-                </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 pt-8 border-t border-slate-100 text-sm font-medium text-slate-500">
+                <div className="flex items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><Phone size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-bold">{person.phone}</span></div>
+                <div className="flex items-center bg-slate-50 p-3 rounded-xl border border-slate-100"><Calendar size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-bold">재직 기간: {person.currentRoleStartDate ? `${person.currentRoleStartDate} ~ 현재` : '정보 미입력'}</span></div>
             </div>
         </div>
       </div>
 
-      {/* AI Reputation Report Section (Secret Dossier Style) */}
       {reputationReport && (
-          <div className="bg-slate-50 p-6 rounded-xl shadow-md border-l-4 border-l-red-500 border-t border-r border-b border-slate-200 animate-in slide-in-from-top-4 relative overflow-hidden">
-              {/* Watermark Background */}
-              <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none select-none">
-                  <span className="text-9xl font-black text-slate-900 -rotate-12">CONFIDENTIAL</span>
-              </div>
-
-              <div className="flex justify-between items-center mb-4 relative z-10">
-                  <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                      <FileWarning size={20} className="mr-2 text-red-600" />
-                      AI 평판 및 리스크 심층 분석 보고서 (Confidential)
-                  </h3>
-                  <button onClick={() => setReputationReport(null)} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
-              </div>
-              
-              <div className="bg-white p-5 rounded-lg border border-slate-200 text-slate-800 text-sm leading-relaxed whitespace-pre-line shadow-inner relative z-10 font-mono">
-                  {reputationReport}
-              </div>
-              
-              <div className="mt-3 flex justify-between items-center relative z-10">
-                  <div className="flex items-center text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded">
-                      <ShieldAlert size={12} className="mr-1"/> 
-                      주의: 이 정보는 AI 추론에 기반하며 사실과 다를 수 있습니다. 외부 공유 금지.
-                  </div>
-                  <p className="text-[10px] text-slate-400 text-right">
-                      Generated by GreenMaster AI Intelligence
-                  </p>
+          <div className="bg-indigo-900 text-white p-1 rounded-[2.5rem] shadow-2xl animate-in slide-in-from-top-4 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-10 opacity-10 pointer-events-none"><Sparkles size={200}/></div>
+              <div className="bg-indigo-950/50 p-8 rounded-[2.2rem] border border-white/5">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="text-xl font-black flex items-center tracking-tight">
+                        <FileWarning size={24} className="mr-3 text-amber-400" />
+                        AI Strategic Reputation Dossier
+                    </h3>
+                    <button onClick={() => setReputationReport(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X size={20}/></button>
+                </div>
+                <div className="text-indigo-100 text-base leading-relaxed whitespace-pre-line font-medium custom-scrollbar max-h-[400px] overflow-y-auto pr-4">
+                    {reputationReport}
+                </div>
+                <div className="mt-8 pt-6 border-t border-white/10 flex items-center text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">
+                    <ShieldAlert size={14} className="mr-2"/> CONFIDENTIAL DATA: GREENMASTER INTELLIGENCE UNIT ONLY
+                </div>
               </div>
           </div>
       )}
 
-      {/* Notes & Relationship */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center">
-              <HeartHandshake size={20} className="mr-2 text-brand-600" /> 관계 및 특징
-          </h3>
-          <div className="bg-yellow-50 border border-yellow-100 p-4 rounded-lg text-slate-700 text-sm leading-relaxed whitespace-pre-line">
-              {person.notes}
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Notes */}
+          <div className="lg:col-span-1 space-y-6">
+              <div className="bg-white p-8 rounded-[2rem] shadow-soft border border-slate-200">
+                  <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center tracking-tight">
+                      <HeartHandshake size={20} className="mr-3 text-brand-600" /> 관계 전략 및 특징
+                  </h3>
+                  <div className="text-slate-700 text-sm leading-relaxed whitespace-pre-line bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-inner italic">
+                      {person.notes || '등록된 메모가 없습니다.'}
+                  </div>
+              </div>
+          </div>
+
+          {/* Timeline */}
+          <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] shadow-soft border border-slate-200">
+            <h3 className="text-lg font-black text-slate-900 mb-8 flex items-center tracking-tight">
+                <Briefcase size={20} className="mr-3 text-brand-600" /> 커리어 히스토리
+            </h3>
+            
+            <div className="relative border-l-2 border-slate-100 ml-3 space-y-8 pb-4">
+                <div className="relative pl-10 animate-in fade-in slide-in-from-left-4">
+                    <div className="absolute -left-[11px] top-1.5 w-5 h-5 rounded-full bg-brand-500 border-4 border-white shadow-md ring-4 ring-brand-500/10"></div>
+                    <div className="bg-brand-50/50 border border-brand-100 rounded-3xl p-6 shadow-sm">
+                        <span className="text-[9px] font-black bg-brand-600 text-white px-2 py-0.5 rounded-full uppercase tracking-widest mb-3 inline-block">CURRENT ROLE</span>
+                        <h4 className="font-black text-slate-900 text-xl mb-1">{currentCourse?.name || '소속 미지정'}</h4>
+                        <p className="text-brand-700 font-bold text-sm mb-2">{person.currentRole}</p>
+                        <p className="text-slate-400 text-xs font-mono">{person.currentRoleStartDate ? `${person.currentRoleStartDate} ~ 현재` : '정보 없음'}</p>
+                    </div>
+                </div>
+
+                {person.careers.map((career, idx) => {
+                     const isExpanded = expandedItems.has(idx);
+                     return (
+                        <div key={idx} className="relative pl-10 group">
+                            <div className="absolute -left-[9px] top-6 w-4 h-4 rounded-full bg-slate-200 border-4 border-white shadow-sm group-hover:bg-slate-400 transition-colors"></div>
+                            <div onClick={() => toggleExpanded(idx)} className={`rounded-3xl border p-6 transition-all cursor-pointer hover:shadow-lg ${isExpanded ? 'bg-white border-slate-300 shadow-soft' : 'bg-white border-slate-100'}`}>
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <h4 className="font-black text-slate-800 text-lg mb-1">{career.courseName}</h4>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-slate-500 font-bold text-xs bg-slate-100 px-2 py-0.5 rounded-lg">{career.role}</span>
+                                            <span className="text-slate-400 text-xs font-mono">{career.startDate} ~ {career.endDate || '미상'}</span>
+                                        </div>
+                                    </div>
+                                    <ChevronDown size={20} className={`text-slate-300 transition-transform duration-300 ${isExpanded ? 'rotate-180 text-brand-600' : ''}`} />
+                                </div>
+                                {isExpanded && (
+                                    <div className="mt-5 pt-5 border-t border-slate-50 animate-in fade-in slide-in-from-top-2">
+                                        <p className="text-slate-600 text-sm leading-relaxed">{career.description || '상세 이력 내용이 없습니다.'}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                     );
+                })}
+            </div>
           </div>
       </div>
 
-      {/* Career Timeline */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center">
-            <Briefcase size={20} className="mr-2 text-brand-600" /> 경력 타임라인
-        </h3>
-        
-        <div className="relative border-l-2 border-slate-200 ml-3 space-y-6 pb-2">
-            {/* Current Job */}
-            <div className="relative pl-8">
-                <div className="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full bg-brand-500 border-4 border-white shadow-sm"></div>
-                <div className="bg-brand-50 border border-brand-100 rounded-lg p-4 shadow-sm">
-                    <h4 className="font-bold text-slate-900 text-md">{currentCourse?.name || '현재 소속'}</h4>
-                    <p className="text-brand-600 font-medium text-sm">{person.currentRole}</p>
-                    <p className="text-slate-400 text-xs mt-1">
-                        {person.currentRoleStartDate ? `${person.currentRoleStartDate} ~ 현재` : '현재 재직 중'}
-                    </p>
-                </div>
-            </div>
-
-            {/* Past Jobs */}
-            {person.careers.map((career, idx) => {
-                 const isExpanded = expandedItems.has(idx);
-                 return (
-                    <div key={idx} className="relative pl-8">
-                        <div className="absolute -left-[9px] top-4 w-4 h-4 rounded-full bg-slate-300 border-4 border-white"></div>
-                        
-                        <div 
-                            onClick={() => toggleExpanded(idx)}
-                            className={`rounded-lg border p-4 transition-all cursor-pointer hover:shadow-md ${
-                                isExpanded 
-                                ? 'bg-white border-slate-300 ring-1 ring-slate-200' 
-                                : 'bg-white border-slate-200 hover:border-slate-300'
-                            }`}
-                        >
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h4 className={`font-bold text-md ${isExpanded ? 'text-slate-900' : 'text-slate-700'}`}>
-                                        {career.courseName}
-                                    </h4>
-                                    <div className="flex items-center flex-wrap gap-2 mt-1">
-                                        <span className="text-slate-600 font-medium text-sm bg-slate-100 px-2 py-0.5 rounded">
-                                            {career.role}
-                                        </span>
-                                        <span className="text-slate-400 text-xs">
-                                            {career.startDate} ~ {career.endDate || '현재'}
-                                        </span>
-                                    </div>
-                                </div>
-                                <button className={`text-slate-400 transition-transform duration-200 ${isExpanded ? 'rotate-180 text-brand-600' : ''}`}>
-                                    <ChevronDown size={20} />
-                                </button>
-                            </div>
-                            
-                            {isExpanded && (
-                                <div className="mt-4 pt-3 border-t border-slate-100 animate-in fade-in slide-in-from-top-2">
-                                    <h5 className="text-xs font-bold text-slate-500 mb-2 uppercase tracking-wider">주요 성과 및 프로젝트</h5>
-                                    {career.description ? (
-                                        <p className="text-slate-700 text-sm leading-relaxed bg-slate-50 p-3 rounded-md border border-slate-100">
-                                            {career.description}
-                                        </p>
-                                    ) : (
-                                        <p className="text-slate-400 text-sm italic">
-                                            등록된 상세 내용이 없습니다.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                 );
-            })}
-        </div>
-      </div>
-
-       {/* Edit Modal */}
+       {/* Enhanced Edit Modal with Auto-Archive */}
        {isEditModalOpen && editForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-                    <h3 className="font-bold text-lg text-slate-900 flex items-center">
-                        인물 정보 수정
-                        <span className="ml-2 text-[10px] text-brand-600 bg-brand-50 border border-brand-100 px-2 py-0.5 rounded-full flex items-center">
-                            <Cloud size={10} className="mr-1"/> 자동 저장 중
-                        </span>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                <div className="px-10 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+                    <h3 className="font-black text-xl text-slate-900 flex items-center tracking-tight">
+                        <Edit2 size={24} className="mr-3 text-brand-600"/> 인물 정보 정밀 수정
                     </h3>
-                    <button onClick={closeEditModal} className="text-slate-400 hover:text-slate-600">
-                        <X size={24} />
-                    </button>
+                    <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-slate-200 rounded-full"><X size={28} /></button>
                 </div>
                 
-                <div className="p-6 space-y-6 overflow-y-auto">
-                    {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-4">
+                <div className="p-10 space-y-10 overflow-y-auto custom-scrollbar">
+                    {/* Basic Section */}
+                    <div className="grid grid-cols-2 gap-6">
                          <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1.5">이름</label>
-                            <input 
-                                type="text" 
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                value={editForm.name}
-                                onChange={(e) => handleEditChange('name', e.target.value)}
-                            />
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">인물 성명</label>
+                            <input type="text" className="w-full rounded-2xl border-slate-200 text-base font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.name} onChange={(e) => handleEditChange('name', e.target.value)} />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-1.5">연락처</label>
-                            <input 
-                                type="text" 
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                value={editForm.phone}
-                                onChange={(e) => handleEditChange('phone', e.target.value)}
-                            />
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">연락처 (Phone)</label>
+                            <input type="text" className="w-full rounded-2xl border-slate-200 text-base font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.phone} onChange={(e) => handleEditChange('phone', e.target.value)} />
                         </div>
                     </div>
 
-                    {/* Current Role Section - Highlighted */}
-                    <div className="bg-brand-50 p-4 rounded-lg border border-brand-100 ring-1 ring-brand-200/50">
-                        <div className="flex justify-between items-center mb-3 border-b border-brand-200 pb-2">
-                             <h4 className="text-xs font-bold text-brand-800 flex items-center">
-                                 <User size={14} className="mr-1.5"/> 현재 근무 정보 (Current)
+                    {/* Current Employment Status Section */}
+                    <div className="bg-slate-50/80 p-8 rounded-[2rem] border border-slate-200 relative group">
+                        <div className="flex justify-between items-center mb-6">
+                             <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] flex items-center">
+                                 <Building2 size={14} className="mr-2 text-brand-600"/> 현직 발령 정보 (Current Role)
                              </h4>
-                             {hasRoleChanged && (
-                                <span className="text-[10px] bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded font-bold animate-pulse">
-                                    변경됨
-                                </span>
-                             )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1.5">소속 골프장</label>
-                                <select 
-                                    className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                    value={editForm.currentCourseId || ''}
-                                    onChange={(e) => handleEditChange('currentCourseId', e.target.value)}
-                                >
-                                    <option value="">소속 없음</option>
-                                    {courses.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name}</option>
-                                    ))}
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">소속 골프장</label>
+                                <select className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 bg-white shadow-sm" value={editForm.currentCourseId || ''} onChange={(e) => handleEditChange('currentCourseId', e.target.value)}>
+                                    <option value="">소속 미지정</option>
+                                    {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-700 mb-1.5">직책</label>
-                                <input 
-                                    type="text" 
-                                    className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                    value={editForm.currentRole}
-                                    onChange={(e) => handleEditChange('currentRole', e.target.value)}
-                                />
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">현직 직책</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm bg-white" value={editForm.currentRole} onChange={(e) => handleEditChange('currentRole', e.target.value)} />
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">발령일 (Start Date)</label>
+                                <input type="date" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm bg-white" value={editForm.currentRoleStartDate || ''} onChange={(e) => handleEditChange('currentRoleStartDate', e.target.value)} />
                             </div>
                         </div>
-                        <div className="mt-3">
-                            <label className="block text-xs font-bold text-slate-700 mb-1.5">입사일</label>
-                            <input 
-                                type="date"
-                                className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                                value={editForm.currentRoleStartDate || ''}
-                                onChange={(e) => handleEditChange('currentRoleStartDate', e.target.value)}
-                            />
-                        </div>
 
-                        {/* Auto Archive Prompt */}
+                        {/* AUTO-ARCHIVE PROMPT: Show when changes detected */}
                         {hasRoleChanged && originalPerson?.currentCourseId && (
-                            <div className="mt-3 bg-white p-3 rounded border border-brand-200 flex items-start space-x-3 shadow-sm animate-in slide-in-from-top-2">
-                                <div className="bg-brand-100 p-1.5 rounded text-brand-600 shrink-0">
-                                    <Archive size={16} />
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-xs text-slate-800 font-bold mb-1">
-                                        경력 자동 보관
-                                    </p>
-                                    <div className="text-xs text-slate-600 mb-2 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
-                                        <div className="flex justify-between mb-1 items-center">
-                                            <span className="text-slate-400 w-8">이전:</span>
-                                            <span className="font-medium text-slate-700 truncate flex-1 text-right">{originalPerson?.currentRole} @ {courses.find(c=>c.id===originalPerson?.currentCourseId)?.name}</span>
+                            <div className="mt-8 bg-brand-50 p-6 rounded-3xl border border-brand-200 shadow-soft animate-in slide-in-from-top-4">
+                                <div className="flex items-start gap-4">
+                                    <div className="bg-white p-3 rounded-2xl text-brand-600 shadow-sm border border-brand-100"><Archive size={24}/></div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-black text-brand-900 mb-2">변경 사항이 감지되었습니다. 이전 경력을 보관하시겠습니까?</p>
+                                        <div className="bg-white/50 p-4 rounded-xl text-xs font-bold text-slate-600 mb-4 border border-brand-100 space-y-1">
+                                            <div className="flex justify-between"><span className="text-slate-400">Previous:</span> <span>{courses.find(c=>c.id===originalPerson.currentCourseId)?.name} / {originalPerson.currentRole}</span></div>
+                                            <div className="flex justify-between text-brand-700"><span className="opacity-50">Proposed:</span> <span>{courses.find(c=>c.id===editForm.currentCourseId)?.name} / {editForm.currentRole}</span></div>
                                         </div>
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-slate-400 w-8">변경:</span>
-                                            <span className="font-bold text-brand-700 truncate flex-1 text-right">{editForm?.currentRole} @ {courses.find(c=>c.id===editForm?.currentCourseId)?.name}</span>
-                                        </div>
+                                        <label className="flex items-center space-x-3 cursor-pointer select-none group/check">
+                                            <div className={`w-6 h-6 rounded-lg border-2 transition-all flex items-center justify-center ${shouldArchive ? 'bg-brand-600 border-brand-600 text-white shadow-lg' : 'bg-white border-slate-300'}`}>
+                                                {shouldArchive && <CheckCircle size={14}/>}
+                                            </div>
+                                            <input type="checkbox" checked={shouldArchive} onChange={(e) => setShouldArchive(e.target.checked)} className="hidden" />
+                                            <span className="text-xs font-black text-slate-800 uppercase tracking-tight group-hover/check:text-brand-700">Yes, archive previous role to History</span>
+                                        </label>
                                     </div>
-                                    <label className="flex items-center space-x-2 cursor-pointer select-none">
-                                        <input 
-                                            type="checkbox" 
-                                            checked={shouldArchive}
-                                            onChange={(e) => setShouldArchive(e.target.checked)}
-                                            className="rounded text-brand-600 focus:ring-brand-500 accent-brand-600 w-4 h-4"
-                                        />
-                                        <span className="text-xs text-slate-800 font-bold">이전 정보를 '과거 이력'에 저장 (타임라인 보존)</span>
-                                    </label>
                                 </div>
                             </div>
                         )}
                     </div>
 
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">친밀도 (관계)</label>
-                        <div className="flex space-x-2 overflow-x-auto pb-1 no-scrollbar">
-                            {[
-                                { val: '2', label: 'Ally', color: 'bg-green-100 text-green-800' },
-                                { val: '1', label: 'Friendly', color: 'bg-emerald-50 text-emerald-700' },
-                                { val: '0', label: 'Neutral', color: 'bg-slate-50 text-slate-600' },
-                                { val: '-1', label: 'Unfriendly', color: 'bg-orange-50 text-orange-700' },
-                                { val: '-2', label: 'Hostile', color: 'bg-red-50 text-red-700' },
-                            ].map(opt => (
-                                <button
-                                    key={opt.val}
-                                    type="button"
-                                    onClick={() => handleEditChange('affinity', parseInt(opt.val))}
-                                    className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all whitespace-nowrap ${
-                                        editForm.affinity === parseInt(opt.val)
-                                        ? `ring-2 ring-offset-1 ring-brand-500 ${opt.color} border-transparent`
-                                        : 'bg-white border-slate-200 text-slate-500'
-                                    }`}
-                                >
-                                    {opt.label}
-                                </button>
-                            ))}
+                    <div className="space-y-6">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center"><History size={14} className="mr-2 text-brand-500"/> 경력 타임라인 (Career History)</h4>
+                            <button type="button" onClick={addCareerToForm} className="text-[10px] font-black bg-slate-900 text-white px-4 py-2 rounded-xl shadow-lg hover:bg-slate-800 transition-all active:scale-95 flex items-center"><Plus size={14} className="mr-1.5"/> ADD RECORD</button>
                         </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1.5">특징 및 메모</label>
-                        <textarea 
-                            rows={3}
-                            className="w-full rounded-lg border-slate-300 text-sm focus:border-brand-500 focus:ring-brand-500"
-                            value={editForm.notes}
-                            onChange={(e) => handleEditChange('notes', e.target.value)}
-                        />
-                    </div>
-
-                    {/* Career History Edit Section */}
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                        <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-2">
-                             <h4 className="text-xs font-bold text-slate-700 flex items-center">
-                                <Briefcase size={14} className="mr-1.5"/> 과거 이력 관리
-                             </h4>
-                             <button type="button" onClick={addCareerToForm} className="text-[10px] flex items-center bg-white border border-slate-300 px-2 py-1 rounded hover:bg-slate-100 shadow-sm font-medium">
-                                <Plus size={10} className="mr-1"/> 직접 추가
-                             </button>
-                        </div>
-                        
-                        {/* Auto Archive Preview */}
-                        {shouldArchive && originalPerson?.currentCourseId && (
-                            <div className="mb-4 bg-brand-50/50 border border-brand-200 border-dashed rounded-lg p-3 relative animate-in fade-in slide-in-from-top-2">
-                                <div className="absolute top-0 right-0 bg-brand-100 text-brand-600 px-2 py-0.5 rounded-bl text-[10px] font-bold shadow-sm flex items-center">
-                                    <Sparkles size={10} className="mr-1"/> 자동 생성 예정
-                                </div>
-                                <div className="flex items-center mb-2">
-                                     <div className="w-1.5 h-1.5 rounded-full bg-brand-500 mr-2"></div>
-                                     <h5 className="text-xs font-bold text-brand-700">과거 이력으로 저장될 항목 (미리보기)</h5>
-                                </div>
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600 pl-3.5">
-                                     <div><span className="text-slate-400 text-[10px]">골프장:</span> {courses.find(c => c.id === originalPerson.currentCourseId)?.name}</div>
-                                     <div><span className="text-slate-400 text-[10px]">직책:</span> {originalPerson.currentRole}</div>
-                                     <div className="col-span-2"><span className="text-slate-400 text-[10px]">기간:</span> {originalPerson.currentRoleStartDate || '미상'} ~ </div>
-                                     <div className="col-span-2 text-brand-600 italic mt-1 text-[10px]">"{`[시스템 자동 보관] 변경사항 반영됨`}"</div>
-                                </div>
-                            </div>
-                        )}
-
                         <div className="space-y-4">
                             {editForm.careers.map((career, idx) => (
-                                <div key={idx} className="relative bg-white p-3 rounded border border-slate-200 hover:border-slate-300 shadow-sm group transition-all">
-                                    <button 
-                                        onClick={() => removeCareerFromForm(idx)}
-                                        className="absolute -right-2 -top-2 bg-white text-slate-400 hover:text-red-500 p-1 rounded-full border border-slate-200 shadow opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title="삭제"
-                                    >
-                                        <Trash2 size={12} />
-                                    </button>
-                                    
-                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                        <div>
-                                            <label className="text-[10px] text-slate-400 block mb-0.5">골프장명</label>
-                                            <input 
-                                                type="text" 
-                                                className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
-                                                value={career.courseName}
-                                                onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] text-slate-400 block mb-0.5">당시 직책</label>
-                                            <input 
-                                                type="text" 
-                                                className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
-                                                value={career.role}
-                                                onChange={(e) => updateCareerField(idx, 'role', e.target.value)}
-                                            />
-                                        </div>
+                                <div key={idx} className="relative bg-slate-50/50 p-6 rounded-3xl border border-slate-200 group transition-all hover:border-slate-400">
+                                    <button onClick={() => removeCareerFromForm(idx)} className="absolute -right-3 -top-3 bg-white text-red-400 hover:text-red-600 p-2 rounded-xl border border-slate-200 shadow-xl opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16} /></button>
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Golf Course</label><input type="text" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.courseName} onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)} /></div>
+                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Position / Role</label><input type="text" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.role} onChange={(e) => updateCareerField(idx, 'role', e.target.value)} /></div>
                                     </div>
-                                    <div className="flex space-x-2 items-end">
-                                        <div className="flex-1">
-                                            <label className="text-[10px] text-slate-400 block mb-0.5">기간</label>
-                                            <div className="flex items-center space-x-1">
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="YYYY-MM"
-                                                    className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
-                                                    value={career.startDate}
-                                                    onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)}
-                                                />
-                                                <ArrowRight size={10} className="text-slate-300"/>
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="종료일"
-                                                    className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
-                                                    value={career.endDate || ''}
-                                                    onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="mt-2">
-                                        <input 
-                                            type="text" 
-                                            placeholder="주요 성과/설명 (선택)"
-                                            className="w-full text-xs border-slate-300 rounded focus:ring-brand-500 py-1"
-                                            value={career.description || ''}
-                                            onChange={(e) => updateCareerField(idx, 'description', e.target.value)}
-                                        />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">Start Date</label><input type="text" placeholder="YYYY-MM" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.startDate} onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)} /></div>
+                                        <div><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block ml-1">End Date</label><input type="text" placeholder="YYYY-MM" className="w-full text-xs font-black border-slate-200 rounded-xl p-3 focus:ring-brand-500 shadow-sm" value={career.endDate || ''} onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)} /></div>
                                     </div>
                                 </div>
                             ))}
-                            {editForm.careers.length === 0 && !shouldArchive && (
-                                <div className="text-center text-xs text-slate-400 py-4 bg-slate-50/50 rounded border border-dashed border-slate-200">
-                                    등록된 과거 이력이 없습니다.
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
                 
-                <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end space-x-3 shrink-0">
-                    <button 
-                        onClick={closeEditModal}
-                        className="px-4 py-2 text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-100"
-                    >
-                        취소
-                    </button>
-                    <button 
-                        onClick={saveEdit}
-                        className="px-4 py-2 text-sm font-bold text-white bg-brand-600 rounded-lg hover:bg-brand-700 flex items-center shadow-sm"
-                    >
-                        <CheckCircle size={16} className="mr-2" />
-                        저장 완료
-                    </button>
+                <div className="p-10 border-t border-slate-100 bg-slate-50 flex justify-end space-x-4 shrink-0 shadow-inner">
+                    <button onClick={() => setIsEditModalOpen(false)} className="px-8 py-3.5 text-sm font-black text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-widest">DISCARD</button>
+                    <button onClick={saveEdit} className="px-12 py-3.5 text-sm font-black text-white bg-slate-900 rounded-2xl hover:bg-slate-800 flex items-center shadow-xl transform active:scale-95 transition-all uppercase tracking-[0.1em]"><CheckCircle size={20} className="mr-3 text-brand-400" /> APPLY ALL CHANGES</button>
                 </div>
             </div>
         </div>

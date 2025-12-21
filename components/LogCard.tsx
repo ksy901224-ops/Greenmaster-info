@@ -58,8 +58,6 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
     e.preventDefault();
     e.stopPropagation();
     
-    // PRUNE log carefully to ensure it's a plain object with only necessary fields
-    // This prevents Structured Clone failures (Maximum call stack size exceeded)
     const sanitizedLog = {
         id: log.id,
         date: log.date,
@@ -78,7 +76,6 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
     navigate('/write', { log: sanitizedLog });
   };
 
-  // Structured parser for Gemini output
   const renderStructuredInsight = (text: string) => {
     const parts = text.split(/(?=\d+\.\s\*\*)/);
     return parts.map((part, index) => {
@@ -124,7 +121,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
           <div className="flex items-center">
             <div className="flex items-center text-xs text-slate-400 font-mono">{log.date}</div>
             {isAdmin && (
-              <div className="flex items-center space-x-1 ml-3 bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
+              <div className="flex items-center space-x-1 ml-3 bg-white rounded-lg p-1 border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={handleEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="수정"><Edit2 size={14} /></button>
                 <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="삭제"><Trash2 size={14} /></button>
               </div>
@@ -140,13 +137,6 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
           <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} className="flex items-center text-xs font-bold text-slate-400 hover:text-brand-600 mb-4 transition-colors focus:outline-none w-fit">
             {isExpanded ? <>접기 <ChevronUp size={14} className="ml-1"/></> : <>더 읽기 <ChevronDown size={14} className="ml-1"/></>}
           </button>
-        )}
-        {log.imageUrls && log.imageUrls.length > 0 && (
-          <div className="flex overflow-x-auto space-x-2 mb-4 pb-2 no-scrollbar">
-            {log.imageUrls.map((url, idx) => (
-              <img key={idx} src={url} alt="Attachment" className="h-24 w-24 object-cover rounded-lg flex-shrink-0 border border-slate-100 shadow-sm hover:scale-105 transition-transform" />
-            ))}
-          </div>
         )}
         <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
           <div className="flex items-center space-x-2 overflow-hidden flex-1 flex-wrap gap-y-2">
@@ -167,29 +157,43 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
           </div>
         </div>
       </div>
+
       {showInsight && insight && !isLoading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowInsight(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200 max-h-[90vh] ring-1 ring-white/20" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-gradient-to-r from-purple-700 to-indigo-800 p-5 flex justify-between items-center shrink-0">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setShowInsight(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200 max-h-[85vh] ring-1 ring-white/20" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-slate-900 p-5 flex justify-between items-center shrink-0 border-b border-slate-800">
                <div className="flex items-center text-white">
-                  <div className="bg-white/20 p-2 rounded-xl mr-3 shadow-inner"><Sparkles className="text-amber-300" size={24} /></div>
-                  <div><h3 className="font-bold text-lg leading-none tracking-tight">AI Insight Report</h3><p className="text-xs text-purple-200 mt-1 opacity-90 font-medium">Powered by Gemini</p></div>
+                  <div className="bg-brand-500/20 p-2 rounded-xl mr-3 shadow-inner"><Sparkles className="text-brand-400" size={24} /></div>
+                  <div>
+                      <h3 className="font-bold text-lg leading-none tracking-tight">AI Insight Report</h3>
+                      <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-black">Strategic Intelligence Analysis</p>
+                  </div>
                </div>
-               <button onClick={() => setShowInsight(false)} className="text-white/70 hover:text-white hover:bg-white/10 p-2 rounded-full transition-colors"><X size={20} /></button>
+               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-2 rounded-full transition-colors"><X size={20} /></button>
             </div>
-            <div className="p-6 overflow-y-auto custom-scrollbar bg-slate-50/30">
-                <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm flex items-start gap-4">
-                   <div className="p-2.5 bg-slate-100 rounded-lg text-slate-500"><Info size={20} /></div>
-                   <div className="flex-1">
-                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between"><span>분석 대상</span><span className="text-slate-400 font-mono font-normal">{log.date}</span></div>
-                      <div className="font-bold text-slate-800 text-sm mb-0.5">{log.courseName} <span className="font-normal text-slate-400">| {log.department}</span></div>
-                      <div className="text-xs text-slate-600 line-clamp-1">{log.title}</div>
+            
+            <div className="p-6 overflow-y-auto custom-scrollbar bg-white">
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-6 shadow-inner flex items-start gap-4">
+                   <div className="p-2.5 bg-white rounded-lg text-slate-400 shadow-sm border border-slate-100"><Info size={20} /></div>
+                   <div className="flex-1 overflow-hidden">
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
+                          <span>Reference Source</span>
+                          <span className="text-slate-400 font-mono font-normal">{log.date}</span>
+                      </div>
+                      <div className="font-bold text-slate-800 text-sm mb-0.5 truncate">{log.courseName} <span className="font-normal text-slate-400">| {log.department}</span></div>
+                      <div className="text-xs text-slate-500 truncate font-medium">{log.title}</div>
                    </div>
                 </div>
-                <div className="space-y-1">{renderStructuredInsight(insight)}</div>
+                
+                <div className="space-y-2">
+                    {renderStructuredInsight(insight)}
+                </div>
             </div>
-            <div className="p-4 bg-white border-t border-slate-100 flex justify-end shrink-0">
-               <button onClick={() => setShowInsight(false)} className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl transition-colors text-sm shadow-md hover:shadow-lg transform active:scale-95 flex items-center"><CheckCircle size={16} className="mr-2" />확인 및 닫기</button>
+
+            <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0 gap-3">
+               <button onClick={() => setShowInsight(false)} className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-all text-sm shadow-xl active:scale-95 flex items-center">
+                   <CheckCircle size={16} className="mr-2 text-brand-400" />확인 완료
+               </button>
             </div>
           </div>
         </div>
