@@ -1,3 +1,4 @@
+
 // @google/genai service for intelligence processing
 import { GoogleGenAI, Type, GenerateContentResponse, Chat } from "@google/genai";
 import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
@@ -5,8 +6,7 @@ import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
- * Enhanced Multi-Entity Extraction
- * 분석된 문서에서 골프장, 인물, 업무 로그 정보를 구조적으로 추출합니다.
+ * Enhanced Multi-Entity Extraction with Granular Categorization
  */
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
@@ -27,27 +27,30 @@ export const analyzeDocument = async (
   contentParts.push({
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다. 
-      제공된 문서(이미지/PDF/텍스트)를 분석하여 우리 회사의 지식 데이터베이스에 저장할 수 있는 형태로 변환하세요.
+      제공된 문서를 정밀 분석하여 전략적 데이터베이스 형태로 변환하고, 문서 전체에 대한 인사이트를 제공하세요.
 
-      [분석 지침]
-      1. 골프장(Courses): 문서에 언급된 모든 골프장의 명칭과 위치, 규모 정보를 추출하세요. 
-         - 기존 목록([${courseListStr}])에 없는 골프장은 '신규'로 간주합니다.
-      2. 업무 일지(Logs): 발생한 업무 내역, 날짜, 담당자, 내용을 요약하세요.
-      3. 인물(People): 성함, 직책, 소속 골프장 정보를 추출하고, 문맥상 우리에 대한 우호도(Affinity)를 -2 ~ 2 사이로 추론하세요.
-      4. 인사이트(Insight): 추출된 정보로부터 얻을 수 있는 전략적 가치와 리스크를 한 문장으로 요약하세요.
+      [핵심 분석 요구사항]
+      1. 골프장(Courses): 명칭, 지역, 주소, 규모(홀수)를 추출하고 '기존 목록([${courseListStr}])' 포함 여부를 판단하세요.
+      2. 업무 일지(Logs): 분류체계(summary, details, strategy, risk, priority)에 맞춰 기술하세요.
+      3. 인물(People): 성함, 직책, 소속, 우호도, 특이사항을 추출하세요.
+      4. 문서 총괄 분석: 
+         - documentSummary: 문서의 핵심 내용을 2-3문장으로 간결하게 요약.
+         - documentDetailedReport: 추출된 데이터 포인트들의 연관성, 비즈니스적 시사점, 향후 대응 전략을 포함한 상세 보고서.
 
-      반드시 제공된 JSON 스키마 형식으로만 답변하세요.
+      반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요.
     `
   });
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3-pro-preview',
     contents: { parts: contentParts },
     config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
+          documentSummary: { type: Type.STRING },
+          documentDetailedReport: { type: Type.STRING },
           extractedCourses: {
             type: Type.ARRAY,
             items: {
@@ -57,7 +60,8 @@ export const analyzeDocument = async (
                 region: { type: Type.STRING },
                 address: { type: Type.STRING },
                 holes: { type: Type.NUMBER },
-                description: { type: Type.STRING }
+                description: { type: Type.STRING },
+                isNew: { type: Type.BOOLEAN }
               }
             }
           },
@@ -69,10 +73,13 @@ export const analyzeDocument = async (
                 date: { type: Type.STRING },
                 courseName: { type: Type.STRING },
                 title: { type: Type.STRING },
-                content: { type: Type.STRING },
+                summary: { type: Type.STRING },
+                details: { type: Type.STRING },
+                strategy: { type: Type.STRING },
+                risk: { type: Type.STRING },
+                priority: { type: Type.NUMBER },
                 department: { type: Type.STRING },
-                tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                insight: { type: Type.STRING }
+                tags: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             }
           },
@@ -90,7 +97,7 @@ export const analyzeDocument = async (
             }
           }
         },
-        required: ["extractedCourses", "extractedLogs", "extractedPeople"]
+        required: ["extractedCourses", "extractedLogs", "extractedPeople", "documentSummary", "documentDetailedReport"]
       }
     }
   });
@@ -101,47 +108,54 @@ export const analyzeDocument = async (
 export const createChatSession = (
   appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] }
 ): Chat => {
-  const prunedLogs = appContextData.logs.slice(0, 40).map(l => ({ 
-    d: l.date, c: l.courseName, t: l.title, content: l.content.substring(0, 150) 
+  const prunedLogs = appContextData.logs.slice(0, 50).map(l => ({ 
+    d: l.date, c: l.courseName, t: l.title, content: l.content.substring(0, 200) 
   }));
-  const prunedCourses = appContextData.courses.slice(0, 80).map(c => ({ 
+  const prunedCourses = appContextData.courses.slice(0, 100).map(c => ({ 
     n: c.name, r: c.region, h: c.holes, t: c.type 
   }));
-  const prunedPeople = appContextData.people.slice(0, 80).map(p => ({ 
-    n: p.name, r: p.currentRole, c: p.currentCourseId, a: p.affinity, careers: p.careers.map(car => car.courseName)
+  const prunedPeople = appContextData.people.slice(0, 100).map(p => ({ 
+    n: p.name, r: p.currentRole, c: p.currentCourseId, a: p.affinity
   }));
 
   const systemInstruction = `
-    당신은 대한민국 골프장 업계의 핵심 정보를 관리하는 전략 인텔리전스 비서 'GreenMaster AI'입니다.
-    사용자의 요청에 따라 사내 데이터베이스를 검색하고 최적의 통찰을 제공하세요.
-    [시스템 데이터 (Context)]
-    - 골프장 마스터: ${JSON.stringify(prunedCourses)}
-    - 인적 네트워크: ${JSON.stringify(prunedPeople)}
-    - 최근 업무 히스토리: ${JSON.stringify(prunedLogs)}
+    당신은 대한민국 골프장 업계의 최고 전략가 'GreenMaster AI'입니다.
+    데이터에 기반하여 요약, 상세 설명, 리스크 및 기회 요인을 구분하여 답변하세요.
+    [컨텍스트 데이터]
+    - 골프장: ${JSON.stringify(prunedCourses)}
+    - 인물: ${JSON.stringify(prunedPeople)}
+    - 히스토리: ${JSON.stringify(prunedLogs)}
   `;
 
-  // Fix: The Thinking Config is only available for the Gemini 3 and 2.5 series models.
-  // Updated from 'gemini-flash-lite-latest' to 'gemini-3-flash-preview'.
   return ai.chats.create({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3-pro-preview',
     config: {
       systemInstruction: systemInstruction,
-      temperature: 0.5,
-      thinkingConfig: { thinkingBudget: 24576 }
+      temperature: 0.4,
+      thinkingConfig: { thinkingBudget: 32768 }
     },
   });
 };
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
-  const prompt = `업무 일지 분석 및 전략 도출:
-골프장: ${log.courseName}
-제목: ${log.title}
-내용: ${log.content}
-위 내용을 분석하여 1) 핵심 요약, 2) 업계 관점에서의 함의, 3) 후속 조치(Next Steps)를 제시하세요.`;
+  const prompt = `
+    다음 업무 일지를 정밀 분석하여 비즈니스 인텔리전스 보고서를 작성하세요.
+    [일지 정보]
+    골프장: ${log.courseName}
+    제목: ${log.title}
+    내용: ${log.content}
+
+    [작성 양식]
+    1. **요약 (Summary)**: 이 일지의 핵심 쟁점을 단 한 문장으로 기술.
+    2. **상세 분석 (Detailed Analysis)**: 일지 내용에 숨겨진 기술적/운영적 세부 사항 분석.
+    3. **전략적 함의 (Strategic Implications)**: 당사 비즈니스에 미치는 영향 및 기회.
+    4. **리스크 및 대응 (Risks & Actions)**: 주의해야 할 리스크와 즉각적인 후속 조치 제안.
+  `;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-3-pro-preview',
     contents: prompt,
+    config: { thinkingConfig: { thinkingBudget: 16384 } }
   });
   return response.text || "분석 실패";
 };
@@ -184,15 +198,22 @@ export const generatePersonReputationReport = async (
   person: Person,
   logs: LogEntry[]
 ): Promise<string> => {
-  const prunedLogs = logs.slice(0, 10).map(l => `${l.date}: ${l.title}`).join('\n');
-  const prompt = `인물 평판 및 네트워크 가치 분석: ${person.name} (${person.currentRole}). 
-  [관련 기록 요약] ${prunedLogs}
-  이 인물의 업계 내 영향력, 업무 스타일, 그리고 우리 회사와의 관계 안정성을 분석하세요.`;
+  const prunedLogs = logs.slice(0, 15).map(l => `${l.date}: ${l.title}`).join('\n');
+  const prompt = `
+    인물 프로파일링: ${person.name} (${person.currentRole}). 
+    [관련 기록 히스토리]
+    ${prunedLogs}
+    
+    위 데이터를 기반으로 다음을 분석하세요:
+    - **전문성 평가**: 업무 스타일 및 전문 분야
+    - **네트워크 가치**: 업계 내 영향력 및 연결 고리
+    - **관계 리스크**: 우리 회사와의 우호도 변동성 및 주의사항
+    - **접근 전략**: 이 인물과의 관계를 강화하기 위한 실질적인 행동 지침
+  `;
   
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    // Fix: Max thinking budget for Pro models provides deeper reasoning.
     config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;
@@ -203,13 +224,23 @@ export const generateCourseSummary = async (
   logs: LogEntry[],
   people: Person[]
 ): Promise<string> => {
-  const prunedLogs = logs.slice(0, 15).map(l => `[${l.date}] ${l.title}`).join(', ');
-  const prunedPeople = people.slice(0, 10).map(p => `${p.name}(${p.currentRole}, 친밀도:${p.affinity})`).join(' | ');
-  const prompt = `골프장 전략 리포트 작성: '${course.name}'. 현황: ${course.description} 주요인물: ${prunedPeople} 최근기록: ${prunedLogs}`;
+  const prunedLogs = logs.slice(0, 20).map(l => `[${l.date}] ${l.title}`).join(', ');
+  const prunedPeople = people.slice(0, 15).map(p => `${p.name}(${p.currentRole}, 우호도:${p.affinity})`).join(' | ');
+  const prompt = `
+    골프장 종합 전략 진단: '${course.name}'. 
+    - 현황: ${course.description} 
+    - 인적 자산: ${prunedPeople} 
+    - 히스토리 요약: ${prunedLogs}
+
+    [작성 가이드]
+    1. **운영 현황 진단**: 현재 골프장의 상태 및 주요 이슈 요약
+    2. **인적 네트워크 분석**: 키맨(Key-man) 파악 및 영향력 분석
+    3. **비즈니스 기회 (Opportunities)**: 당사가 파고들 수 있는 틈새 전략
+    4. **향후 전망**: 업계 트렌드 대비 이 골프장의 포지셔닝
+  `;
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    // Fix: Max thinking budget for Pro models provides deeper reasoning.
     config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;

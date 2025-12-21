@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { LogEntry, Department, UserRole } from '../types';
-import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target } from 'lucide-react';
+// Added FileText to imports
+import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, ShieldAlert, Zap, FileText } from 'lucide-react';
 import { analyzeLogEntry } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -27,36 +28,19 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const handleAnalyze = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
+    e.preventDefault(); e.stopPropagation();
     if (showInsight) return;
     if (insight) { setShowInsight(true); return; }
-
     setIsLoading(true);
     try {
       const result = await analyzeLogEntry(log);
       setInsight(result);
       setShowInsight(true);
-    } catch (error) {
-      console.error(error);
-      alert('AI 분석에 실패했습니다.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (window.confirm("정말로 이 업무 기록을 삭제하시겠습니까?\n삭제된 데이터는 복구할 수 없습니다.")) {
-      deleteLog(log.id);
-    }
+    } catch (error) { alert('AI 분석에 실패했습니다.'); } finally { setIsLoading(false); }
   };
 
   const handleEdit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault(); e.stopPropagation();
     navigate('/write', { log: { ...log, tags: [...(log.tags || [])] } });
   };
 
@@ -70,22 +54,27 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
       }
       const rawTitle = headerMatch[1].replace(/:$/, '').trim(); 
       const body = part.replace(headerMatch[0], '').replace(/^\d+\.\s*:?/, '').trim(); 
+      
       let styleClass = "bg-slate-50 border-slate-200";
       let titleClass = "text-slate-700";
       let Icon = Info;
+
       if (rawTitle.includes("요약")) {
         styleClass = "bg-indigo-50 border-indigo-100"; titleClass = "text-indigo-700"; Icon = Lightbulb;
+      } else if (rawTitle.includes("상세") || rawTitle.includes("분석")) {
+        styleClass = "bg-white border-slate-200"; titleClass = "text-slate-700"; Icon = FileText;
       } else if (rawTitle.includes("리스크") || rawTitle.includes("함의")) {
-        styleClass = "bg-amber-50 border-amber-100"; titleClass = "text-amber-700"; Icon = AlertTriangle;
-      } else if (rawTitle.includes("액션") || rawTitle.includes("추천")) {
+        styleClass = "bg-red-50 border-red-100"; titleClass = "text-red-700"; Icon = ShieldAlert;
+      } else if (rawTitle.includes("전략") || rawTitle.includes("액션")) {
         styleClass = "bg-emerald-50 border-emerald-100"; titleClass = "text-emerald-700"; Icon = Target;
       }
+
       return (
-        <div key={index} className={`rounded-xl border p-4 mb-4 last:mb-0 shadow-sm transition-all hover:shadow-md ${styleClass}`}>
-          <h4 className={`font-bold text-sm mb-2 flex items-center ${titleClass}`}>
-            <Icon size={16} className="mr-2" /> {rawTitle}
+        <div key={index} className={`rounded-xl border p-5 mb-4 last:mb-0 shadow-sm transition-all hover:shadow-md ${styleClass}`}>
+          <h4 className={`font-black text-xs uppercase tracking-widest mb-3 flex items-center ${titleClass}`}>
+            <Icon size={14} className="mr-2" /> {rawTitle}
           </h4>
-          <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line pl-1">{body.replace(/^:/, '').trim()}</p>
+          <p className="text-slate-800 text-sm leading-relaxed whitespace-pre-line font-medium">{body.replace(/^:/, '').trim()}</p>
         </div>
       );
     });
@@ -106,8 +95,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
             <div className="flex items-center text-xs text-slate-400 font-mono">{log.date}</div>
             {isAdmin && (
               <div className="flex items-center space-x-1 ml-3 bg-white rounded-lg p-1 border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={handleEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="수정"><Edit2 size={14} /></button>
-                <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors" title="삭제"><Trash2 size={14} /></button>
+                <button onClick={handleEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"><Edit2 size={14} /></button>
               </div>
             )}
           </div>
@@ -125,9 +113,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
         <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
           <div className="flex items-center space-x-2 overflow-hidden flex-1 flex-wrap gap-y-2">
             {log.tags?.map((tag, idx) => (
-              <span key={idx} className="flex items-center text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md font-medium border border-slate-200">
-                <Tag size={10} className="mr-1 opacity-70" /> {tag}
-              </span>
+              <span key={idx} className="flex items-center text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-md font-medium border border-slate-200"><Tag size={10} className="mr-1 opacity-70" /> {tag}</span>
             ))}
           </div>
           <div className="flex items-center space-x-3 shrink-0 ml-2">
@@ -135,7 +121,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
               {canUseAI && (
                   <button onClick={handleAnalyze} disabled={isLoading} className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-all shadow-sm ${showInsight ? 'bg-purple-100 text-purple-700 border-purple-200 ring-2 ring-purple-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-gradient-to-r hover:from-purple-500 hover:to-indigo-500 hover:text-white hover:border-transparent'}`}>
                       {isLoading ? <Loader2 size={12} className="animate-spin mr-1" /> : <Sparkles size={12} className="mr-1" />}
-                      {isLoading ? '분석 중...' : 'AI Insight'}
+                      {isLoading ? '분석 중...' : 'Intelligent Insight'}
                   </button>
               )}
           </div>
@@ -144,39 +130,39 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
 
       {showInsight && insight && !isLoading && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setShowInsight(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200 max-h-[85vh] ring-1 ring-white/20" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-slate-900 p-5 flex justify-between items-center shrink-0 border-b border-slate-800">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200 max-h-[85vh] ring-1 ring-white/20" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-slate-900 p-6 flex justify-between items-center shrink-0 border-b border-slate-800">
                <div className="flex items-center text-white">
-                  <div className="bg-brand-500/20 p-2 rounded-xl mr-3 shadow-inner"><Sparkles className="text-brand-400" size={24} /></div>
+                  <div className="bg-brand-500/20 p-2.5 rounded-2xl mr-4 shadow-inner"><Sparkles className="text-brand-400" size={24} /></div>
                   <div>
-                      <h3 className="font-bold text-lg leading-none tracking-tight text-white">AI Insight Report</h3>
-                      <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-black">Strategic Intelligence Analysis</p>
+                      <h3 className="font-black text-xl leading-none tracking-tight text-white uppercase">AI Business Insight</h3>
+                      <p className="text-[10px] text-slate-400 mt-1.5 uppercase tracking-[0.2em] font-black">Strategic Intelligence Report</p>
                   </div>
                </div>
-               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-2 rounded-full transition-colors focus:outline-none"><X size={20} /></button>
+               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-2.5 rounded-full transition-colors focus:outline-none"><X size={24} /></button>
             </div>
             
-            <div className="p-6 overflow-y-auto custom-scrollbar bg-white flex-1">
-                <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-6 shadow-inner flex items-start gap-4">
-                   <div className="p-2.5 bg-white rounded-lg text-slate-400 shadow-sm border border-slate-100"><Info size={20} /></div>
+            <div className="p-8 overflow-y-auto custom-scrollbar bg-slate-50/30 flex-1">
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm flex items-start gap-4 ring-1 ring-slate-100">
+                   <div className="p-3 bg-slate-900 rounded-xl text-brand-400 shadow-lg"><Info size={20} /></div>
                    <div className="flex-1 overflow-hidden">
-                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 flex items-center justify-between">
-                          <span>Reference Source</span>
-                          <span className="text-slate-400 font-mono font-normal">{log.date}</span>
+                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1.5 flex items-center justify-between">
+                          <span>Intelligence Source</span>
+                          <span className="font-mono text-slate-500">{log.date}</span>
                       </div>
-                      <div className="font-bold text-slate-800 text-sm mb-0.5 truncate">{log.courseName} <span className="font-normal text-slate-400">| {log.department}</span></div>
-                      <div className="text-xs text-slate-500 truncate font-medium">{log.title}</div>
+                      <div className="font-black text-slate-900 text-base mb-1 truncate">{log.courseName} <span className="font-medium text-slate-400 mx-2">|</span> {log.department}</div>
+                      <div className="text-xs text-slate-500 truncate font-bold">{log.title}</div>
                    </div>
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-4">
                     {renderStructuredInsight(insight)}
                 </div>
             </div>
 
-            <div className="p-5 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0 gap-3">
-               <button onClick={() => setShowInsight(false)} className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-all text-sm shadow-xl active:scale-95 flex items-center">
-                   <CheckCircle size={16} className="mr-2 text-brand-400" />확인 완료
+            <div className="p-6 bg-white border-t border-slate-100 flex justify-end shrink-0 gap-3 shadow-inner">
+               <button onClick={() => setShowInsight(false)} className="px-10 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-[1.2rem] transition-all text-sm shadow-xl active:scale-95 flex items-center uppercase tracking-widest">
+                   <CheckCircle size={18} className="mr-3 text-brand-400" />Done
                </button>
             </div>
           </div>

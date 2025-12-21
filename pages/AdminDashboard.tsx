@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole, UserStatus, Department, UserProfile, SystemLog, GolfCourse, CourseType, GrassType, Region } from '../types';
-import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2, Key, Mail, User as UserIcon } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2, Key, Mail, User as UserIcon, Filter, Info, ChevronRight, FileSearch } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 
 interface EnhancedSyncItem {
@@ -33,6 +33,15 @@ const AdminDashboard: React.FC = () => {
   const [catalogText, setCatalogText] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResults, setSyncResults] = useState<EnhancedSyncItem[] | null>(null);
+  const [docSummary, setDocSummary] = useState<string | null>(null);
+  const [docDetail, setDocDetail] = useState<string | null>(null);
+  const [aiReportTab, setAiReportTab] = useState<'SUMMARY' | 'DETAIL'>('SUMMARY');
+  
+  // Filtering States
+  const [filterConflict, setFilterConflict] = useState<'ALL' | 'new' | 'update'>('ALL');
+  const [filterStatus, setFilterStatus] = useState<'ALL' | 'pending' | 'success' | 'error'>('ALL');
+  const [masterSearch, setMasterSearch] = useState('');
+
   const [batchProcessing, setBatchProcessing] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +75,8 @@ const AdminDashboard: React.FC = () => {
       if (!catalogText.trim() && selectedFiles.length === 0) return;
       setIsSyncing(true);
       setSyncResults(null);
+      setDocSummary(null);
+      setDocDetail(null);
 
       try {
           const inputData: any[] = [];
@@ -91,28 +102,33 @@ const AdminDashboard: React.FC = () => {
 
           const results = await analyzeDocument(inputData, courses.map(c => c.name));
           
-          if (results && results.extractedCourses) {
-              const enhanced: EnhancedSyncItem[] = results.extractedCourses.map((item: any, idx: number) => {
-                  const existing = courses.find(c => c.name === item.name);
-                  return {
-                      id: `sync-${Date.now()}-${idx}`,
-                      original: item,
-                      editable: {
-                          courseName: item.name,
-                          region: (item.region as Region) || '기타',
-                          address: item.address || '',
-                          holes: item.holes || 18,
-                          type: '대중제',
-                          openYear: new Date().getFullYear().toString(),
-                          description: item.description || '',
-                          issues: []
-                      },
-                      status: 'pending',
-                      conflictType: existing ? 'update' : 'new',
-                      isEditing: false
-                  };
-              });
-              setSyncResults(enhanced);
+          if (results) {
+              setDocSummary(results.documentSummary);
+              setDocDetail(results.documentDetailedReport);
+
+              if (results.extractedCourses) {
+                  const enhanced: EnhancedSyncItem[] = results.extractedCourses.map((item: any, idx: number) => {
+                      const existing = courses.find(c => c.name === item.name);
+                      return {
+                          id: `sync-${Date.now()}-${idx}`,
+                          original: item,
+                          editable: {
+                              courseName: item.name,
+                              region: (item.region as Region) || '기타',
+                              address: item.address || '',
+                              holes: item.holes || 18,
+                              type: '대중제',
+                              openYear: new Date().getFullYear().toString(),
+                              description: item.description || '',
+                              issues: []
+                          },
+                          status: 'pending',
+                          conflictType: existing ? 'update' : 'new',
+                          isEditing: false
+                      };
+                  });
+                  setSyncResults(enhanced);
+              }
           }
       } catch (error) {
           console.error(error);
@@ -122,6 +138,18 @@ const AdminDashboard: React.FC = () => {
           setSelectedFiles([]);
       }
   };
+
+  const filteredSyncResults = useMemo(() => {
+      if (!syncResults) return [];
+      return syncResults.filter(item => {
+          const matchConflict = filterConflict === 'ALL' || item.conflictType === filterConflict;
+          const matchStatus = filterStatus === 'ALL' || item.status === filterStatus;
+          const matchSearch = masterSearch === '' || 
+                             item.editable.courseName.toLowerCase().includes(masterSearch.toLowerCase()) ||
+                             item.editable.address.toLowerCase().includes(masterSearch.toLowerCase());
+          return matchConflict && matchStatus && matchSearch;
+      });
+  }, [syncResults, filterConflict, filterStatus, masterSearch]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -139,18 +167,6 @@ const AdminDashboard: React.FC = () => {
       } catch (err: any) {
           alert(err.message || '사용자 생성에 실패했습니다.');
       }
-  };
-
-  const toggleEdit = (id: string) => {
-      setSyncResults(prev => prev ? prev.map(item => 
-          item.id === id ? { ...item, isEditing: !item.isEditing } : item
-      ) : null);
-  };
-
-  const updateEditableField = (id: string, field: string, value: any) => {
-      setSyncResults(prev => prev ? prev.map(item => 
-          item.id === id ? { ...item, editable: { ...item.editable, [field]: value } } : item
-      ) : null);
   };
 
   const applySyncItem = async (id: string) => {
@@ -198,10 +214,10 @@ const AdminDashboard: React.FC = () => {
 
   const handleBulkApply = async () => {
       if (!syncResults) return;
-      const pendingItems = syncResults.filter(i => i.status !== 'success');
+      const pendingItems = filteredSyncResults.filter(i => i.status !== 'success');
       if (pendingItems.length === 0) return;
 
-      if (window.confirm(`${pendingItems.length}건의 데이터를 일괄 반영하시겠습니까?`)) {
+      if (window.confirm(`${pendingItems.length}건의 필터링된 데이터를 일괄 반영하시겠습니까?`)) {
           setBatchProcessing(true);
           for (const item of pendingItems) {
               await applySyncItem(item.id);
@@ -285,23 +301,93 @@ const AdminDashboard: React.FC = () => {
                   </div>
               </div>
 
+              {/* AI Report Section */}
+              {(docSummary || docDetail) && (
+                  <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl animate-in slide-in-from-bottom-4">
+                      <div className="flex border-b border-slate-100">
+                          <button 
+                            onClick={() => setAiReportTab('SUMMARY')}
+                            className={`flex-1 py-4 text-sm font-bold flex items-center justify-center transition-all ${aiReportTab === 'SUMMARY' ? 'bg-brand-50 text-brand-700 border-b-2 border-brand-500' : 'text-slate-400 hover:bg-slate-50'}`}
+                          >
+                            <Zap size={16} className="mr-2"/> 핵심 요약 (Concise Summary)
+                          </button>
+                          <button 
+                            onClick={() => setAiReportTab('DETAIL')}
+                            className={`flex-1 py-4 text-sm font-bold flex items-center justify-center transition-all ${aiReportTab === 'DETAIL' ? 'bg-brand-50 text-brand-700 border-b-2 border-brand-500' : 'text-slate-400 hover:bg-slate-50'}`}
+                          >
+                            <FileSearch size={16} className="mr-2"/> 상세 분석 보고서 (Detailed Report)
+                          </button>
+                      </div>
+                      <div className="p-8">
+                          {aiReportTab === 'SUMMARY' ? (
+                              <div className="animate-in fade-in duration-300">
+                                  <div className="flex items-start gap-4">
+                                      <div className="p-3 bg-brand-100 text-brand-600 rounded-2xl shrink-0"><Lightbulb size={24}/></div>
+                                      <p className="text-slate-700 text-lg font-medium leading-relaxed italic">"{docSummary}"</p>
+                                  </div>
+                              </div>
+                          ) : (
+                              <div className="animate-in fade-in duration-300">
+                                  <div className="prose prose-slate max-w-none">
+                                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 shadow-inner text-slate-800 text-sm leading-loose whitespace-pre-line font-medium">
+                                          {docDetail}
+                                      </div>
+                                  </div>
+                              </div>
+                          )}
+                      </div>
+                  </div>
+              )}
+
               {syncResults && (
                   <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl animate-in slide-in-from-top-4">
-                      <div className="p-6 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                          <h3 className="font-bold text-slate-800 text-lg flex items-center">
-                              <Activity size={20} className="mr-2 text-brand-600"/>
-                              분석 결과 ({syncResults.length}건)
-                          </h3>
-                          <div className="flex items-center gap-3">
-                              <button onClick={() => setSyncResults(null)} className="px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-colors">Discard</button>
-                              <button 
-                                onClick={handleBulkApply}
-                                disabled={batchProcessing || syncResults.every(i => i.status === 'success')}
-                                className="bg-slate-900 text-white px-8 py-3 rounded-xl text-sm font-bold hover:bg-slate-800 shadow-md flex items-center transition-all disabled:opacity-50"
-                              >
-                                  {batchProcessing ? <Loader2 size={18} className="animate-spin mr-2"/> : <Save size={18} className="mr-2"/>}
-                                  일괄 반영
-                              </button>
+                      <div className="p-6 bg-slate-50 border-b border-slate-200 space-y-6">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                              <h3 className="font-bold text-slate-800 text-lg flex items-center">
+                                  <Activity size={20} className="mr-2 text-brand-600"/>
+                                  데이터 동기화 큐 ({filteredSyncResults.length} / {syncResults.length}건)
+                              </h3>
+                              <div className="flex items-center gap-3">
+                                  <button onClick={() => { setSyncResults(null); setDocSummary(null); setDocDetail(null); }} className="px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-colors">Discard All</button>
+                                  <button 
+                                    onClick={handleBulkApply}
+                                    disabled={batchProcessing || filteredSyncResults.every(i => i.status === 'success')}
+                                    className="bg-slate-900 text-white px-8 py-3 rounded-xl text-sm font-bold hover:bg-slate-800 shadow-md flex items-center transition-all disabled:opacity-50"
+                                  >
+                                      {batchProcessing ? <Loader2 size={18} className="animate-spin mr-2"/> : <Save size={18} className="mr-2"/>}
+                                      필터 항목 일괄 반영
+                                  </button>
+                              </div>
+                          </div>
+
+                          {/* Advanced Filters for Master Sync */}
+                          <div className="flex flex-wrap items-center gap-6 pt-2 border-t border-slate-200/60">
+                              <div className="flex items-center gap-3">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center"><Filter size={14} className="mr-1.5"/> Conflict Type</span>
+                                  <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+                                      {['ALL', 'new', 'update'].map(t => (
+                                          <button key={t} onClick={() => setFilterConflict(t as any)} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all uppercase ${filterConflict === t ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{t}</button>
+                                      ))}
+                                  </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center"><CheckCircle size={14} className="mr-1.5"/> Sync Status</span>
+                                  <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200">
+                                      {['ALL', 'pending', 'success', 'error'].map(s => (
+                                          <button key={s} onClick={() => setFilterStatus(s as any)} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all uppercase ${filterStatus === s ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{s}</button>
+                                      ))}
+                                  </div>
+                              </div>
+                              <div className="flex-1 min-w-[200px] relative">
+                                  <Search className="absolute left-3 top-2 text-slate-400" size={14}/>
+                                  <input 
+                                    type="text" 
+                                    placeholder="결과 내 검색..." 
+                                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-500/20"
+                                    value={masterSearch}
+                                    onChange={(e) => setMasterSearch(e.target.value)}
+                                  />
+                              </div>
                           </div>
                       </div>
 
@@ -318,33 +404,43 @@ const AdminDashboard: React.FC = () => {
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                  {syncResults.map((item) => (
-                                      <tr key={item.id} className={`transition-all ${item.status === 'success' ? 'bg-green-50/30' : 'hover:bg-slate-50'}`}>
+                                  {filteredSyncResults.map((item) => (
+                                      <tr key={item.id} className={`transition-all ${item.status === 'success' ? 'bg-green-50/30 opacity-70' : 'hover:bg-slate-50'}`}>
                                           <td className="px-6 py-4">
                                               {item.status === 'success' ? (
-                                                  <span className="text-green-600 font-bold flex items-center"><Check size={14} className="mr-1"/> Synced</span>
+                                                  <span className="text-green-600 font-black text-[10px] flex items-center uppercase"><CheckCircle size={14} className="mr-1.5"/> Completed</span>
+                                              ) : item.status === 'error' ? (
+                                                  <span className="text-red-600 font-black text-[10px] flex items-center uppercase"><AlertTriangle size={14} className="mr-1.5"/> {item.error || 'Failed'}</span>
                                               ) : (
                                                   <span className={`text-[10px] px-2 py-1 rounded font-black uppercase tracking-wider ${item.conflictType === 'update' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                                       {item.conflictType === 'update' ? 'UPDATE' : 'NEW'}
                                                   </span>
                                               )}
                                           </td>
-                                          <td className="px-6 py-4 font-bold text-slate-900">{item.editable.courseName}</td>
-                                          <td className="px-6 py-4">{item.editable.region}</td>
-                                          <td className="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate">{item.editable.address}</td>
-                                          <td className="px-6 py-4 font-bold">{item.editable.holes}H</td>
+                                          <td className="px-6 py-4 font-black text-slate-900">{item.editable.courseName}</td>
+                                          <td className="px-6 py-4 font-bold text-slate-600">{item.editable.region}</td>
+                                          <td className="px-6 py-4 text-xs text-slate-500 max-w-[250px] truncate" title={item.editable.address}>{item.editable.address}</td>
+                                          <td className="px-6 py-4 font-black">{item.editable.holes}H</td>
                                           <td className="px-6 py-4 text-right">
                                               {item.status !== 'success' && (
                                                   <button 
                                                       onClick={() => applySyncItem(item.id)}
-                                                      className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 shadow-sm transition-all"
+                                                      className="bg-brand-600 text-white px-5 py-2 rounded-xl text-xs font-black hover:bg-brand-700 shadow-sm transition-all active:scale-95 flex items-center gap-1.5 ml-auto"
                                                   >
-                                                      반영
+                                                      <Check size={14}/> 반영
                                                   </button>
                                               )}
                                           </td>
                                       </tr>
                                   ))}
+                                  {filteredSyncResults.length === 0 && (
+                                      <tr>
+                                          <td colSpan={6} className="py-20 text-center">
+                                              <Search size={48} className="mx-auto text-slate-200 mb-4"/>
+                                              <p className="text-slate-400 font-bold">조건에 맞는 결과가 없습니다.</p>
+                                          </td>
+                                      </tr>
+                                  )}
                               </tbody>
                           </table>
                       </div>
