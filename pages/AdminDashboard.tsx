@@ -25,7 +25,7 @@ interface EnhancedSyncItem {
 }
 
 const AdminDashboard: React.FC = () => {
-  const { user, allUsers, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse, createUserManually } = useApp();
+  const { user, allUsers, isAdmin, isSeniorOrAdmin, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse, createUserManually } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'MASTER'>('MASTER');
 
@@ -50,11 +50,11 @@ const AdminDashboard: React.FC = () => {
 
   // Access Control
   React.useEffect(() => {
-    if (user && (user.role !== UserRole.ADMIN && user.role !== UserRole.SENIOR)) {
-      alert('접근 권한이 없습니다. 관리자/상급자만 접근 가능합니다.');
+    if (!isSeniorOrAdmin) {
+      alert('접근 권한이 없습니다. 상급자 이상만 접근 가능합니다.');
       navigate('/');
     }
-  }, [user, navigate]);
+  }, [isSeniorOrAdmin, navigate]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files) {
@@ -91,21 +91,21 @@ const AdminDashboard: React.FC = () => {
 
           const results = await analyzeDocument(inputData, courses.map(c => c.name));
           
-          if (results) {
-              const enhanced: EnhancedSyncItem[] = results.map((item, idx) => {
-                  const existing = courses.find(c => c.name === item.courseName);
+          if (results && results.extractedCourses) {
+              const enhanced: EnhancedSyncItem[] = results.extractedCourses.map((item: any, idx: number) => {
+                  const existing = courses.find(c => c.name === item.name);
                   return {
                       id: `sync-${Date.now()}-${idx}`,
                       original: item,
                       editable: {
-                          courseName: item.courseName,
-                          region: (item.course_info?.region as Region) || '기타',
-                          address: item.course_info?.address || '',
-                          holes: item.course_info?.holes || 18,
-                          type: item.course_info?.type || '대중제',
-                          openYear: item.course_info?.openYear || new Date().getFullYear().toString(),
+                          courseName: item.name,
+                          region: (item.region as Region) || '기타',
+                          address: item.address || '',
+                          holes: item.holes || 18,
+                          type: '대중제',
+                          openYear: new Date().getFullYear().toString(),
                           description: item.description || '',
-                          issues: item.strategic_analysis?.issues || []
+                          issues: []
                       },
                       status: 'pending',
                       conflictType: existing ? 'update' : 'new',
@@ -125,6 +125,7 @@ const AdminDashboard: React.FC = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
       e.preventDefault();
+      if (!isAdmin) return;
       try {
           await createUserManually({
               name: newUserForm.name,
@@ -179,7 +180,7 @@ const AdminDashboard: React.FC = () => {
                   address: item.editable.address,
                   openYear: item.editable.openYear,
                   grassType: GrassType.ZOYSIA,
-                  area: item.original.course_info?.area || '정보없음',
+                  area: '정보없음',
                   description: item.editable.description,
                   issues: item.editable.issues
               });
@@ -210,7 +211,7 @@ const AdminDashboard: React.FC = () => {
       }
   };
 
-  if (!user || (user.role !== UserRole.ADMIN && user.role !== UserRole.SENIOR)) return null;
+  if (!user || !isSeniorOrAdmin) return null;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 relative">
@@ -219,18 +220,20 @@ const AdminDashboard: React.FC = () => {
         <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center">
                 <Shield className="mr-3 text-brand-700" size={28} /> 
-                시스템 마스터 통합 관리
+                인텔리전스 마스터 관리
             </h1>
-            <p className="text-slate-500 text-sm mt-1 ml-10">전국 골프장 데이터 정합성 관리 및 파일 기반 일괄 업로드를 지원합니다.</p>
+            <p className="text-slate-500 text-sm mt-1 ml-10">데이터 정합성 관리 및 {isAdmin ? '사용자 권한 통제' : '업무 로그 감사'}를 수행합니다.</p>
         </div>
         
         <div className="flex bg-slate-100 p-1 rounded-xl mt-4 md:mt-0 shadow-inner">
              <button onClick={() => setActiveTab('MASTER')} className={`px-5 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${activeTab === 'MASTER' ? 'bg-white shadow-sm text-brand-800' : 'text-slate-500 hover:text-slate-700'}`}>
                  <Database size={16} className="mr-2"/> 데이터 동기화
              </button>
-             <button onClick={() => setActiveTab('USERS')} className={`px-5 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${activeTab === 'USERS' ? 'bg-white shadow-sm text-brand-800' : 'text-slate-500 hover:text-slate-700'}`}>
-                 <Users size={16} className="mr-2"/> 사용자 계정
-             </button>
+             {isAdmin && (
+                <button onClick={() => setActiveTab('USERS')} className={`px-5 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${activeTab === 'USERS' ? 'bg-white shadow-sm text-brand-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                    <Users size={16} className="mr-2"/> 사용자 계정
+                </button>
+             )}
              <button onClick={() => setActiveTab('LOGS')} className={`px-5 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${activeTab === 'LOGS' ? 'bg-white shadow-sm text-brand-800' : 'text-slate-500 hover:text-slate-700'}`}>
                  <List size={16} className="mr-2"/> 감사 로그
              </button>
@@ -239,50 +242,42 @@ const AdminDashboard: React.FC = () => {
 
       {activeTab === 'MASTER' && (
           <div className="space-y-6">
-              <div className="bg-indigo-950 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
+              <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl relative overflow-hidden">
                   <div className="absolute top-0 right-0 p-10 opacity-10"><Sparkles size={200} /></div>
                   <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
                       <div className="flex flex-col justify-center">
-                        <div className="inline-flex items-center space-x-2 bg-indigo-500/20 px-3 py-1 rounded-full text-indigo-300 text-xs font-bold mb-4 w-fit border border-indigo-500/30">
-                            <Sparkles size={12}/>
-                            <span>Next-Gen Data Ingestion</span>
+                        <div className="inline-flex items-center space-x-2 bg-brand-500/20 px-3 py-1 rounded-full text-brand-300 text-xs font-bold mb-4 w-fit border border-brand-500/30">
+                            <Zap size={12}/>
+                            <span>Mass Data Ingestion</span>
                         </div>
                         <h2 className="text-3xl font-black mb-3 tracking-tight">전국 골프장 지능형 데이터 동기화</h2>
-                        <p className="text-indigo-200 text-sm mb-6 leading-relaxed">
-                            PDF 문서, 엑셀 캡처, 또는 텍스트 목록을 업로드하세요. <br/>
-                            AI가 지역, 주소, 홀수, 개장일 등 핵심 정보를 자동 추출하여 기존 DB와 대조합니다.
+                        <p className="text-slate-300 text-sm mb-6 leading-relaxed">
+                            보고서, PDF, 또는 텍스트 목록을 입력하세요. <br/>
+                            AI가 명칭, 지역, 홀수 정보를 자동 추출하여 시스템 DB와 대조합니다.
                         </p>
                         <div className="flex flex-wrap gap-3">
                             <button 
                                 onClick={() => fileInputRef.current?.click()}
-                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-xl font-bold flex items-center shadow-lg transition-all active:scale-95 border border-indigo-400/30"
+                                className="bg-slate-800 hover:bg-slate-700 text-white px-6 py-3 rounded-xl font-bold flex items-center shadow-lg transition-all active:scale-95 border border-slate-700"
                             >
-                                <FileUp size={20} className="mr-2"/> 파일 선택 (PDF/IMG)
+                                <FileUp size={20} className="mr-2"/> 파일 선택
                                 <input type="file" multiple ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*,application/pdf" />
                             </button>
                             <button 
                                 onClick={handleCatalogSync}
                                 disabled={isSyncing || (!catalogText.trim() && selectedFiles.length === 0)}
-                                className="bg-white text-indigo-900 px-8 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-all flex items-center disabled:opacity-50 shadow-lg active:scale-95"
+                                className="bg-brand-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-brand-500 transition-all flex items-center disabled:opacity-50 shadow-lg active:scale-95"
                             >
                                 {isSyncing ? <Loader2 size={20} className="animate-spin mr-3"/> : <BookOpen size={20} className="mr-3"/>}
-                                분석 및 동기화 시작
+                                AI 분석 시작
                             </button>
                         </div>
-                        {selectedFiles.length > 0 && (
-                            <div className="mt-4 flex flex-wrap gap-2">
-                                {selectedFiles.map((f, i) => (
-                                    <span key={i} className="text-[10px] bg-white/10 px-2 py-1 rounded border border-white/20">{f.name}</span>
-                                ))}
-                            </div>
-                        )}
                       </div>
                       
-                      <div className="bg-slate-900/50 p-6 rounded-2xl border border-white/10 focus-within:border-indigo-400 transition-colors shadow-inner">
-                          <label className="block text-[10px] font-bold text-indigo-300 uppercase mb-2 tracking-widest">Text Input Area</label>
+                      <div className="bg-white/5 p-6 rounded-2xl border border-white/10 shadow-inner">
                           <textarea 
-                             className="w-full bg-transparent border-none focus:ring-0 text-indigo-50 text-sm h-48 custom-scrollbar placeholder:text-indigo-300/30 font-mono"
-                             placeholder="[전북] 상떼힐 CC, 익산시 춘포면, 6홀, 2009년... [전북] 태인CC, 회원제, 18홀, 1997년..."
+                             className="w-full bg-transparent border-none focus:ring-0 text-slate-100 text-sm h-48 custom-scrollbar placeholder:text-slate-600 font-mono"
+                             placeholder="텍스트 목록을 여기에 붙여넣으세요..."
                              value={catalogText}
                              onChange={(e) => setCatalogText(e.target.value)}
                           />
@@ -293,35 +288,32 @@ const AdminDashboard: React.FC = () => {
               {syncResults && (
                   <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl animate-in slide-in-from-top-4">
                       <div className="p-6 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                          <div>
-                            <h3 className="font-bold text-slate-800 text-lg flex items-center">
-                                <Activity size={20} className="mr-2 text-indigo-600"/>
-                                추출 데이터 분석 결과 ({syncResults.length}건)
-                            </h3>
-                            <p className="text-xs text-slate-500 mt-1">시스템에서 자동으로 매칭된 결과를 검토하세요.</p>
-                          </div>
-                          <div className="flex items-center gap-3 w-full sm:w-auto">
-                              <button onClick={() => setSyncResults(null)} className="px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-sm transition-colors uppercase tracking-widest">Discard</button>
+                          <h3 className="font-bold text-slate-800 text-lg flex items-center">
+                              <Activity size={20} className="mr-2 text-brand-600"/>
+                              분석 결과 ({syncResults.length}건)
+                          </h3>
+                          <div className="flex items-center gap-3">
+                              <button onClick={() => setSyncResults(null)} className="px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-colors">Discard</button>
                               <button 
                                 onClick={handleBulkApply}
                                 disabled={batchProcessing || syncResults.every(i => i.status === 'success')}
-                                className="flex-1 sm:flex-none bg-indigo-600 text-white px-10 py-3 rounded-xl text-sm font-bold hover:bg-indigo-700 shadow-md flex items-center justify-center transition-all disabled:opacity-50"
+                                className="bg-slate-900 text-white px-8 py-3 rounded-xl text-sm font-bold hover:bg-slate-800 shadow-md flex items-center transition-all disabled:opacity-50"
                               >
                                   {batchProcessing ? <Loader2 size={18} className="animate-spin mr-2"/> : <Save size={18} className="mr-2"/>}
-                                  일괄 데이터 반영
+                                  일괄 반영
                               </button>
                           </div>
                       </div>
 
-                      <div className="overflow-x-auto max-h-[800px] custom-scrollbar">
+                      <div className="overflow-x-auto max-h-[600px] custom-scrollbar">
                           <table className="w-full text-sm text-left border-collapse">
                               <thead className="bg-slate-100 text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-20">
                                   <tr>
                                       <th className="px-6 py-4">Status</th>
-                                      <th className="px-6 py-4">Name & Region</th>
+                                      <th className="px-6 py-4">Name</th>
+                                      <th className="px-6 py-4">Region</th>
                                       <th className="px-6 py-4">Address</th>
-                                      <th className="px-6 py-4">Scale</th>
-                                      <th className="px-6 py-4">Summary</th>
+                                      <th className="px-6 py-4">Holes</th>
                                       <th className="px-6 py-4 text-right">Actions</th>
                                   </tr>
                               </thead>
@@ -330,66 +322,25 @@ const AdminDashboard: React.FC = () => {
                                       <tr key={item.id} className={`transition-all ${item.status === 'success' ? 'bg-green-50/30' : 'hover:bg-slate-50'}`}>
                                           <td className="px-6 py-4">
                                               {item.status === 'success' ? (
-                                                  <div className="flex items-center text-green-600 font-bold">
-                                                      <Check size={16} className="mr-1"/> Synced
-                                                  </div>
+                                                  <span className="text-green-600 font-bold flex items-center"><Check size={14} className="mr-1"/> Synced</span>
                                               ) : (
-                                                  <span className={`text-[10px] px-2 py-1 rounded-md font-black uppercase tracking-wider ${item.conflictType === 'update' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                  <span className={`text-[10px] px-2 py-1 rounded font-black uppercase tracking-wider ${item.conflictType === 'update' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                                       {item.conflictType === 'update' ? 'UPDATE' : 'NEW'}
                                                   </span>
                                               )}
                                           </td>
-                                          <td className="px-6 py-4">
-                                              {item.isEditing ? (
-                                                  <div className="space-y-2">
-                                                    <input type="text" className="w-full text-xs p-1 border rounded" value={item.editable.courseName} onChange={e => updateEditableField(item.id, 'courseName', e.target.value)} />
-                                                    <select className="w-full text-[10px] p-1 border rounded bg-white" value={item.editable.region} onChange={e => updateEditableField(item.id, 'region', e.target.value)}>
-                                                        {['서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '인천', '부산', '대구', '울산', '대전', '광주', '세종', '기타'].map(r => <option key={r} value={r}>{r}</option>)}
-                                                    </select>
-                                                  </div>
-                                              ) : (
-                                                  <div>
-                                                      <div className="font-bold text-slate-900">{item.editable.courseName}</div>
-                                                      <div className="text-[10px] text-slate-500 font-bold uppercase">{item.editable.region}</div>
-                                                  </div>
-                                              )}
-                                          </td>
-                                          <td className="px-6 py-4">
-                                              {item.isEditing ? (
-                                                  <input type="text" className="w-full text-xs p-1 border rounded" value={item.editable.address} onChange={e => updateEditableField(item.id, 'address', e.target.value)} />
-                                              ) : (
-                                                  <div className="text-xs text-slate-600 max-w-xs truncate">{item.editable.address}</div>
-                                              )}
-                                          </td>
-                                          <td className="px-6 py-4">
-                                              <div className="flex items-center space-x-2">
-                                                {item.isEditing ? (
-                                                    <input type="number" className="w-16 text-xs p-1 border rounded" value={item.editable.holes} onChange={e => updateEditableField(item.id, 'holes', parseInt(e.target.value))} />
-                                                ) : (
-                                                    <span className="font-bold text-slate-700">{item.editable.holes}H</span>
-                                                )}
-                                                <span className="text-[10px] text-slate-400">({item.editable.type})</span>
-                                              </div>
-                                          </td>
-                                          <td className="px-6 py-4">
-                                              <div className="text-xs text-slate-500 italic max-w-sm line-clamp-2">"{item.editable.description}"</div>
-                                          </td>
+                                          <td className="px-6 py-4 font-bold text-slate-900">{item.editable.courseName}</td>
+                                          <td className="px-6 py-4">{item.editable.region}</td>
+                                          <td className="px-6 py-4 text-xs text-slate-500 max-w-[200px] truncate">{item.editable.address}</td>
+                                          <td className="px-6 py-4 font-bold">{item.editable.holes}H</td>
                                           <td className="px-6 py-4 text-right">
                                               {item.status !== 'success' && (
-                                                  <div className="flex justify-end space-x-2">
-                                                      <button 
-                                                          onClick={() => toggleEdit(item.id)}
-                                                          className={`p-2 rounded-lg border transition-all ${item.isEditing ? 'bg-brand-900 text-white border-brand-900' : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600 shadow-sm'}`}
-                                                      >
-                                                          {item.isEditing ? <Check size={16}/> : <Edit2 size={16}/>}
-                                                      </button>
-                                                      <button 
-                                                          onClick={() => applySyncItem(item.id)}
-                                                          className="bg-slate-900 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-800 shadow-sm"
-                                                      >
-                                                          반영
-                                                      </button>
-                                                  </div>
+                                                  <button 
+                                                      onClick={() => applySyncItem(item.id)}
+                                                      className="bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 shadow-sm transition-all"
+                                                  >
+                                                      반영
+                                                  </button>
                                               )}
                                           </td>
                                       </tr>
@@ -402,15 +353,15 @@ const AdminDashboard: React.FC = () => {
           </div>
       )}
 
-      {activeTab === 'USERS' && (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
+      {activeTab === 'USERS' && isAdmin && (
+          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-right-4">
               <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                  <h3 className="font-bold text-slate-800 flex items-center"><Users className="mr-2" size={20}/> 사용자 계정 관리 ({allUsers.length})</h3>
+                  <h3 className="font-bold text-slate-800 flex items-center"><Users className="mr-2" size={20}/> 사용자 계정 권한 관리 ({allUsers.length})</h3>
                   <button 
                     onClick={() => setIsCreateModalOpen(true)}
                     className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center hover:bg-slate-800 transition-all shadow-md active:scale-95"
                   >
-                      <UserPlus size={18} className="mr-2"/> 신규 사용자 생성
+                      <UserPlus size={18} className="mr-2"/> 신규 사용자 직접 생성
                   </button>
               </div>
               <div className="overflow-x-auto">
@@ -421,7 +372,7 @@ const AdminDashboard: React.FC = () => {
                               <th className="px-6 py-4">부서</th>
                               <th className="px-6 py-4">권한 레벨</th>
                               <th className="px-6 py-4">상태</th>
-                              <th className="px-6 py-4 text-right">관리</th>
+                              <th className="px-6 py-4 text-right">권한 변경</th>
                           </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -438,13 +389,9 @@ const AdminDashboard: React.FC = () => {
                                   </td>
                                   <td className="px-6 py-4">{u.department}</td>
                                   <td className="px-6 py-4">
-                                      <select 
-                                          value={u.role}
-                                          onChange={(e) => updateUserRole(u.id, e.target.value as UserRole)}
-                                          className="text-xs border-slate-300 rounded-lg p-1.5 focus:ring-brand-500"
-                                      >
-                                          {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
-                                      </select>
+                                      <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${u.role === UserRole.ADMIN ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+                                          {u.role.split('(')[0]}
+                                      </span>
                                   </td>
                                   <td className="px-6 py-4">
                                       <span className={`px-2 py-0.5 rounded text-[10px] font-black ${u.status === 'APPROVED' ? 'bg-green-100 text-green-700' : u.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
@@ -452,12 +399,21 @@ const AdminDashboard: React.FC = () => {
                                       </span>
                                   </td>
                                   <td className="px-6 py-4 text-right">
-                                      {u.status === 'PENDING' && (
-                                          <div className="flex justify-end space-x-1">
-                                              <button onClick={() => updateUserStatus(u.id, 'APPROVED')} className="p-2 text-green-600 hover:bg-green-50 rounded-lg"><CheckCircle size={16}/></button>
-                                              <button onClick={() => updateUserStatus(u.id, 'REJECTED')} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><XCircle size={16}/></button>
-                                          </div>
-                                      )}
+                                      <div className="flex justify-end space-x-2">
+                                          <select 
+                                              value={u.role}
+                                              onChange={(e) => updateUserRole(u.id, e.target.value as UserRole)}
+                                              className="text-[10px] font-bold border-slate-300 rounded-lg p-1 px-2 focus:ring-brand-500 bg-white"
+                                          >
+                                              {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
+                                          </select>
+                                          {u.status === 'PENDING' && (
+                                              <>
+                                                  <button onClick={() => updateUserStatus(u.id, 'APPROVED')} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg border border-green-200"><Check size={14}/></button>
+                                                  <button onClick={() => updateUserStatus(u.id, 'REJECTED')} className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg border border-red-200"><X size={14}/></button>
+                                              </>
+                                          )}
+                                      </div>
                                   </td>
                               </tr>
                           ))}
@@ -467,64 +423,44 @@ const AdminDashboard: React.FC = () => {
           </div>
       )}
 
-      {/* Manual User Creation Modal */}
-      {isCreateModalOpen && (
+      {/* Admin-Only User Creation Modal */}
+      {isCreateModalOpen && isAdmin && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <h3 className="font-bold text-lg text-slate-800 flex items-center">
-                          <UserPlus className="mr-2 text-brand-600" size={24}/> 신규 사용자 직접 생성
+                          <UserPlus className="mr-2 text-brand-600" size={24}/> 신규 사용자 생성 (Admin)
                       </h3>
                       <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors"><X size={20}/></button>
                   </div>
                   <form onSubmit={handleCreateUser} className="p-8 space-y-5">
                       <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">이름 (실명)</label>
-                          <div className="relative">
-                            <UserIcon className="absolute left-3 top-3 text-slate-300" size={18}/>
-                            <input 
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">이름</label>
+                          <input 
                                 required
                                 type="text" 
-                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
-                                placeholder="사용자 성함 입력"
+                                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none text-sm"
+                                placeholder="성함 입력"
                                 value={newUserForm.name}
                                 onChange={e => setNewUserForm({...newUserForm, name: e.target.value})}
-                            />
-                          </div>
+                          />
                       </div>
                       <div>
                           <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">이메일 (ID)</label>
-                          <div className="relative">
-                            <Mail className="absolute left-3 top-3 text-slate-300" size={18}/>
-                            <input 
+                          <input 
                                 required
                                 type="email" 
-                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
+                                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 outline-none text-sm"
                                 placeholder="email@greenmaster.com"
                                 value={newUserForm.email}
                                 onChange={e => setNewUserForm({...newUserForm, email: e.target.value})}
-                            />
-                          </div>
-                      </div>
-                      <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">임시 비밀번호</label>
-                          <div className="relative">
-                            <Key className="absolute left-3 top-3 text-slate-300" size={18}/>
-                            <input 
-                                required
-                                type="password" 
-                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
-                                placeholder="초기 접속 시 사용할 비밀번호"
-                                value={newUserForm.password}
-                                onChange={e => setNewUserForm({...newUserForm, password: e.target.value})}
-                            />
-                          </div>
+                          />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">소속 부서</label>
+                              <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">부서</label>
                               <select 
-                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 text-sm outline-none bg-white"
+                                className="w-full p-3 rounded-xl border border-slate-200 text-sm outline-none bg-white"
                                 value={newUserForm.department}
                                 onChange={e => setNewUserForm({...newUserForm, department: e.target.value as Department})}
                               >
@@ -534,7 +470,7 @@ const AdminDashboard: React.FC = () => {
                           <div>
                               <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">권한 (Role)</label>
                               <select 
-                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 text-sm outline-none bg-white font-bold"
+                                className="w-full p-3 rounded-xl border border-slate-200 text-sm outline-none bg-white font-bold"
                                 value={newUserForm.role}
                                 onChange={e => setNewUserForm({...newUserForm, role: e.target.value as UserRole})}
                               >
@@ -548,7 +484,7 @@ const AdminDashboard: React.FC = () => {
                       <div className="pt-4">
                           <button 
                             type="submit"
-                            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl transform active:scale-[0.98]"
+                            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl"
                           >
                               사용자 즉시 생성
                           </button>

@@ -48,7 +48,8 @@ interface AppContextType {
   isSimulatedLive: boolean;
   canUseAI: boolean;
   canViewFullData: boolean;
-  isAdmin: boolean;
+  isAdmin: boolean; // Strictly UserRole.ADMIN
+  isSeniorOrAdmin: boolean; // Features for both Senior and Admin
   // Routing
   currentPath: string;
   navigate: (path: string, state?: any) => void;
@@ -212,6 +213,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const createUserManually = async (data: { name: string, email: string, department: Department, role: UserRole }) => {
+    if (!isAdmin) throw new Error('권한 관리 권한이 없습니다.');
     if (allUsers.some(u => u.email.toLowerCase() === data.email.trim().toLowerCase())) {
         throw new Error('이미 존재하는 이메일입니다.');
     }
@@ -233,12 +235,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateUserStatus = async (userId: string, status: UserStatus) => {
+    if (!isAdmin) return;
     await updateDocument('users', userId, { status });
     const target = allUsers.find(u => u.id === userId);
     logActivity(status === 'APPROVED' ? 'APPROVE' : 'REJECT', 'USER', target?.name || 'Unknown User', `Status changed to ${status}`);
   };
 
   const updateUserRole = async (userId: string, role: UserRole) => {
+    if (!isAdmin) return;
     await updateDocument('users', userId, { role });
     const target = allUsers.find(u => u.id === userId);
     logActivity('UPDATE', 'USER', target?.name || 'Unknown User', `Role updated to ${role}`);
@@ -375,7 +379,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const isSimulatedLive = true;
   const canUseAI = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
   const canViewFullData = user?.role === UserRole.SENIOR || user?.role === UserRole.INTERMEDIATE || user?.role === UserRole.ADMIN;
-  const isAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
+  const isAdmin = user?.role === UserRole.ADMIN;
+  const isSeniorOrAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
 
   const value = {
     user, allUsers, login, register, logout, updateUserStatus, updateUserRole, updateUserDepartment, updateUser, createUserManually,
@@ -387,7 +392,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addFinancial, updateFinancial, deleteFinancial,
     addMaterial, updateMaterial, deleteMaterial,
     refreshLogs, resetData, exportAllData, isSimulatedLive,
-    canUseAI, canViewFullData, isAdmin,
+    canUseAI, canViewFullData, isAdmin, isSeniorOrAdmin,
     currentPath, navigate, routeParams, locationState
   };
 

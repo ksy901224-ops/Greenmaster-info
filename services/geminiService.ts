@@ -35,7 +35,7 @@ export const analyzeDocument = async (
          - 기존 목록([${courseListStr}])에 없는 골프장은 '신규'로 간주합니다.
       2. 업무 일지(Logs): 발생한 업무 내역, 날짜, 담당자, 내용을 요약하세요.
       3. 인물(People): 성함, 직책, 소속 골프장 정보를 추출하고, 문맥상 우리에 대한 우호도(Affinity)를 -2 ~ 2 사이로 추론하세요.
-      4. 전략 분석(Strategy): 추출된 정보로부터 얻을 수 있는 핵심 인사이트와 향후 권장 액션을 포함하세요.
+      4. 인사이트(Insight): 추출된 정보로부터 얻을 수 있는 전략적 가치와 리스크를 한 문장으로 요약하세요.
 
       반드시 제공된 JSON 스키마 형식으로만 답변하세요.
     `
@@ -55,11 +55,10 @@ export const analyzeDocument = async (
               type: Type.OBJECT,
               properties: {
                 name: { type: Type.STRING },
-                region: { type: Type.STRING, description: "서울, 경기, 강원 등" },
+                region: { type: Type.STRING },
                 address: { type: Type.STRING },
                 holes: { type: Type.NUMBER },
-                description: { type: Type.STRING },
-                isNew: { type: Type.BOOLEAN }
+                description: { type: Type.STRING }
               }
             }
           },
@@ -68,13 +67,13 @@ export const analyzeDocument = async (
             items: {
               type: Type.OBJECT,
               properties: {
-                date: { type: Type.STRING, description: "YYYY-MM-DD" },
+                date: { type: Type.STRING },
                 courseName: { type: Type.STRING },
                 title: { type: Type.STRING },
                 content: { type: Type.STRING },
-                department: { type: Type.STRING, description: "영업, 연구소, 건설사업, 컨설팅, 관리 중 하나" },
+                department: { type: Type.STRING },
                 tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                insight: { type: Type.STRING, description: "AI가 판단한 핵심 요약 및 리스크" }
+                insight: { type: Type.STRING }
               }
             }
           },
@@ -86,7 +85,7 @@ export const analyzeDocument = async (
                 name: { type: Type.STRING },
                 role: { type: Type.STRING },
                 courseName: { type: Type.STRING },
-                affinity: { type: Type.NUMBER, description: "-2 to 2" },
+                affinity: { type: Type.NUMBER },
                 notes: { type: Type.STRING }
               }
             }
@@ -100,7 +99,6 @@ export const analyzeDocument = async (
   return JSON.parse(response.text);
 };
 
-// ... 기존 createChatSession 등 함수들 유지 (Gemini 2.5 Flash-Lite 적용 상태)
 export const createChatSession = (
   appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] }
 ): Chat => {
