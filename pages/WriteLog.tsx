@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, MessageSquare, BookOpenCheck } from 'lucide-react';
+import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region, CareerRecord } from '../types';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -9,7 +9,7 @@ const WriteLog: React.FC = () => {
   const { addLog, updateLog, addCourse, updateCourse, addPerson, addExternalEvent, courses: globalCourses, people: globalPeople, navigate, locationState } = useApp();
   const editingLog = locationState?.log as LogEntry | undefined;
   
-  const [activeTab, setActiveTab] = useState<'LOG' | 'AI' | 'PERSON' | 'SCHEDULE'>('LOG');
+  const [activeTab, setActiveTab] = useState<'LOG' | 'AI' | 'PERSON'>('LOG');
   const regions: Region[] = ['서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '인천', '부산', '대구', '울산', '대전', '광주', '세종', '기타'];
 
   // --- Manual Log State ---
@@ -19,10 +19,28 @@ const WriteLog: React.FC = () => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   
-  // --- Bulk Person Form State ---
-  const [personEntries, setPersonEntries] = useState<any[]>([
-    { id: Date.now(), name: '', role: '', phone: '', courseId: '', affinity: '0' }
-  ]);
+  // --- Enhanced Person Registration State ---
+  const [personForm, setPersonForm] = useState<{
+    name: string;
+    phone: string;
+    currentRole: string;
+    currentCourseName: string;
+    currentCourseId: string;
+    currentRoleStartDate: string;
+    affinity: AffinityLevel;
+    notes: string;
+    careers: Partial<CareerRecord>[];
+  }>({
+    name: '',
+    phone: '',
+    currentRole: '',
+    currentCourseName: '',
+    currentCourseId: '',
+    currentRoleStartDate: new Date().toISOString().split('T')[0],
+    affinity: AffinityLevel.NEUTRAL,
+    notes: '',
+    careers: []
+  });
 
   // --- AI State ---
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,13 +50,8 @@ const WriteLog: React.FC = () => {
   const [aiResults, setAiResults] = useState<{
       extractedCourses: any[],
       extractedLogs: any[],
-      extractedPeople: any[],
-      strategicReport?: {
-          summary: string;
-          detailedAnalysis: string;
-      }
+      extractedPeople: any[]
   } | null>(null);
-  const [reportTab, setReportTab] = useState<'summary' | 'detailed'>('summary');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
@@ -118,20 +131,68 @@ const WriteLog: React.FC = () => {
     setNewCourse({ name: '', region: '경기', address: '', holes: 18, type: CourseType.PUBLIC, grassType: GrassType.ZOYSIA, area: '', length: '', description: '' });
   };
 
-  const addPersonRow = () => setPersonEntries([...personEntries, { id: Date.now(), name: '', role: '', phone: '', courseId: '', affinity: '0' }]);
-  const removePersonRow = (id: number) => personEntries.length > 1 && setPersonEntries(personEntries.filter(p => p.id !== id));
-  const updatePersonEntry = (id: number, field: string, value: any) => setPersonEntries(personEntries.map(p => p.id === id ? { ...p, [field]: value } : p));
+  // --- Enhanced Person Handlers ---
+  const handlePersonFieldChange = (field: string, value: any) => {
+    setPersonForm(prev => {
+      const newState = { ...prev, [field]: value };
+      if (field === 'currentCourseName') {
+        const matched = globalCourses.find(c => c.name === value);
+        newState.currentCourseId = matched ? matched.id : '';
+      }
+      return newState;
+    });
+  };
 
-  const handleBulkPersonSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSubmitting(true);
+  const addCareerRow = () => {
+    setPersonForm(prev => ({
+      ...prev,
+      careers: [{ courseName: '', courseId: '', role: '', startDate: '', endDate: '', description: '' }, ...prev.careers]
+    }));
+  };
+
+  const updateCareerField = (idx: number, field: string, value: string) => {
+    setPersonForm(prev => {
+      const newCareers = [...prev.careers];
+      const updated = { ...newCareers[idx], [field]: value };
+      if (field === 'courseName') {
+        const matched = globalCourses.find(c => c.name === value);
+        updated.courseId = matched ? matched.id : '';
+      }
+      newCareers[idx] = updated;
+      return { ...prev, careers: newCareers };
+    });
+  };
+
+  const removeCareerRow = (idx: number) => {
+    setPersonForm(prev => ({
+      ...prev,
+      careers: prev.careers.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const handlePersonSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!personForm.name.trim()) return;
+    setIsSubmitting(true);
     try {
-        const validEntries = personEntries.filter(p => p.name.trim() !== '');
-        for (const p of validEntries) {
-            await addPerson({ id: `person-${Date.now()}-${Math.random()}`, name: p.name, phone: p.phone, currentRole: p.role, currentCourseId: p.courseId, affinity: parseInt(p.affinity) as AffinityLevel, notes: '일괄 등록 시스템 이용', careers: [] });
-        }
-        alert(`${validEntries.length}명의 인물 정보가 시스템에 통합되었습니다.`);
+        await addPerson({
+          id: `person-${Date.now()}`,
+          name: personForm.name,
+          phone: personForm.phone,
+          currentRole: personForm.currentRole,
+          currentCourseId: personForm.currentCourseId,
+          currentRoleStartDate: personForm.currentRoleStartDate,
+          affinity: personForm.affinity,
+          notes: personForm.notes,
+          careers: personForm.careers as CareerRecord[]
+        });
+        alert(`${personForm.name}님의 정보가 성공적으로 등록되었습니다.`);
         navigate('/courses');
-    } catch (err) { alert('등록 중 오류가 발생했습니다.'); } finally { setIsSubmitting(false); }
+    } catch (err) {
+        alert('등록 중 오류가 발생했습니다.');
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   const handleLogSubmit = (e: React.FormEvent) => {
@@ -153,7 +214,7 @@ const WriteLog: React.FC = () => {
             {[
                 { id: 'LOG', label: '업무 일지', icon: <FileText size={18}/> },
                 { id: 'AI', label: 'AI 스마트 등록', icon: <Sparkles size={18}/> },
-                { id: 'PERSON', label: '인물 다중 등록', icon: <UserPlus size={18}/> },
+                { id: 'PERSON', label: '인물 신규 등록', icon: <UserPlus size={18}/> },
             ].map(tab => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 min-w-[140px] py-3.5 text-sm font-black rounded-xl transition-all duration-200 flex items-center justify-center ${activeTab === tab.id ? 'bg-brand-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
                   <span className="mr-2">{tab.icon}</span> {tab.label}
@@ -185,39 +246,97 @@ const WriteLog: React.FC = () => {
 
             {activeTab === 'PERSON' && (
                 <div className="animate-in fade-in duration-300">
-                    <h3 className="text-xl font-black text-slate-900 flex items-center mb-8"><UserPlus className="mr-3 text-brand-600"/> 인물 다중 정보 등록</h3>
-                    <form onSubmit={handleBulkPersonSubmit} className="space-y-5">
-                        <div className="space-y-4">
-                            {personEntries.map((p, idx) => (
-                                <div key={p.id} className="bg-slate-50/50 border border-slate-200 rounded-3xl p-6 relative group shadow-sm">
-                                    <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-3">
-                                        <span className="text-[10px] font-black bg-brand-100 text-brand-700 px-3 py-1 rounded-full uppercase tracking-widest tracking-tight">PERSON ENTRY #{idx + 1}</span>
-                                        {personEntries.length > 1 && (
-                                            <button type="button" onClick={() => removePersonRow(p.id)} className="text-red-400 hover:text-red-600 flex items-center text-xs font-black transition-colors"><Trash size={14} className="mr-1.5"/> REMOVE</button>
-                                        )}
-                                    </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                        <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">성명 *</label><input type="text" className={getInputClass()} value={p.name} onChange={e => updatePersonEntry(p.id, 'name', e.target.value)} required placeholder="이름" /></div>
-                                        <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">현직 직책</label><input type="text" className={getInputClass()} value={p.role} onChange={e => updatePersonEntry(p.id, 'role', e.target.value)} placeholder="코스팀장 등" /></div>
-                                        <div>
-                                            <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1 flex justify-between">소속 골프장 <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-brand-600 hover:underline">신규</button></label>
-                                            <div className="relative">
-                                                <input list={`courses-p-${idx}`} className={getInputClass()} value={globalCourses.find(c => c.id === p.courseId)?.name || ''} onChange={e => { const f = globalCourses.find(c => c.name === e.target.value); updatePersonEntry(p.id, 'courseId', f ? f.id : ''); }} placeholder="검색..." />
-                                                <datalist id={`courses-p-${idx}`}>{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
-                                            </div>
-                                        </div>
-                                        <div><label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">연락처</label><input type="text" className={getInputClass()} value={p.phone} onChange={e => updatePersonEntry(p.id, 'phone', e.target.value)} placeholder="010-0000-0000" /></div>
-                                    </div>
+                    <div className="flex justify-between items-center mb-8">
+                      <h3 className="text-xl font-black text-slate-900 flex items-center"><UserPlus className="mr-3 text-brand-600"/> 인물 정보 정밀 등록</h3>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Personal Relationship Mapping</p>
+                    </div>
+                    
+                    <form onSubmit={handlePersonSubmit} className="space-y-10">
+                        {/* Core Info Section */}
+                        <section className="space-y-6">
+                            <h4 className="text-[11px] font-black text-brand-700 uppercase tracking-widest border-b border-brand-100 pb-2">기본 인적 사항</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">성명 *</label><input type="text" className={getInputClass()} value={personForm.name} onChange={e => handlePersonFieldChange('name', e.target.value)} required placeholder="이름" /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">연락처</label><input type="text" className={getInputClass()} value={personForm.phone} onChange={e => handlePersonFieldChange('phone', e.target.value)} placeholder="010-0000-0000" /></div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">우리와의 친밀도</label>
+                                    <select className={getSelectClass()} value={personForm.affinity} onChange={e => handlePersonFieldChange('affinity', parseInt(e.target.value))}>
+                                        <option value={AffinityLevel.ALLY}>강력한 아군 (Ally)</option>
+                                        <option value={AffinityLevel.FRIENDLY}>우호적 (Friendly)</option>
+                                        <option value={AffinityLevel.NEUTRAL}>중립 (Neutral)</option>
+                                        <option value={AffinityLevel.UNFRIENDLY}>비우호적 (Unfriendly)</option>
+                                        <option value={AffinityLevel.HOSTILE}>적대적 (Hostile)</option>
+                                    </select>
                                 </div>
-                            ))}
-                        </div>
-                        <div className="pt-8 flex flex-col items-center">
-                            <button type="button" onClick={addPersonRow} className="mb-8 group flex flex-col items-center text-slate-300 hover:text-brand-600 transition-all focus:outline-none">
-                                <PlusCircle size={44} className="mb-2 group-hover:scale-110 transition-transform" />
-                                <span className="text-[10px] font-black uppercase tracking-widest">ADD ANOTHER ENTRY</span>
-                            </button>
-                            <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-xl active:scale-[0.98] transition-all flex justify-center items-center">
-                                {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle className="mr-2" />} SAVE {personEntries.length} PERSON RECORDS
+                            </div>
+                        </section>
+
+                        {/* Current Placement Section */}
+                        <section className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 shadow-inner space-y-6">
+                            <div className="flex justify-between items-center">
+                                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center"><Building2 size={16} className="mr-2 text-brand-600"/> 현재 소속 발령 정보</h4>
+                                <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] font-black text-brand-600 hover:underline">골프장 신규 등록</button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장 (Master DB 연동)</label>
+                                    <input 
+                                      list="courses-person-reg" 
+                                      className={getInputClass()} 
+                                      value={personForm.currentCourseName} 
+                                      onChange={e => handlePersonFieldChange('currentCourseName', e.target.value)} 
+                                      placeholder="골프장 검색..."
+                                    />
+                                    <datalist id="courses-person-reg">{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
+                                    {personForm.currentCourseId && <p className="text-[9px] text-brand-600 font-bold mt-1.5 flex items-center"><CheckCircle size={10} className="mr-1"/> 마스터 DB 연결됨</p>}
+                                </div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">현직 공식 직책</label><input type="text" className={getInputClass()} value={personForm.currentRole} onChange={e => handlePersonFieldChange('currentRole', e.target.value)} placeholder="코스팀장, 총지배인 등" /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">현직 발령일</label><input type="date" className={getInputClass()} value={personForm.currentRoleStartDate} onChange={e => handlePersonFieldChange('currentRoleStartDate', e.target.value)} /></div>
+                            </div>
+                        </section>
+
+                        {/* Career History Section */}
+                        <section className="space-y-6">
+                            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center"><Briefcase size={16} className="mr-2 text-brand-600"/> 과거 주요 경력 사항 (Careers)</h4>
+                                <button type="button" onClick={addCareerRow} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black shadow-lg hover:bg-slate-800 transition-all flex items-center active:scale-95"><Plus size={14} className="mr-1.5"/> ADD RECORD</button>
+                            </div>
+                            
+                            {personForm.careers.length > 0 ? (
+                                <div className="space-y-4">
+                                    {personForm.careers.map((career, idx) => (
+                                        <div key={idx} className="bg-white border border-slate-200 p-6 rounded-3xl shadow-soft relative group animate-in slide-in-from-top-2 duration-300">
+                                            <button type="button" onClick={() => removeCareerRow(idx)} className="absolute -right-2 -top-2 bg-white text-red-400 hover:text-red-600 p-2 rounded-xl border border-slate-100 shadow-md opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                <div className="lg:col-span-1">
+                                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1.5 ml-1">골프장 명칭</label>
+                                                    <input list={`career-courses-${idx}`} className="w-full text-xs font-bold border border-slate-200 rounded-xl p-3 focus:ring-4 focus:ring-brand-500/5 outline-none" value={career.courseName} onChange={e => updateCareerField(idx, 'courseName', e.target.value)} placeholder="검색..." />
+                                                    <datalist id={`career-courses-${idx}`}>{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
+                                                </div>
+                                                <div><label className="text-[9px] font-black text-slate-400 uppercase block mb-1.5 ml-1">수행 직책</label><input className="w-full text-xs font-bold border border-slate-200 rounded-xl p-3 focus:ring-4 focus:ring-brand-500/5 outline-none" value={career.role} onChange={e => updateCareerField(idx, 'role', e.target.value)} placeholder="직책 입력" /></div>
+                                                <div><label className="text-[9px] font-black text-slate-400 uppercase block mb-1.5 ml-1">시작일 (YYYY-MM)</label><input className="w-full text-xs font-bold border border-slate-200 rounded-xl p-3 focus:ring-4 focus:ring-brand-500/5 outline-none" value={career.startDate} onChange={e => updateCareerField(idx, 'startDate', e.target.value)} placeholder="YYYY-MM" /></div>
+                                                <div><label className="text-[9px] font-black text-slate-400 uppercase block mb-1.5 ml-1">종료일 (YYYY-MM)</label><input className="w-full text-xs font-bold border border-slate-200 rounded-xl p-3 focus:ring-4 focus:ring-brand-500/5 outline-none" value={career.endDate} onChange={e => updateCareerField(idx, 'endDate', e.target.value)} placeholder="YYYY-MM" /></div>
+                                            </div>
+                                            {career.courseId && <p className="text-[8px] text-brand-600 font-black mt-2 px-1 flex items-center uppercase tracking-tighter"><CheckCircle size={10} className="mr-1"/> Master DB Match: {career.courseId}</p>}
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="py-12 text-center bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
+                                    <History size={32} className="mx-auto text-slate-200 mb-3"/>
+                                    <p className="text-slate-400 text-xs font-bold">등록된 과거 경력이 없습니다. 인맥 관리를 위해 추가를 권장합니다.</p>
+                                </div>
+                            )}
+                        </section>
+
+                        <section className="space-y-4">
+                            <label className="block text-[11px] font-black text-brand-700 uppercase tracking-widest border-b border-brand-100 pb-2">전략적 관계 메모</label>
+                            <textarea rows={4} className={getInputClass()} value={personForm.notes} onChange={e => handlePersonFieldChange('notes', e.target.value)} placeholder="성격, 특이사항, 관계 유지 전략 등을 입력하세요..." />
+                        </section>
+
+                        <div className="pt-6">
+                            <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xl shadow-2xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.98] transition-all">
+                                {isSubmitting ? <Loader2 className="animate-spin mr-3" /> : <Save className="mr-3" />} 인물 마스터 DB 등록
                             </button>
                         </div>
                     </form>
@@ -258,26 +377,6 @@ const WriteLog: React.FC = () => {
                                 <div><h2 className="text-3xl font-black text-slate-900 flex items-center tracking-tight"><ListChecks size={32} className="mr-3 text-brand-600"/> 데이터 검토 및 시스템 반영</h2><p className="text-slate-500 mt-2 font-medium">추출된 결과를 최종 확인하고 사내 데이터베이스에 통합하세요.</p></div>
                                 <button onClick={() => setAiResults(null)} className="flex items-center text-slate-400 hover:text-red-500 font-black text-xs uppercase tracking-widest transition-colors mb-2"><RotateCcw size={16} className="mr-2"/> 분석 초기화</button>
                             </div>
-
-                            {aiResults.strategicReport && (
-                                <div className="mb-12 bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-md">
-                                    <div className="p-5 border-b border-slate-100 bg-indigo-50/50 flex justify-between items-center">
-                                        <h3 className="font-black text-slate-900 flex items-center gap-2 text-sm">
-                                            <Sparkles size={18} className="text-brand-600"/> 전략 인텔리전스 리포트
-                                        </h3>
-                                        <div className="flex bg-white/80 p-1 rounded-xl border border-slate-200">
-                                            <button onClick={() => setReportTab('summary')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all flex items-center gap-1.5 ${reportTab === 'summary' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500'}`}><MessageSquare size={12}/> 핵심 요약</button>
-                                            <button onClick={() => setReportTab('detailed')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all flex items-center gap-1.5 ${reportTab === 'detailed' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-500'}`}><BookOpenCheck size={12}/> 상세 분석</button>
-                                        </div>
-                                    </div>
-                                    <div className="p-6 bg-slate-50/30">
-                                        <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line font-medium italic">
-                                            {reportTab === 'summary' ? aiResults.strategicReport.summary : aiResults.strategicReport.detailedAnalysis}
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-
                             <div className="space-y-12">
                                 {/* Courses */}
                                 {aiResults.extractedCourses.length > 0 && (

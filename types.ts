@@ -66,6 +66,7 @@ export interface GolfCourse {
   lat?: number;
   lng?: number;
   issues?: string[];
+  staffCount?: number;
 }
 
 export interface CareerRecord {

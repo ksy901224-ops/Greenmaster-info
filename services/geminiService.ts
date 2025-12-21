@@ -1,4 +1,3 @@
-
 // @google/genai service for intelligence processing
 import { GoogleGenAI, Type, GenerateContentResponse, Chat } from "@google/genai";
 import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
@@ -7,8 +6,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
  * Enhanced Multi-Entity Extraction
- * 분석된 문서에서 골프장, 인물, 업무 로그 정보를 구조적으로 추출하며,
- * 핵심 요약과 상세 전략 분석이라는 두 가지 형태의 리포트를 생성합니다.
+ * 분석된 문서에서 골프장, 인물, 업무 로그 정보를 구조적으로 추출합니다.
  */
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
@@ -29,16 +27,14 @@ export const analyzeDocument = async (
   contentParts.push({
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다. 
-      제공된 문서(이미지/PDF/텍스트)를 분석하여 우리 회사의 지식 데이터베이스에 저장할 수 있는 형태로 변환하고 전략적 통찰을 제공하세요.
+      제공된 문서(이미지/PDF/텍스트)를 분석하여 우리 회사의 지식 데이터베이스에 저장할 수 있는 형태로 변환하세요.
 
       [분석 지침]
       1. 골프장(Courses): 문서에 언급된 모든 골프장의 명칭과 위치, 규모 정보를 추출하세요. 
          - 기존 목록([${courseListStr}])에 없는 골프장은 '신규'로 간주합니다.
       2. 업무 일지(Logs): 발생한 업무 내역, 날짜, 담당자, 내용을 요약하세요.
       3. 인물(People): 성함, 직책, 소속 골프장 정보를 추출하고, 문맥상 우리에 대한 우호도(Affinity)를 -2 ~ 2 사이로 추론하세요.
-      4. 전략 리포트(Strategic Report): 
-         - Summary: 전체 내용에서 가장 중요한 핵심 사항을 1~2문장으로 요약한 'Concise Summary'.
-         - DetailedAnalysis: 추출된 데이터 포인트들의 상세 내역, 배경 정보, 비즈니스 함의 및 향후 우리 회사가 취해야 할 구체적인 전략적 제언을 포함한 'Detailed Breakdown'.
+      4. 인사이트(Insight): 추출된 정보로부터 얻을 수 있는 전략적 가치와 리스크를 한 문장으로 요약하세요.
 
       반드시 제공된 JSON 스키마 형식으로만 답변하세요.
     `
@@ -92,17 +88,9 @@ export const analyzeDocument = async (
                 notes: { type: Type.STRING }
               }
             }
-          },
-          strategicReport: {
-            type: Type.OBJECT,
-            properties: {
-              summary: { type: Type.STRING, description: "Concise summary of key information" },
-              detailedAnalysis: { type: Type.STRING, description: "Detailed breakdown including data points and strategic implications" }
-            },
-            required: ["summary", "detailedAnalysis"]
           }
         },
-        required: ["extractedCourses", "extractedLogs", "extractedPeople", "strategicReport"]
+        required: ["extractedCourses", "extractedLogs", "extractedPeople"]
       }
     }
   });
@@ -132,6 +120,8 @@ export const createChatSession = (
     - 최근 업무 히스토리: ${JSON.stringify(prunedLogs)}
   `;
 
+  // Fix: The Thinking Config is only available for the Gemini 3 and 2.5 series models.
+  // Updated from 'gemini-flash-lite-latest' to 'gemini-3-flash-preview'.
   return ai.chats.create({
     model: 'gemini-3-flash-preview',
     config: {
@@ -202,6 +192,7 @@ export const generatePersonReputationReport = async (
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
+    // Fix: Max thinking budget for Pro models provides deeper reasoning.
     config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;
@@ -218,6 +209,7 @@ export const generateCourseSummary = async (
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
+    // Fix: Max thinking budget for Pro models provides deeper reasoning.
     config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;
