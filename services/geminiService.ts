@@ -81,40 +81,47 @@ export const analyzeDocument = async (
   return JSON.parse(response.text);
 };
 
-// Streaming Chat Session for Multi-turn Conversation
+// Streaming Chat Session with Context Memory - Optimized with Gemini 2.5 Flash-Lite
 export const createChatSession = (
   appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] }
 ): Chat => {
-  const prunedLogs = appContextData.logs.slice(0, 50).map(l => ({ 
-    date: l.date, course: l.courseName, title: l.title, content: l.content.substring(0, 150) 
+  // Prune data to fit context efficiently
+  const prunedLogs = appContextData.logs.slice(0, 40).map(l => ({ 
+    d: l.date, c: l.courseName, t: l.title, content: l.content.substring(0, 150) 
   }));
-  const prunedCourses = appContextData.courses.slice(0, 100).map(c => ({ 
-    name: c.name, region: c.region, holes: c.holes, type: c.type 
+  const prunedCourses = appContextData.courses.slice(0, 80).map(c => ({ 
+    n: c.name, r: c.region, h: c.holes, t: c.type 
   }));
-  const prunedPeople = appContextData.people.slice(0, 100).map(p => ({ 
-    name: p.name, role: p.currentRole, course: prunedCourses.find(c => c.name === p.currentCourseId)?.name || '기타', affinity: p.affinity 
+  const prunedPeople = appContextData.people.slice(0, 80).map(p => ({ 
+    n: p.name, r: p.currentRole, c: p.currentCourseId, a: p.affinity, careers: p.careers.map(car => car.courseName)
   }));
 
   const systemInstruction = `
-    당신은 골프장 비즈니스 및 인적 네트워크 전문가 '그린마스터 AI'입니다.
-    다음 제공되는 시스템 데이터를 바탕으로 사용자의 질문에 답하세요.
-    데이터에는 골프장 정보, 업무 일지, 인물 관계도가 포함되어 있습니다.
-    
-    [시스템 데이터 요약]
-    - 골프장: ${JSON.stringify(prunedCourses)}
-    - 인물: ${JSON.stringify(prunedPeople)}
-    - 주요 일지: ${JSON.stringify(prunedLogs)}
+    당신은 대한민국 골프장 업계의 핵심 정보를 관리하는 전략 인텔리전스 비서 'GreenMaster AI'입니다.
+    사용자의 요청에 따라 사내 데이터베이스를 검색하고 최적의 통찰을 제공하세요.
 
-    사용자가 특정 인물이나 골프장의 이력을 물으면 데이터를 검색하여 정확히 답변하세요.
-    데이터에 없는 내용은 추측하지 말고 모른다고 답변하세요.
-    답변은 전문적이면서도 친절한 한국어로 작성하세요.
+    [핵심 가치: 인간관계와 히스토리]
+    - 골프장 업계는 인적 네트워크가 가장 중요합니다. 특정 인물을 언급하면 그의 과거 경력(Career History)과 우리 회사와의 친밀도(Affinity)를 바탕으로 조언하세요.
+    - 특정 골프장의 이슈를 물으면 과거 업무 일지를 분석하여 맥락을 짚어주세요.
+
+    [시스템 데이터 (Context)]
+    - 골프장 마스터: ${JSON.stringify(prunedCourses)}
+    - 인적 네트워크: ${JSON.stringify(prunedPeople)}
+    - 최근 업무 히스토리: ${JSON.stringify(prunedLogs)}
+
+    [답변 규칙]
+    1. 데이터에 근거하여 답변하되, 보안상 민감한 내용은 신중하게 전달하세요.
+    2. 모르는 정보는 추측하지 말고 "데이터에 기록되지 않은 내용입니다"라고 답변하세요.
+    3. 한국어로 전문적이고 신속하게(Low-latency) 응답하세요.
   `;
 
   return ai.chats.create({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-flash-lite-latest',
     config: {
       systemInstruction: systemInstruction,
-      temperature: 0.7,
+      temperature: 0.5,
+      // Flash-Lite handles streaming extremely well.
+      thinkingConfig: { thinkingBudget: 2000 } // Allocate some thinking budget for relationship deduction
     },
   });
 };
@@ -136,23 +143,32 @@ export const generateCourseSummary = async (
     - 주요 인물: ${prunedPeople}
 
     요구사항:
-    1. 현황 진단
-    2. 관계 전략
-    3. Action Plan
+    1. 현재 운영 상황 진단
+    2. 인적 네트워크 기반의 대관/영업 전략
+    3. 리스크 요인 및 향후 액션 플랜
   `;
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
+    config: {
+      thinkingConfig: { thinkingBudget: 4000 }
+    }
   });
 
   return response.text;
 };
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
-  const prompt = `일지 분석 리포트: ${log.courseName} - ${log.title}\n${log.content.substring(0, 1000)}`;
+  const prompt = `업무 일지 분석 및 전략 도출:
+골프장: ${log.courseName}
+제목: ${log.title}
+내용: ${log.content}
+
+위 내용을 분석하여 1) 핵심 요약, 2) 업계 관점에서의 함의, 3) 후속 조치(Next Steps)를 제시하세요.`;
+
   const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
+    model: 'gemini-flash-lite-latest',
     contents: prompt,
   });
   return response.text || "분석 실패";
@@ -197,10 +213,21 @@ export const generatePersonReputationReport = async (
   logs: LogEntry[]
 ): Promise<string> => {
   const prunedLogs = logs.slice(0, 10).map(l => `${l.date}: ${l.title}`).join('\n');
-  const prompt = `인물 평판 분석: ${person.name} (${person.currentRole}). 관련 기록 요약:\n${prunedLogs}`;
+  const prompt = `인물 평판 및 네트워크 가치 분석: ${person.name} (${person.currentRole}). 
+  
+  [관련 기록 요약]
+  ${prunedLogs}
+  
+  [분석 요청]
+  이 인물의 업계 내 영향력, 업무 스타일, 그리고 우리 회사와의 관계 안정성을 분석하세요.
+  특히 과거 이력(Career)의 흐름을 보아 향후 협력 가능성을 예측하세요.`;
+  
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
+    config: {
+      thinkingConfig: { thinkingBudget: 8000 }
+    }
   });
   return response.text;
 };

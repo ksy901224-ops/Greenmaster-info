@@ -1,7 +1,7 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary, analyzeMaterialInventory } from '../services/geminiService';
-// Added ChevronDown to imports
 import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region } from '../types';
 import { useApp } from '../contexts/AppContext';
@@ -88,7 +88,7 @@ const CourseDetail: React.FC = () => {
   const courseFinancials = useMemo(() => {
       return financials
         .filter(f => f.courseId === id)
-        .sort((a, b) => Number(a.year) - Number(b.year)); // Sort ascending for chart
+        .sort((a, b) => Number(a.year) - Number(b.year)); 
   }, [financials, id]);
 
   const displayFinancials = useMemo(() => [...courseFinancials].reverse(), [courseFinancials]);
@@ -410,7 +410,7 @@ const CourseDetail: React.FC = () => {
                       </div>
                   )}
 
-                  {/* Enhanced Combined Chart (Revenue Bar + Margin Line Overlay) */}
+                  {/* Performance Trend Analysis Chart */}
                   {courseFinancials.length > 0 && (
                       <div className="bg-slate-50 p-6 sm:p-8 rounded-[2rem] border border-slate-100">
                           <div className="flex justify-between items-center mb-10">
@@ -430,12 +430,10 @@ const CourseDetail: React.FC = () => {
                           </div>
                           
                           <div className="relative h-64 flex items-end justify-between px-4 pb-8 group/chart">
-                              {/* Y-axis helper lines (background) */}
                               <div className="absolute inset-0 flex flex-col justify-between py-8 px-2 opacity-50 pointer-events-none">
                                   {[0, 1, 2, 3].map(i => <div key={i} className="w-full border-t border-slate-200 border-dashed"></div>)}
                               </div>
 
-                              {/* Revenue Bars */}
                               {courseFinancials.map((fin, idx) => {
                                   const maxRev = Math.max(...courseFinancials.map(f => f.revenue));
                                   const heightPercent = (fin.revenue / (maxRev || 1)) * 100;
@@ -443,12 +441,10 @@ const CourseDetail: React.FC = () => {
                                   
                                   return (
                                       <div key={idx} className="relative flex flex-col items-center w-full max-w-[60px] h-full group z-10">
-                                          {/* Bar */}
                                           <div 
                                               className="w-full bg-blue-100 rounded-t-lg transition-all duration-500 group-hover:bg-blue-600 group-hover:shadow-glow relative mt-auto" 
                                               style={{ height: `${heightPercent}%` }}
                                           >
-                                              {/* Tooltip on Hover */}
                                               <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-black px-2.5 py-1.5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl z-20 pointer-events-none">
                                                   {formatKRW(fin.revenue)}
                                                   <div className="text-emerald-400 mt-0.5">이익률: {margin.toFixed(1)}%</div>
@@ -460,7 +456,6 @@ const CourseDetail: React.FC = () => {
                                   );
                               })}
 
-                              {/* Margin Line Overlay (SVG) */}
                               {courseFinancials.length > 1 && (
                                 <svg className="absolute inset-0 w-full h-full pointer-events-none py-8 px-4 z-20 overflow-visible" preserveAspectRatio="none">
                                     <path 
@@ -478,7 +473,6 @@ const CourseDetail: React.FC = () => {
                                         strokeLinejoin="round"
                                         className="drop-shadow-md transition-all duration-1000"
                                     />
-                                    {/* Line Dots */}
                                     {courseFinancials.map((fin, i) => {
                                             const margin = fin.revenue > 0 ? ((fin.profit || 0) / fin.revenue) * 100 : 0;
                                             const maxMargin = Math.max(...courseFinancials.map(f => f.revenue > 0 ? (f.profit || 0)/f.revenue*100 : 0), 20);
@@ -563,7 +557,7 @@ const CourseDetail: React.FC = () => {
                               >
                                   {isUploadingMat ? <Loader2 size={16} className="animate-spin mr-2"/> : <Sparkles size={16} className="mr-2 text-amber-400"/>}
                                   AI 스마트 등록
-                                  <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,.pdf" />
+                                  <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,application/pdf" />
                               </button>
                           )}
                           {isAdmin && (
@@ -635,7 +629,20 @@ const CourseDetail: React.FC = () => {
                                       {isAdmin && (
                                           <td className="px-8 py-5 text-right">
                                               <div className="opacity-0 group-hover:opacity-100 transition-opacity flex justify-end space-x-2">
-                                                  <button onClick={() => { setEditingMat(mat); setMatForm({ ...mat }); setIsMatModalOpen(true); }} className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl shadow-sm transition-all active:scale-90"><Edit2 size={14}/></button>
+                                                  {/* Fix: Explicitly map fields to match matForm state type and handle optional fields */}
+                                                  <button onClick={() => { 
+                                                      setEditingMat(mat); 
+                                                      setMatForm({ 
+                                                          category: mat.category,
+                                                          name: mat.name,
+                                                          quantity: mat.quantity,
+                                                          unit: mat.unit,
+                                                          supplier: mat.supplier || '',
+                                                          notes: mat.notes || '',
+                                                          year: mat.year
+                                                      }); 
+                                                      setIsMatModalOpen(true); 
+                                                  }} className="p-2.5 text-slate-400 hover:text-blue-600 bg-white border border-slate-200 rounded-xl shadow-sm transition-all active:scale-90"><Edit2 size={14}/></button>
                                                   <button onClick={() => deleteMaterial(mat.id)} className="p-2.5 text-slate-400 hover:text-red-600 bg-white border border-slate-200 rounded-xl shadow-sm transition-all active:scale-90"><Trash2 size={14}/></button>
                                               </div>
                                           </td>
@@ -657,7 +664,6 @@ const CourseDetail: React.FC = () => {
           </div>
         )}
 
-        {/* Other Tabs (LOGS, PEOPLE) remains identical but ensure consistency in padding/spacing */}
         {activeTab === 'LOGS' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="col-span-full mb-2">
@@ -725,7 +731,7 @@ const CourseDetail: React.FC = () => {
         )}
       </div>
 
-      {/* --- Modals --- (Ensuring standard styling) */}
+      {/* --- Modals --- */}
       
       {/* Financial Modal */}
       {isFinModalOpen && (
@@ -738,7 +744,6 @@ const CourseDetail: React.FC = () => {
                   <div className="p-10 space-y-8">
                       <div>
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block ml-1">연도 (Fiscal Year)</label>
-                          {/* Fix: removed undefined setLastSavedTime and fixed malformed arrow function */}
                           <input type="number" className="w-full border-slate-200 rounded-2xl p-4 font-black text-xl text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-sm" value={finForm.year} onChange={(e) => setFinForm({...finForm, year: Number(e.target.value)})} />
                       </div>
                       <div>
@@ -760,8 +765,7 @@ const CourseDetail: React.FC = () => {
           </div>
       )}
 
-      {/* Material Modal & AI Preview remains with standard unified styling as established in previous updates */}
-      {/* ... (Existing Modal Code maintained with unified styling) ... */}
+      {/* Material Modal */}
       {isMatModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md animate-in fade-in duration-300">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -813,8 +817,41 @@ const CourseDetail: React.FC = () => {
           </div>
       )}
 
-      {/* AI Preview Modal handled similarly with unified styling */}
-      {/* ... (Included in full file content) ... */}
+      {/* AI Material Preview Modal */}
+      {isPreviewModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md animate-in fade-in duration-300">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
+                  <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+                      <h3 className="font-black text-xl text-indigo-900 flex items-center tracking-tight"><Sparkles size={24} className="mr-3 text-indigo-600"/> AI 추출 자재 목록 검토</h3>
+                      <button onClick={() => setIsPreviewModalOpen(false)} className="text-indigo-400 hover:text-indigo-900 transition-colors p-1.5 hover:bg-indigo-100 rounded-xl"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
+                      <p className="text-sm text-slate-500 mb-6 font-medium">AI가 문서에서 추출한 항목들입니다. 저장 전 데이터를 확인하세요.</p>
+                      <div className="space-y-4">
+                          {previewMaterials.map((item, idx) => (
+                              <div key={idx} className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex justify-between items-center group">
+                                  <div>
+                                      <div className="text-lg font-black text-slate-900">{item.name}</div>
+                                      <div className="flex gap-3 mt-1 items-center">
+                                          <span className="text-[10px] font-black bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase">{item.category}</span>
+                                          <span className="text-xs text-slate-400 font-bold">{item.supplier || '제조사 미상'}</span>
+                                      </div>
+                                  </div>
+                                  <div className="text-right">
+                                      <div className="text-xl font-black text-indigo-600">{item.quantity.toLocaleString()}<span className="text-xs ml-1 text-slate-400">{item.unit}</span></div>
+                                      <div className="text-[10px] font-bold text-slate-400">{item.year}년 인벤토리</div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+                  <div className="p-8 bg-white border-t border-slate-100 flex justify-end space-x-4 shrink-0">
+                      <button onClick={() => setIsPreviewModalOpen(false)} className="px-8 py-3.5 text-sm font-black text-slate-500 hover:text-slate-800 uppercase tracking-widest">DISCARD</button>
+                      <button onClick={applyPreviewMaterials} className="px-12 py-3.5 bg-indigo-600 text-white rounded-2xl text-sm font-black shadow-xl hover:bg-indigo-700 transition-all active:scale-95 uppercase tracking-[0.1em]">COMMIT TO DATABASE</button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {/* Edit Course Info Modal */}
       {isEditModalOpen && editForm && (
@@ -825,7 +862,6 @@ const CourseDetail: React.FC = () => {
                     <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-1.5 hover:bg-slate-200 rounded-xl"><X size={28} /></button>
                 </div>
                 <div className="p-10 space-y-10 overflow-y-auto custom-scrollbar">
-                    {/* (Standard edit forms as previously established) */}
                     <div className="space-y-6">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><Info size={14} className="mr-2 text-brand-500"/> Core Infrastructure Data</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -845,7 +881,56 @@ const CourseDetail: React.FC = () => {
                             </div>
                         </div>
                     </div>
-                    {/* ... (Other Edit Sections maintained with unified styling) ... */}
+
+                    <div className="space-y-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><Map size={14} className="mr-2 text-brand-500"/> Site and Scale Details</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="md:col-span-2">
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Detailed Address</label>
+                                <input type="text" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.address} onChange={(e) => setEditForm({...editForm, address: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Total Holes</label>
+                                <input type="number" className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 shadow-sm" value={editForm.holes} onChange={(e) => setEditForm({...editForm, holes: Number(e.target.value)})} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Membership Type</label>
+                                <select className="w-full rounded-2xl border-slate-200 text-sm font-black focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 p-4 bg-white shadow-sm appearance-none" value={editForm.type} onChange={(e) => setEditForm({...editForm, type: e.target.value as CourseType})}>
+                                    <option value={CourseType.MEMBER}>회원제</option>
+                                    <option value={CourseType.PUBLIC}>대중제</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><FileText size={14} className="mr-2 text-brand-500"/> Operational Context</h4>
+                        <div>
+                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Strategic Course Summary</label>
+                            <textarea className="w-full rounded-2xl border-slate-200 text-sm font-medium h-32 p-4 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm leading-relaxed" value={editForm.description} onChange={(e) => setEditForm({...editForm, description: e.target.value})} />
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center"><History size={14} className="mr-2 text-brand-500"/> Key Timeline / Issues</h4>
+                            <button onClick={handleAddIssue} className="text-[10px] font-black bg-brand-50 text-brand-700 px-3 py-1.5 rounded-xl border border-brand-100 hover:bg-brand-100 transition-colors flex items-center"><Plus size={14} className="mr-1"/> ADD EVENT</button>
+                        </div>
+                        <div className="space-y-3">
+                            {editForm.issues?.map((issue, idx) => (
+                                <div key={idx} className="flex gap-3 animate-in slide-in-from-left-2 duration-300">
+                                    <input 
+                                        type="text" 
+                                        className="flex-1 rounded-xl border-slate-200 text-sm p-3 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm" 
+                                        value={issue} 
+                                        onChange={(e) => handleUpdateIssue(idx, e.target.value)} 
+                                        placeholder="이벤트 또는 이슈 입력..."
+                                    />
+                                    <button onClick={() => handleRemoveIssue(idx)} className="p-3 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"><Trash2 size={18}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
                 <div className="p-8 border-t border-slate-100 bg-slate-50 flex justify-end space-x-4 shrink-0 shadow-inner">
                     <button onClick={() => setIsEditModalOpen(false)} className="px-8 py-3.5 text-sm font-black text-slate-500 hover:text-slate-800 transition-colors uppercase tracking-widest">DISCARD</button>

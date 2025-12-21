@@ -5,7 +5,7 @@ import LogCard from '../components/LogCard';
 import { CalendarView } from '../components/CalendarView';
 import { CalendarSettingsModal } from '../components/CalendarSettingsModal';
 import { Department, LogEntry, UserRole } from '../types';
-import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText, Send, User, RotateCcw } from 'lucide-react';
+import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText, Send, User, RotateCcw, Trash2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { addTodo } from '../services/firestoreService';
 import { createChatSession } from '../services/geminiService';
@@ -53,7 +53,7 @@ const Dashboard: React.FC = () => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [chatMessages]);
+  }, [chatMessages, isStreaming]);
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -92,7 +92,7 @@ const Dashboard: React.FC = () => {
         });
       }
     } catch (error) {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: '죄송합니다. 응답 생성 중 오류가 발생했습니다.' }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '죄송합니다. 인텔리전스 응답 생성 중 오류가 발생했습니다.' }]);
     } finally {
       setIsStreaming(false);
     }
@@ -102,6 +102,7 @@ const Dashboard: React.FC = () => {
     chatSessionRef.current = null;
     setChatMessages([]);
     setCurrentInput('');
+    setIsStreaming(false);
   };
 
   const handleAddTodo = async (e: React.FormEvent) => {
@@ -154,9 +155,10 @@ const Dashboard: React.FC = () => {
   }, {} as Record<string, LogEntry[]>);
 
   const suggestedQueries = [
-    '최근 스카이뷰 CC 주요 이슈는?',
-    '최민수 팀장 관련 기록 요약해줘',
-    '진행 중인 공사 현황 알려줘',
+    '최근 안양 CC 주요 이슈는?',
+    '최민수 팀장의 이력과 소속 정보 알려줘',
+    '진행 중인 공사 현황 요약해줘',
+    '전국 18홀 이상 회원제 골프장 비율은?'
   ];
 
   if (!canViewFullData) {
@@ -206,26 +208,41 @@ const Dashboard: React.FC = () => {
       {/* 2. AI Chat Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {canUseAI ? (
-          <div className="lg:col-span-2 bg-slate-900 rounded-2xl p-1 shadow-2xl border border-slate-800 flex flex-col min-h-[450px]">
+          <div className="lg:col-span-2 bg-slate-900 rounded-2xl p-1 shadow-2xl border border-slate-800 flex flex-col min-h-[480px]">
             <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl flex flex-col flex-1 relative overflow-hidden">
                 <div className="p-4 border-b border-white/5 flex justify-between items-center bg-slate-900/50">
                     <div className="flex items-center">
-                        <div className="p-2 bg-indigo-500/20 rounded-lg mr-3"><Sparkles className="text-indigo-400" size={20} /></div>
+                        <div className="p-2 bg-brand-500/20 rounded-lg mr-3 shadow-inner"><Sparkles className="text-brand-400" size={20} /></div>
                         <h3 className="font-bold text-white text-md">GreenMaster AI 인텔리전스</h3>
                     </div>
                     {chatMessages.length > 0 && (
-                        <button onClick={resetChat} className="p-1.5 text-slate-400 hover:text-white transition-colors" title="대화 초기화"><RotateCcw size={16}/></button>
+                        <button 
+                            onClick={resetChat} 
+                            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-all flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest"
+                            title="대화 초기화"
+                        >
+                            <RotateCcw size={14}/> Reset
+                        </button>
                     )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-slate-950/20">
                     {chatMessages.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-                            <Sparkles size={48} className="text-indigo-500 mb-4 animate-pulse" />
-                            <p className="text-slate-400 text-sm font-medium">골프장 현황이나 인맥 관계에 대해<br/>무엇이든 물어보세요.</p>
-                            <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-sm">
+                        <div className="h-full flex flex-col items-center justify-center text-center opacity-50 p-6">
+                            <div className="bg-white/5 p-4 rounded-3xl mb-4"><Sparkles size={40} className="text-brand-400 animate-pulse" /></div>
+                            <p className="text-slate-400 text-sm font-medium leading-relaxed">
+                                골프장 현황, 인맥 네트워크, 과거 기록에 대해<br/>
+                                무엇이든 질문하세요. AI가 데이터를 분석해 드립니다.
+                            </p>
+                            <div className="mt-8 flex flex-wrap gap-2 justify-center max-w-sm">
                                 {suggestedQueries.map((q, idx) => (
-                                    <button key={idx} onClick={() => handleSendMessage(undefined, q)} className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-[10px] text-slate-400 hover:bg-slate-700 hover:text-white transition-all">{q}</button>
+                                    <button 
+                                        key={idx} 
+                                        onClick={() => handleSendMessage(undefined, q)} 
+                                        className="px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-[10px] text-slate-400 hover:bg-slate-700 hover:text-white transition-all transform active:scale-95"
+                                    >
+                                        {q}
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -233,20 +250,24 @@ const Dashboard: React.FC = () => {
                         <>
                             {chatMessages.map((msg, i) => (
                                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
-                                    <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-white/5 shadow-inner'}`}>
-                                        <div className="flex items-center mb-1 opacity-50 text-[10px] font-bold uppercase tracking-wider">
-                                            {msg.role === 'user' ? <><User size={10} className="mr-1"/> 나</> : <><Sparkles size={10} className="mr-1"/> 그린마스터 AI</>}
+                                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+                                        msg.role === 'user' 
+                                            ? 'bg-brand-600 text-white shadow-lg' 
+                                            : 'bg-slate-800 text-slate-200 border border-white/5 shadow-inner'
+                                    }`}>
+                                        <div className="flex items-center mb-1.5 opacity-50 text-[10px] font-black uppercase tracking-widest">
+                                            {msg.role === 'user' ? <><User size={10} className="mr-1"/> 나 (User)</> : <><Sparkles size={10} className="mr-1"/> GreenMaster AI</>}
                                         </div>
-                                        <div className="whitespace-pre-line leading-relaxed">{msg.content}</div>
+                                        <div className="whitespace-pre-line leading-relaxed">{msg.content || (isStreaming && i === chatMessages.length - 1 ? '입력 중...' : '')}</div>
                                     </div>
                                 </div>
                             ))}
                             {isStreaming && (
                                 <div className="flex justify-start">
-                                    <div className="bg-slate-800 rounded-full px-4 py-2 text-indigo-400 flex space-x-1 items-center">
-                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></span>
-                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
-                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                                    <div className="bg-slate-800 rounded-full px-4 py-2 text-brand-400 flex space-x-1.5 items-center border border-white/5">
+                                        <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce"></span>
+                                        <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                                        <span className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
                                     </div>
                                 </div>
                             )}
@@ -255,22 +276,22 @@ const Dashboard: React.FC = () => {
                     )}
                 </div>
 
-                <div className="p-4 bg-slate-900/80 backdrop-blur-sm border-t border-white/5">
+                <div className="p-4 bg-slate-900/80 backdrop-blur-md border-t border-white/5">
                     <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
                         <input 
                             type="text" 
                             value={currentInput}
                             onChange={(e) => setCurrentInput(e.target.value)}
-                            placeholder="메시지를 입력하세요..."
-                            className="flex-1 px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
+                            placeholder="질문을 입력하세요... (예: 렉스필드 CC 연혁 알려줘)"
+                            className="flex-1 px-5 py-3.5 rounded-2xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all text-sm"
                             disabled={isStreaming}
                         />
                         <button 
                             type="submit" 
                             disabled={isStreaming || !currentInput.trim()}
-                            className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all disabled:opacity-50 flex items-center justify-center shadow-lg transform active:scale-95"
+                            className="p-3.5 bg-brand-600 text-white rounded-2xl hover:bg-brand-500 transition-all disabled:opacity-50 flex items-center justify-center shadow-lg transform active:scale-95"
                         >
-                            <Send size={18} />
+                            <Send size={20} />
                         </button>
                     </form>
                 </div>
@@ -280,28 +301,33 @@ const Dashboard: React.FC = () => {
             <div className="lg:col-span-2 bg-gradient-to-r from-slate-50 to-white rounded-2xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center shadow-sm">
                 <div className="p-4 bg-slate-100 rounded-full mb-3 text-slate-400"><Lock size={32} /></div>
                 <h3 className="text-slate-800 font-bold mb-1">AI 기능 제한됨</h3>
-                <p className="text-slate-500 text-sm">상급자 권한이 필요합니다.</p>
+                <p className="text-slate-500 text-sm">상급자 이상의 권한이 필요합니다.</p>
             </div>
         )}
 
         {/* Quick To-Do */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 flex flex-col h-full">
             <div className="flex items-center space-x-2 mb-4">
-                <div className="p-1.5 bg-brand-100 text-brand-700 rounded-lg"><CheckCircle size={18} /></div>
-                <h3 className="font-bold text-slate-800">Quick To-Do</h3>
+                <div className="p-2 bg-brand-100 text-brand-700 rounded-xl shadow-sm"><CheckCircle size={20} /></div>
+                <h3 className="font-bold text-slate-900">개인 업무 To-Do</h3>
             </div>
-            <div className="flex-1 bg-slate-50 rounded-xl border border-slate-100 p-4 mb-3 flex items-center justify-center text-center">
-                <p className="text-xs text-slate-400">등록된 빠른 할 일이 없습니다.</p>
+            <div className="flex-1 overflow-y-auto mb-4 bg-slate-50/50 rounded-2xl border border-slate-100 p-4 min-h-[200px] flex flex-col items-center justify-center text-center">
+                <div className="opacity-20 mb-3"><Activity size={40}/></div>
+                <p className="text-xs text-slate-400 font-medium leading-relaxed">등록된 빠른 할 일이 없습니다.<br/>아래에서 새 항목을 추가하세요.</p>
             </div>
-            <form onSubmit={handleAddTodo} className="flex gap-2 mt-auto">
+            <form onSubmit={handleAddTodo} className="flex gap-2">
                 <input 
-                type="text" 
-                value={todoText}
-                onChange={(e) => setTodoText(e.target.value)}
-                placeholder="할 일 입력..."
-                className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
+                    type="text" 
+                    value={todoText}
+                    onChange={(e) => setTodoText(e.target.value)}
+                    placeholder="오늘의 할 일..."
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all shadow-sm font-medium"
                 />
-                <button type="submit" disabled={isTodoSubmitting || !todoText.trim()} className="bg-brand-600 text-white px-3 py-2 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50">
+                <button 
+                    type="submit" 
+                    disabled={isTodoSubmitting || !todoText.trim()} 
+                    className="bg-slate-900 text-white px-4 py-2.5 rounded-xl hover:bg-slate-800 transition-colors disabled:opacity-50 shadow-md active:scale-95"
+                >
                     {isTodoSubmitting ? <Loader2 size={18} className="animate-spin" /> : <PlusCircle size={18} />}
                 </button>
             </form>
@@ -309,21 +335,21 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* 3. Main Content Controls */}
-      <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-20 z-40 backdrop-blur-md bg-white/80">
+      <div className="bg-white/80 p-2 rounded-2xl border border-slate-200 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-20 z-40 backdrop-blur-md">
            <div className="flex space-x-1 overflow-x-auto pb-1 md:pb-0 no-scrollbar px-2 items-center">
             {(user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN) && (
-                <button onClick={() => setFilterDept('ALL')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${filterDept === 'ALL' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>전체</button>
+                <button onClick={() => setFilterDept('ALL')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${filterDept === 'ALL' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>전체</button>
             )}
             {Object.values(Department).map(dept => {
                 const isRestricted = (user?.role !== UserRole.SENIOR && user?.role !== UserRole.ADMIN) && user?.department !== dept;
                 if (isRestricted) return null;
                 return (
-                    <button key={dept} onClick={() => setFilterDept(dept)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap flex items-center ${filterDept === dept ? 'bg-brand-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>{dept}{(user?.role !== UserRole.SENIOR && user?.role !== UserRole.ADMIN) && <Lock size={10} className="ml-1.5 opacity-70" />}</button>
+                    <button key={dept} onClick={() => setFilterDept(dept)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center ${filterDept === dept ? 'bg-brand-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>{dept}{(user?.role !== UserRole.SENIOR && user?.role !== UserRole.ADMIN) && <Lock size={10} className="ml-1.5 opacity-70" />}</button>
                 );
             })}
           </div>
           <div className="flex items-center gap-2 px-2">
-             <div className="flex bg-slate-100 p-1 rounded-xl">
+             <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
                 <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><ListIcon size={18}/></button>
                 <button onClick={() => setViewMode('course')} className={`p-2 rounded-lg transition-all ${viewMode === 'course' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><LayoutGrid size={18}/></button>
                 <button onClick={() => setViewMode('calendar')} className={`p-2 rounded-lg transition-all ${viewMode === 'calendar' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><CalendarIcon size={18}/></button>
@@ -332,25 +358,38 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* 4. Content Area */}
-      <div>
+      <div className="min-h-[400px]">
         {viewMode === 'calendar' && (
           <CalendarView logs={deptFilteredLogs} externalEvents={externalEvents} onDateSelect={handleDateSelect} selectedDate={selectedCalendarDate} />
         )}
         {viewMode === 'course' && (
-             <div className="space-y-8">
+             <div className="space-y-10">
                 {Object.keys(groupedByCourse).length > 0 ? (
                     Object.entries(groupedByCourse).map(([courseName, courseLogs]: [string, LogEntry[]]) => (
                         <div key={courseName} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                             <div className="flex items-center mb-4 px-1"><div className="w-1 h-6 bg-brand-500 rounded-full mr-3"></div><h3 className="text-xl font-bold text-slate-800">{courseName}</h3><span className="ml-3 bg-slate-100 text-slate-500 text-xs font-bold px-2.5 py-1 rounded-full border border-slate-200">{courseLogs.length}</span></div>
+                             <div className="flex items-center mb-5 px-2">
+                                 <div className="w-1.5 h-6 bg-brand-500 rounded-full mr-4 shadow-sm"></div>
+                                 <h3 className="text-xl font-black text-slate-800 tracking-tight">{courseName}</h3>
+                                 <span className="ml-3 bg-slate-100 text-slate-500 text-[10px] font-black px-2.5 py-1 rounded-full border border-slate-200 shadow-sm">{courseLogs.length} Records</span>
+                             </div>
                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">{courseLogs.map(log => (<LogCard key={log.id} log={log} />))}</div>
                         </div>
                     ))
-                ) : (<div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"><div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300"><Search size={32}/></div><p className="text-slate-400 font-medium">기록이 없습니다.</p></div>)}
+                ) : (
+                    <div className="text-center py-32 bg-white rounded-[2.5rem] border border-slate-100 shadow-soft">
+                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6 text-slate-200"><Search size={40}/></div>
+                        <p className="text-slate-400 font-bold text-lg">필터 조건에 맞는 업무 기록이 없습니다.</p>
+                    </div>
+                )}
              </div>
         )}
         {viewMode === 'list' && (
-            <div className="space-y-4">
-                {finalDisplayLogs.length > 0 ? (finalDisplayLogs.map(log => (<LogCard key={log.id} log={log} />))) : (<div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"><p className="text-slate-400 font-medium">기록이 없습니다.</p></div>)}
+            <div className="space-y-5">
+                {finalDisplayLogs.length > 0 ? (
+                    finalDisplayLogs.map(log => (<LogCard key={log.id} log={log} />))
+                ) : (
+                    <div className="text-center py-32 bg-white rounded-[2.5rem] border border-slate-100 shadow-soft"><p className="text-slate-400 font-bold">기록이 없습니다.</p></div>
+                )}
             </div>
         )}
       </div>
