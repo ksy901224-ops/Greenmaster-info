@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson } from 'lucide-react';
+import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson, LockIcon } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Department, UserRole, UserStatus } from '../types';
 
 const Settings: React.FC = () => {
-  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData, exportAllData } = useApp();
+  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData, exportAllData, isAdmin } = useApp();
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(true);
   const [marketingNotif, setMarketingNotif] = useState(false);
@@ -31,14 +31,14 @@ const Settings: React.FC = () => {
   }, [user]);
 
   const handleUpdateProfile = async () => {
-      if (!user) return;
+      if (!user || !isAdmin) return;
       try {
           await updateUser(user.id, profileForm);
           setIsEditingProfile(false);
           alert('프로필 정보가 수정되었습니다.');
-      } catch (e) {
+      } catch (e: any) {
           console.error(e);
-          alert('수정 중 오류가 발생했습니다.');
+          alert(e.message || '수정 중 오류가 발생했습니다.');
       }
   };
 
@@ -60,8 +60,6 @@ const Settings: React.FC = () => {
       }
       setIsEditingProfile(false);
   };
-
-  const isAdmin = user?.role === UserRole.ADMIN;
 
   const handleSaveSettings = () => {
     alert('환경 설정이 저장되었습니다.');
@@ -106,23 +104,29 @@ const Settings: React.FC = () => {
         </div>
 
         {/* Account Information */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative overflow-hidden">
            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-2">
                <h2 className="text-lg font-bold text-slate-900 flex items-center">
                     <Shield className="mr-2 text-brand-600" size={20} /> 
                     내 계정 정보
                </h2>
-               {!isEditingProfile && (
+               {isAdmin && !isEditingProfile && (
                    <button 
                     onClick={() => setIsEditingProfile(true)}
                     className="text-slate-400 hover:text-brand-600 p-1.5 rounded-full hover:bg-slate-100 transition-colors"
-                    title="프로필 수정"
+                    title="프로필 수정 (관리자 전용)"
                    >
                        <Edit2 size={18} />
                    </button>
                )}
            </div>
           
+          {!isAdmin && (
+              <div className="absolute top-4 right-4 flex items-center text-[10px] font-black text-slate-300 uppercase tracking-widest bg-slate-50 px-2 py-1 rounded-md border border-slate-100">
+                  <LockIcon size={10} className="mr-1"/> Read Only
+              </div>
+          )}
+
           <div className={`bg-slate-50 p-4 rounded-lg border border-slate-100 transition-all ${isEditingProfile ? 'ring-2 ring-brand-100 bg-white' : ''}`}>
              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                  <div className="flex items-center space-x-4 flex-1">
@@ -197,6 +201,11 @@ const Settings: React.FC = () => {
                  )}
              </div>
           </div>
+          {!isAdmin && (
+              <p className="mt-4 text-[10px] text-slate-400 font-medium text-center bg-slate-50 py-2 rounded-lg border border-slate-100 border-dashed">
+                  본인의 계정 정보 및 권한 수정은 시스템 관리자(Admin)만 가능합니다.
+              </p>
+          )}
         </div>
 
         {/* --- ADMIN ONLY: User Management --- */}
@@ -204,15 +213,16 @@ const Settings: React.FC = () => {
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 border-l-4 border-l-brand-500">
                 <h2 className="text-lg font-bold text-slate-900 mb-2 flex items-center">
                     <Users className="mr-2 text-brand-600" size={20} /> 
-                    사용자 관리 (관리자 전용)
+                    사용자 통합 관리 (Admin)
                 </h2>
-                <p className="text-sm text-slate-500 mb-6">신규 가입 요청을 승인하거나 권한을 수정합니다.</p>
+                <p className="text-sm text-slate-500 mb-6">시스템의 모든 사용자 정보를 직접 수정하거나 승인 절차를 관리합니다.</p>
                 <div className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-slate-100 text-slate-500 font-medium border-b border-slate-200">
                             <tr>
                                 <th className="px-4 py-3">사용자</th>
                                 <th className="px-4 py-3">부서</th>
+                                <th className="px-4 py-3">권한 레벨</th>
                                 <th className="px-4 py-3">상태</th>
                                 <th className="px-4 py-3 text-right">관리</th>
                             </tr>
@@ -225,14 +235,25 @@ const Settings: React.FC = () => {
                                         <div className="text-xs text-slate-500">{u.email}</div>
                                     </td>
                                     <td className="px-4 py-3 text-slate-600">{u.department}</td>
+                                    <td className="px-4 py-3">
+                                        <select 
+                                            value={u.role}
+                                            onChange={(e) => updateUserRole(u.id, e.target.value as UserRole)}
+                                            className="text-[10px] font-bold border-slate-200 rounded p-1 bg-white"
+                                        >
+                                            {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
+                                        </select>
+                                    </td>
                                     <td className="px-4 py-3">{getStatusBadge(u.status)}</td>
                                     <td className="px-4 py-3 text-right">
-                                        {u.status === 'PENDING' && (
-                                            <div className="flex justify-end space-x-2">
-                                                <button onClick={() => updateUserStatus(u.id, 'APPROVED')} className="p-1 bg-green-600 text-white rounded hover:bg-green-700"><CheckCircle size={14}/></button>
-                                                <button onClick={() => updateUserStatus(u.id, 'REJECTED')} className="p-1 bg-red-600 text-white rounded hover:bg-red-700"><XCircle size={14}/></button>
-                                            </div>
-                                        )}
+                                        <div className="flex justify-end space-x-2">
+                                            {u.status === 'PENDING' && (
+                                                <>
+                                                    <button onClick={() => updateUserStatus(u.id, 'APPROVED')} className="p-1.5 bg-green-600 text-white rounded hover:bg-green-700 shadow-sm" title="승인"><CheckCircle size={14}/></button>
+                                                    <button onClick={() => updateUserStatus(u.id, 'REJECTED')} className="p-1.5 bg-red-600 text-white rounded hover:bg-red-700 shadow-sm" title="거절"><XCircle size={14}/></button>
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

@@ -88,6 +88,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [locationState, setLocationState] = useState<any>(null);
   const [routeParams, setRouteParams] = useState<{ id?: string }>({});
 
+  const isAdmin = user?.role === UserRole.ADMIN;
+  const isSeniorOrAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
+
   const parsePath = (path: string) => {
     const courseMatch = path.match(/^\/courses\/([^/]+)$/);
     if (courseMatch) return { id: courseMatch[1] };
@@ -249,12 +252,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateUserDepartment = async (userId: string, department: Department) => {
+    if (!isAdmin && user?.id !== userId) return;
     await updateDocument('users', userId, { department });
   };
 
   const updateUser = async (userId: string, data: Partial<UserProfile>) => {
+    if (!isAdmin) {
+        throw new Error("사용자 정보 수정 권한이 없습니다. 시스템 관리자에게 문의하세요.");
+    }
     await updateDocument('users', userId, data);
-    logActivity('UPDATE', 'USER', 'Profile', 'User updated own profile');
+    logActivity('UPDATE', 'USER', 'Profile', `Admin updated profile for user: ${userId}`);
   };
 
   const addLog = (log: LogEntry) => {
@@ -376,11 +383,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('UPDATE', 'USER', 'Data Export', 'User exported local data backup');
   };
 
-  const isSimulatedLive = true;
   const canUseAI = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
   const canViewFullData = user?.role === UserRole.SENIOR || user?.role === UserRole.INTERMEDIATE || user?.role === UserRole.ADMIN;
-  const isAdmin = user?.role === UserRole.ADMIN;
-  const isSeniorOrAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
+  const isSimulatedLive = true;
 
   const value = {
     user, allUsers, login, register, logout, updateUserStatus, updateUserRole, updateUserDepartment, updateUser, createUserManually,
