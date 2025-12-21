@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History as HistoryIcon } from 'lucide-react';
-import { AffinityLevel, Person, CareerRecord, CourseType, GrassType, Region } from '../types';
+import { AffinityLevel, Person, CareerRecord } from '../types';
 import { useApp } from '../contexts/AppContext';
 import { generatePersonReputationReport } from '../services/geminiService';
 
 const PersonDetail: React.FC = () => {
-  const { people, courses, updatePerson, deletePerson, addCourse, routeParams, navigate, canUseAI, logs } = useApp();
+  const { people, courses, updatePerson, deletePerson, routeParams, navigate, canUseAI, logs } = useApp();
   const id = routeParams.id;
   
   const person = people.find(p => p.id === id);
@@ -18,15 +18,11 @@ const PersonDetail: React.FC = () => {
   const [originalPerson, setOriginalPerson] = useState<Person | null>(null);
   const [shouldArchive, setShouldArchive] = useState(false);
 
-  // New Course Modal State (inside Person Edit)
-  const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
-  const [newCourseForm, setNewCourseForm] = useState({ name: '', region: '경기' as Region, holes: 18 });
-
   // Reputation Analysis State
   const [isAnalyzingReputation, setIsAnalyzingReputation] = useState(false);
   const [reputationReport, setReputationReport] = useState<string | null>(null);
 
-  if (!person) return <div className="p-8 text-center">인물 정보를 찾을 수 없습니다.</div>;
+  if (!person) return <div className="p-8 text-center font-bold text-slate-400">인물 정보를 찾을 수 없습니다.</div>;
 
   const currentCourse = courses.find(c => c.id === person.currentCourseId);
 
@@ -94,38 +90,9 @@ const PersonDetail: React.FC = () => {
   const updateCareerField = (index: number, field: keyof CareerRecord, value: string) => {
       if (editForm) {
           const newCareers = [...editForm.careers];
-          const updatedRecord = { ...newCareers[index], [field]: value };
-          
-          // If courseName is changed, try to find and link courseId automatically
-          if (field === 'courseName') {
-              const matchedCourse = courses.find(c => c.name === value);
-              updatedRecord.courseId = matchedCourse ? matchedCourse.id : '';
-          }
-          
-          newCareers[index] = updatedRecord;
+          newCareers[index] = { ...newCareers[index], [field]: value };
           setEditForm({...editForm, careers: newCareers});
       }
-  };
-
-  const handleQuickAddCourse = () => {
-      if (!newCourseForm.name.trim()) return;
-      const newId = `c-quick-${Date.now()}`;
-      addCourse({
-          id: newId,
-          name: newCourseForm.name,
-          region: newCourseForm.region,
-          holes: newCourseForm.holes,
-          type: CourseType.PUBLIC,
-          openYear: new Date().getFullYear().toString(),
-          address: `${newCourseForm.region} 신규 등록 골프장`,
-          grassType: GrassType.ZOYSIA,
-          area: '정보없음',
-          description: '인물 정보 등록 중 즉시 추가됨',
-          issues: []
-      });
-      setIsCourseModalOpen(false);
-      setNewCourseForm({ name: '', region: '경기', holes: 18 });
-      alert(`'${newCourseForm.name}' 골프장이 마스터 DB에 등록되었습니다.`);
   };
 
   const saveEdit = () => {
@@ -153,7 +120,7 @@ const PersonDetail: React.FC = () => {
   };
 
   const handleDelete = () => {
-      if (window.confirm(`정말로 '${person.name}' 인물 정보를 삭제하시겠습니까?`)) {
+      if (window.confirm(`정말로 '${person.name}' 인물 정보를 영구 삭제하시겠습니까?`)) {
           deletePerson(person.id);
           navigate('/courses');
       }
@@ -172,8 +139,6 @@ const PersonDetail: React.FC = () => {
           setIsAnalyzingReputation(false);
       }
   };
-
-  const regions: Region[] = ['서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '인천', '부산', '대구', '울산', '대전', '광주', '세종', '기타'];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -321,13 +286,10 @@ const PersonDetail: React.FC = () => {
                     </div>
 
                     <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200">
-                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
-                            <div className="flex items-center"><Building2 size={14} className="mr-2 text-brand-600"/> 현재 소속 발령 정보</div>
-                            <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-brand-600 hover:underline text-[9px] font-black uppercase">목록에 없나요? 신규 등록</button>
-                        </h4>
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center"><Building2 size={14} className="mr-2 text-brand-600"/> 현재 소속 발령 정보</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장 선택</label>
+                                <label className="block text-[9px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장</label>
                                 <select className="w-full rounded-2xl border-slate-200 p-4 bg-white focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm font-bold" value={editForm.currentCourseId || ''} onChange={(e) => handleEditChange('currentCourseId', e.target.value)}>
                                     <option value="">미지정</option>
                                     {courses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -364,35 +326,16 @@ const PersonDetail: React.FC = () => {
                                 <div key={idx} className="relative bg-slate-50 p-5 rounded-2xl border border-slate-200 group transition-all hover:border-slate-300">
                                     <button onClick={() => removeCareerFromForm(idx)} className="absolute -right-2 -top-2 bg-white text-red-400 hover:text-red-600 p-1.5 rounded-lg border border-slate-200 shadow-md opacity-0 group-hover:opacity-100 transition-all focus:outline-none"><Trash2 size={14} /></button>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
-                                        <div className="space-y-1">
-                                            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">골프장 (Master DB 연동)</label>
-                                            <div className="flex gap-2">
-                                                <input 
-                                                    list="courses-list-careers"
-                                                    placeholder="골프장 명칭 검색..." 
-                                                    className="flex-1 text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" 
-                                                    value={career.courseName} 
-                                                    onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)} 
-                                                />
-                                                <button type="button" onClick={() => { setNewCourseForm({ ...newCourseForm, name: career.courseName }); setIsCourseModalOpen(true); }} className="p-2.5 bg-white border border-slate-200 rounded-xl text-brand-600 hover:bg-brand-50" title="신규 등록"><Plus size={16}/></button>
-                                            </div>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[8px] font-black text-slate-400 uppercase ml-1">수행 직책 / 업무</label>
-                                            <input type="text" placeholder="직책 / 업무" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.role} onChange={(e) => updateCareerField(idx, 'role', e.target.value)} />
-                                        </div>
+                                        <input type="text" placeholder="골프장 명칭" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.courseName} onChange={(e) => updateCareerField(idx, 'courseName', e.target.value)} />
+                                        <input type="text" placeholder="직책 / 업무" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.role} onChange={(e) => updateCareerField(idx, 'role', e.target.value)} />
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <input type="text" placeholder="시작일(YYYY-MM)" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.startDate} onChange={(e) => updateCareerField(idx, 'startDate', e.target.value)} />
                                         <input type="text" placeholder="종료일(YYYY-MM)" className="w-full text-xs font-bold border-slate-200 rounded-xl p-2.5 focus:ring-brand-500 shadow-sm" value={career.endDate || ''} onChange={(e) => updateCareerField(idx, 'endDate', e.target.value)} />
                                     </div>
-                                    {career.courseId && <div className="mt-2 text-[9px] text-brand-600 font-bold flex items-center px-1"><CheckCircle size={10} className="mr-1"/> 마스터 DB 골프장과 연결됨 (ID: {career.courseId})</div>}
                                 </div>
                             ))}
                         </div>
-                        <datalist id="courses-list-careers">
-                            {courses.map(c => <option key={c.id} value={c.name} />)}
-                        </datalist>
                     </div>
                     
                     <div>
@@ -407,41 +350,6 @@ const PersonDetail: React.FC = () => {
                 </div>
             </div>
         </div>
-      )}
-
-      {/* Quick Add Course Modal (Nested) */}
-      {isCourseModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md animate-in zoom-in-95 duration-200">
-              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
-                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-brand-50">
-                      <h4 className="font-black text-lg text-brand-900 flex items-center tracking-tight"><Building2 size={20} className="mr-2"/> 신규 골프장 마스터 등록</h4>
-                      <button onClick={() => setIsCourseModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24}/></button>
-                  </div>
-                  <div className="p-8 space-y-5">
-                      <div>
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">골프장 명칭 *</label>
-                          <input type="text" required className="w-full rounded-xl border-slate-200 p-3.5 text-sm font-bold shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.name} onChange={e => setNewCourseForm({...newCourseForm, name: e.target.value})} placeholder="공식 명칭 입력" />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">지역</label>
-                              <select className="w-full rounded-xl border-slate-200 p-3.5 text-sm font-bold shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.region} onChange={e => setNewCourseForm({...newCourseForm, region: e.target.value as Region})}>
-                                  {regions.map(r => <option key={r} value={r}>{r}</option>)}
-                              </select>
-                          </div>
-                          <div>
-                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">홀 수</label>
-                              <input type="number" className="w-full rounded-xl border-slate-200 p-3.5 text-sm font-bold shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.holes} onChange={e => setNewCourseForm({...newCourseForm, holes: parseInt(e.target.value)})} />
-                          </div>
-                      </div>
-                      <div className="pt-4">
-                          <button onClick={handleQuickAddCourse} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-sm shadow-xl hover:bg-slate-800 transition-all flex justify-center items-center">
-                              <CheckCircle size={18} className="mr-2 text-brand-400" /> MASTER DB에 즉시 등록
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
       )}
     </div>
   );
