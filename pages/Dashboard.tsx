@@ -1,29 +1,29 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { MOCK_EXTERNAL_EVENTS } from '../constants';
 import LogCard from '../components/LogCard';
 import { CalendarView } from '../components/CalendarView';
 import { CalendarSettingsModal } from '../components/CalendarSettingsModal';
 import { Department, LogEntry, UserRole } from '../types';
-import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText } from 'lucide-react';
+import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText, Send, User, RotateCcw } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { addTodo } from '../services/firestoreService';
-import { searchAppWithAIStream } from '../services/geminiService';
+import { createChatSession } from '../services/geminiService';
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 const Dashboard: React.FC = () => {
   const { logs, courses, people, user, canUseAI, canViewFullData, isAdmin, navigate } = useApp();
   
-  // Determine default department filter based on user role
-  // Senior/Admin starts with 'ALL', Intermediate starts with their department
   const [filterDept, setFilterDept] = useState<Department | 'ALL'>(
     (user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN) ? 'ALL' : (user?.department || 'ALL')
   );
 
-  // Enforce dept filter update if user changes (e.g. login/logout)
   useEffect(() => {
-    if (user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN) {
-        // Keep current selection or default to ALL
-    } else if (user?.department) {
+    if (!(user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN) && user?.department) {
         setFilterDept(user.department);
     }
   }, [user]);
@@ -42,12 +42,19 @@ const Dashboard: React.FC = () => {
   const [todoText, setTodoText] = useState('');
   const [isTodoSubmitting, setIsTodoSubmitting] = useState(false);
 
-  // --- AI Search State ---
-  const [aiSearchQuery, setAiSearchQuery] = useState('');
-  const [aiSearchResult, setAiSearchResult] = useState<string | null>(null);
-  const [isAiSearching, setIsAiSearching] = useState(false);
+  // --- AI Chat State ---
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [currentInput, setCurrentInput] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatSessionRef = useRef<any>(null);
 
-  // Stats for Hero Section
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
   const stats = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     const todayLogs = logs.filter(l => l.date === today).length;
@@ -56,36 +63,50 @@ const Dashboard: React.FC = () => {
     return { todayLogs, totalIssues, activeProjects };
   }, [logs, courses]);
 
-  const handleAiSearch = async (e?: React.FormEvent, queryOverride?: string) => {
+  const handleSendMessage = async (e?: React.FormEvent, textOverride?: string) => {
     if (e) e.preventDefault();
-    const query = queryOverride || aiSearchQuery;
-    if (!query.trim()) return;
+    const text = textOverride || currentInput;
+    if (!text.trim() || isStreaming) return;
 
-    if (queryOverride) setAiSearchQuery(queryOverride);
+    if (!chatSessionRef.current) {
+      chatSessionRef.current = createChatSession({ logs, courses, people });
+    }
 
-    setIsAiSearching(true);
-    setAiSearchResult(''); // Clear previous result immediately
+    const newUserMsg: ChatMessage = { role: 'user', content: text };
+    setChatMessages(prev => [...prev, newUserMsg]);
+    setCurrentInput('');
+    setIsStreaming(true);
 
     try {
-      // Use the streaming function
-      await searchAppWithAIStream(
-        query, 
-        { logs, courses, people },
-        (chunk) => {
-          setAiSearchResult(prev => (prev || '') + chunk);
-        }
-      );
+      const result = await chatSessionRef.current.sendMessageStream({ message: text });
+      
+      let assistantMsgContent = '';
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+      for await (const chunk of result) {
+        assistantMsgContent += chunk.text;
+        setChatMessages(prev => {
+          const newMsgs = [...prev];
+          newMsgs[newMsgs.length - 1].content = assistantMsgContent;
+          return newMsgs;
+        });
+      }
     } catch (error) {
-      setAiSearchResult("검색 중 오류가 발생했습니다.");
+      setChatMessages(prev => [...prev, { role: 'assistant', content: '죄송합니다. 응답 생성 중 오류가 발생했습니다.' }]);
     } finally {
-      setIsAiSearching(false);
+      setIsStreaming(false);
     }
+  };
+
+  const resetChat = () => {
+    chatSessionRef.current = null;
+    setChatMessages([]);
+    setCurrentInput('');
   };
 
   const handleAddTodo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!todoText.trim()) return;
-    
     setIsTodoSubmitting(true);
     try {
       await addTodo(todoText, user?.name || '익명 사용자');
@@ -98,17 +119,14 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  // --- Recent Activity Logic (Latest Uploads) ---
   const recentLogs = useMemo(() => {
     return [...logs].sort((a, b) => {
-      // Prioritize CreatedAt for "Recently Uploaded", falling back to Date
       const tA = a.createdAt || new Date(a.date).getTime();
       const tB = b.createdAt || new Date(b.date).getTime();
       return tB - tA;
     }).slice(0, 6);
   }, [logs]);
 
-  // Filters and Sorts
   const deptFilteredLogs = filterDept === 'ALL' ? logs : logs.filter(l => l.department === filterDept);
   const sortedLogs = [...deptFilteredLogs].sort((a, b) => {
     const dateA = new Date(a.date).getTime();
@@ -117,9 +135,7 @@ const Dashboard: React.FC = () => {
   });
   const finalDisplayLogs = sortedLogs.filter(l => {
     if (viewMode === 'calendar' && selectedCalendarDate) return l.date === selectedCalendarDate;
-    const matchesStart = !startDate || l.date >= startDate;
-    const matchesEnd = !endDate || l.date <= endDate;
-    return matchesStart && matchesEnd;
+    return true;
   });
 
   const externalEvents = [
@@ -138,94 +154,32 @@ const Dashboard: React.FC = () => {
   }, {} as Record<string, LogEntry[]>);
 
   const suggestedQueries = [
-    '최근 1주일간 스카이뷰 CC 주요 이슈는?',
-    '김철수 팀장 관련 기록 요약해줘',
-    '진행 중인 모든 공사 현황 알려줘',
-    '레이크사이드 관련 최신 영업 기록은?'
+    '최근 스카이뷰 CC 주요 이슈는?',
+    '최민수 팀장 관련 기록 요약해줘',
+    '진행 중인 공사 현황 알려줘',
   ];
 
-  // --- SPECIAL VIEW FOR JUNIOR (ISSUES ONLY) ---
   if (!canViewFullData) {
       return (
           <div className="space-y-8">
               <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-200 shadow-sm flex items-center space-x-4">
-                  <div className="p-3 bg-white rounded-full text-yellow-600 shadow-sm">
-                      <AlertTriangle size={32} />
-                  </div>
-                  <div>
-                      <h1 className="text-2xl font-bold text-slate-900">주요 이슈 현황판</h1>
-                      <p className="text-slate-600">골프장별 이슈 사항을 조회하고 클릭하여 상세 내역을 확인할 수 있습니다.</p>
-                  </div>
+                  <div className="p-3 bg-white rounded-full text-yellow-600 shadow-sm"><AlertTriangle size={32} /></div>
+                  <div><h1 className="text-2xl font-bold text-slate-900">주요 이슈 현황판</h1><p className="text-slate-600">골프장별 이슈 사항을 조회할 수 있습니다.</p></div>
               </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {courses.map(course => {
-                      const hasIssues = course.issues && course.issues.length > 0;
-                      return (
-                          <div key={course.id} className={`bg-white rounded-xl shadow-sm border p-6 transition-all hover:shadow-md ${hasIssues ? 'border-l-4 border-l-red-500 border-slate-200' : 'border-slate-200 opacity-80'}`}>
-                              <div className="flex justify-between items-start mb-4">
-                                  <h3 className="font-bold text-slate-900 text-lg">{course.name}</h3>
-                                  <button onClick={() => navigate(`/courses/${course.id}`)} className="text-xs bg-slate-100 px-3 py-1.5 rounded-full text-slate-600 hover:bg-slate-200 flex items-center font-medium">
-                                      상세보기 <ChevronRight size={14} className="ml-1"/>
-                                  </button>
-                              </div>
-                              {hasIssues ? (
-                                  <ul className="space-y-3">
-                                      {course.issues?.map((issue, idx) => (
-                                          <li 
-                                            key={idx} 
-                                            className="text-sm text-slate-700 flex items-start bg-red-50 p-2 rounded-lg cursor-pointer hover:bg-red-100 transition-colors group"
-                                            onClick={() => navigate(`/courses/${course.id}`, { filterIssue: issue })}
-                                            title="클릭하여 관련 업무 일지 조회"
-                                          >
-                                              <AlertOctagon size={14} className="text-red-500 mr-2 mt-0.5 shrink-0" />
-                                              <span className="group-hover:underline">{issue}</span>
-                                          </li>
-                                      ))}
-                                  </ul>
-                              ) : (
-                                  <div className="text-center py-6 text-slate-400 text-sm bg-slate-50 rounded-lg">
-                                      <CheckCircle size={20} className="mx-auto mb-2 opacity-50"/>
-                                      등록된 주요 이슈가 없습니다.
-                                  </div>
-                              )}
-                          </div>
-                      );
-                  })}
-              </div>
-
-              {/* Recent Updates Section for Junior */}
-              <div className="mt-8">
-                  <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-                      <Activity size={20} className="mr-2 text-brand-600"/> 최신 업데이트된 자료 (Recent Uploads)
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {recentLogs.map(log => (
-                          <div key={log.id} className="bg-white border border-slate-200 rounded-lg p-4 hover:border-brand-300 transition-all shadow-sm">
-                              <div className="flex justify-between text-xs text-slate-500 mb-2">
-                                  <span className="font-bold text-brand-600">{log.courseName}</span>
-                                  <span>{log.date}</span>
-                              </div>
-                              <h4 className="text-sm font-bold text-slate-800 mb-1 line-clamp-1">{log.title}</h4>
-                              <p className="text-xs text-slate-600 line-clamp-2">{log.content}</p>
-                          </div>
-                      ))}
-                      {recentLogs.length === 0 && (
-                          <div className="col-span-full text-center py-8 text-slate-400 bg-slate-50 rounded-lg border border-dashed">
-                              최신 자료가 없습니다.
-                          </div>
-                      )}
-                  </div>
-              </div>
-              
-              <div className="bg-white border border-slate-200 p-4 rounded-lg text-center text-xs text-slate-500 flex items-center justify-center mt-6">
-                  <Lock size={14} className="mr-2 text-slate-400"/> 상세 업무 일지 전체 조회 및 인물 정보는 상급자/중급자 권한이 필요합니다.
+                  {courses.map(course => (
+                      <div key={course.id} className={`bg-white rounded-xl shadow-sm border p-6 transition-all hover:shadow-md ${course.issues?.length ? 'border-l-4 border-l-red-500 border-slate-200' : 'border-slate-200 opacity-80'}`}>
+                          <div className="flex justify-between items-start mb-4"><h3 className="font-bold text-slate-900 text-lg">{course.name}</h3><button onClick={() => navigate(`/courses/${course.id}`)} className="text-xs bg-slate-100 px-3 py-1.5 rounded-full text-slate-600 hover:bg-slate-200 flex items-center font-medium">상세보기 <ChevronRight size={14} className="ml-1"/></button></div>
+                          {course.issues?.length ? (
+                              <ul className="space-y-3">{course.issues.map((issue, idx) => (<li key={idx} className="text-sm text-slate-700 flex items-start bg-red-50 p-2 rounded-lg cursor-pointer hover:bg-red-100 transition-colors group" onClick={() => navigate(`/courses/${course.id}`, { filterIssue: issue })}><AlertOctagon size={14} className="text-red-500 mr-2 mt-0.5 shrink-0" /><span className="group-hover:underline">{issue}</span></li>))}</ul>
+                          ) : (<div className="text-center py-6 text-slate-400 text-sm bg-slate-50 rounded-lg"><CheckCircle size={20} className="mx-auto mb-2 opacity-50"/>등록된 주요 이슈가 없습니다.</div>)}
+                      </div>
+                  ))}
               </div>
           </div>
       );
   }
 
-  // --- VIEW FOR SENIOR & INTERMEDIATE ---
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
@@ -235,132 +189,117 @@ const Dashboard: React.FC = () => {
               <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-5 rounded-full blur-3xl translate-x-10 -translate-y-10"></div>
               <div className="relative z-10">
                   <h1 className="text-2xl font-bold mb-1">반갑습니다, {user?.name}님 👋</h1>
-                  <p className="text-brand-200 text-sm mb-6">
-                      {user?.department}팀 / {user?.role.split('(')[0]}
-                  </p>
-                  
-                  <div className="flex items-center space-x-2 text-xs bg-white/10 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/10">
-                      <Users size={14} />
-                      <span>
-                          {isAdmin ? '팀 공유 모드 (전체 접근)' : `${user?.department} 부서 업무 모드`}
-                      </span>
-                  </div>
+                  <p className="text-brand-200 text-sm mb-6">{user?.department}팀 / {user?.role.split('(')[0]}</p>
+                  <div className="flex items-center space-x-2 text-xs bg-white/10 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/10"><Users size={14} /><span>{isAdmin ? '팀 공유 모드 (전체 접근)' : `${user?.department} 부서 업무 모드`}</span></div>
               </div>
           </div>
-
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                  <div>
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">오늘의 업무</p>
-                      <h2 className="text-3xl font-black text-brand-600 mt-1">{stats.todayLogs}</h2>
-                  </div>
-                  <div className="p-2 bg-brand-50 text-brand-600 rounded-lg">
-                      <ListIcon size={20}/>
-                  </div>
-              </div>
-              <div className="text-xs text-slate-400 mt-4 flex items-center">
-                  <TrendingUp size={12} className="mr-1 text-emerald-500"/> 전일 대비 활동 증가
-              </div>
+              <div className="flex justify-between items-start"><div><p className="text-slate-500 text-xs font-bold uppercase tracking-wider">오늘의 업무</p><h2 className="text-3xl font-black text-brand-600 mt-1">{stats.todayLogs}</h2></div><div className="p-2 bg-brand-50 text-brand-600 rounded-lg"><ListIcon size={20}/></div></div>
+              <div className="text-xs text-slate-400 mt-4 flex items-center"><TrendingUp size={12} className="mr-1 text-emerald-500"/> 전일 대비 활동 증가</div>
           </div>
-
           <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="flex justify-between items-start">
-                  <div>
-                      <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">관리 이슈</p>
-                      <h2 className="text-3xl font-black text-red-500 mt-1">{stats.totalIssues}</h2>
-                  </div>
-                  <div className="p-2 bg-red-50 text-red-500 rounded-lg">
-                      <AlertOctagon size={20}/>
-                  </div>
-              </div>
-              <div className="text-xs text-slate-400 mt-4">
-                  {stats.activeProjects}개의 프로젝트 진행 중
-              </div>
+              <div className="flex justify-between items-start"><div><p className="text-slate-500 text-xs font-bold uppercase tracking-wider">관리 이슈</p><h2 className="text-3xl font-black text-red-500 mt-1">{stats.totalIssues}</h2></div><div className="p-2 bg-red-50 text-red-500 rounded-lg"><AlertOctagon size={20}/></div></div>
+              <div className="text-xs text-slate-400 mt-4">{stats.activeProjects}개의 프로젝트 진행 중</div>
           </div>
       </div>
 
-      {/* 2. AI & Tools Section */}
+      {/* 2. AI Chat Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* AI Smart Search (2 Columns) - Only for SENIOR/ADMIN */}
         {canUseAI ? (
-          <div className="lg:col-span-2 bg-slate-900 rounded-2xl p-1 shadow-lg border border-slate-800">
-            <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl p-5 h-full relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-20"><Sparkles size={100} className="text-indigo-500"/></div>
-                
-                <div className="relative z-10">
-                    <div className="flex items-center mb-4">
-                        <div className="p-2 bg-indigo-500/20 rounded-lg mr-3">
-                            <Sparkles className="text-indigo-400" size={20} />
-                        </div>
-                        <h3 className="font-bold text-white text-lg">GreenMaster AI Insight</h3>
+          <div className="lg:col-span-2 bg-slate-900 rounded-2xl p-1 shadow-2xl border border-slate-800 flex flex-col min-h-[450px]">
+            <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-xl flex flex-col flex-1 relative overflow-hidden">
+                <div className="p-4 border-b border-white/5 flex justify-between items-center bg-slate-900/50">
+                    <div className="flex items-center">
+                        <div className="p-2 bg-indigo-500/20 rounded-lg mr-3"><Sparkles className="text-indigo-400" size={20} /></div>
+                        <h3 className="font-bold text-white text-md">GreenMaster AI 인텔리전스</h3>
                     </div>
-                    
-                    <form onSubmit={(e) => handleAiSearch(e)} className="relative mb-4 group">
-                        <div className="absolute inset-0 bg-indigo-500 rounded-xl blur opacity-20 group-hover:opacity-30 transition-opacity"></div>
-                        <input 
-                            type="text" 
-                            value={aiSearchQuery}
-                            onChange={(e) => setAiSearchQuery(e.target.value)}
-                            placeholder="예: 최근 1주일간 스카이뷰 CC 주요 이슈는?"
-                            className="relative w-full pl-12 pr-24 py-4 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all shadow-inner"
-                        />
-                        <Search className="absolute left-4 top-4.5 text-slate-500" size={20} />
-                        <button 
-                            type="submit" 
-                            disabled={isAiSearching || !aiSearchQuery.trim()}
-                            className="absolute right-2 top-2 bottom-2 px-4 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-500 transition-colors disabled:opacity-50 flex items-center shadow-lg"
-                        >
-                            {isAiSearching ? <Loader2 size={16} className="animate-spin" /> : '검색'}
-                        </button>
-                    </form>
+                    {chatMessages.length > 0 && (
+                        <button onClick={resetChat} className="p-1.5 text-slate-400 hover:text-white transition-colors" title="대화 초기화"><RotateCcw size={16}/></button>
+                    )}
+                </div>
 
-                    {aiSearchResult ? (
-                        <div className="bg-slate-950/50 rounded-xl p-4 text-slate-300 text-sm leading-relaxed border border-slate-700/50 animate-in fade-in slide-in-from-top-2 whitespace-pre-wrap max-h-40 overflow-y-auto custom-scrollbar">
-                            {aiSearchResult}
-                            {isAiSearching && <span className="inline-block w-1.5 h-4 ml-1 bg-indigo-500 animate-pulse align-middle"></span>}
+                <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-slate-950/20">
+                    {chatMessages.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+                            <Sparkles size={48} className="text-indigo-500 mb-4 animate-pulse" />
+                            <p className="text-slate-400 text-sm font-medium">골프장 현황이나 인맥 관계에 대해<br/>무엇이든 물어보세요.</p>
+                            <div className="mt-6 flex flex-wrap gap-2 justify-center max-w-sm">
+                                {suggestedQueries.map((q, idx) => (
+                                    <button key={idx} onClick={() => handleSendMessage(undefined, q)} className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-[10px] text-slate-400 hover:bg-slate-700 hover:text-white transition-all">{q}</button>
+                                ))}
+                            </div>
                         </div>
                     ) : (
-                        <div className="flex flex-wrap gap-2">
-                            {suggestedQueries.map((q, idx) => (
-                                <button key={idx} onClick={() => handleAiSearch(undefined, q)} className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-xs text-slate-400 hover:bg-slate-700 hover:text-white transition-all text-left">
-                                    {q}
-                                </button>
+                        <>
+                            {chatMessages.map((msg, i) => (
+                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+                                    <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-200 border border-white/5 shadow-inner'}`}>
+                                        <div className="flex items-center mb-1 opacity-50 text-[10px] font-bold uppercase tracking-wider">
+                                            {msg.role === 'user' ? <><User size={10} className="mr-1"/> 나</> : <><Sparkles size={10} className="mr-1"/> 그린마스터 AI</>}
+                                        </div>
+                                        <div className="whitespace-pre-line leading-relaxed">{msg.content}</div>
+                                    </div>
+                                </div>
                             ))}
-                        </div>
+                            {isStreaming && (
+                                <div className="flex justify-start">
+                                    <div className="bg-slate-800 rounded-full px-4 py-2 text-indigo-400 flex space-x-1 items-center">
+                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></span>
+                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                                        <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={chatEndRef} />
+                        </>
                     )}
+                </div>
+
+                <div className="p-4 bg-slate-900/80 backdrop-blur-sm border-t border-white/5">
+                    <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
+                        <input 
+                            type="text" 
+                            value={currentInput}
+                            onChange={(e) => setCurrentInput(e.target.value)}
+                            placeholder="메시지를 입력하세요..."
+                            className="flex-1 px-4 py-3 rounded-xl bg-slate-950 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all text-sm"
+                            disabled={isStreaming}
+                        />
+                        <button 
+                            type="submit" 
+                            disabled={isStreaming || !currentInput.trim()}
+                            className="p-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 transition-all disabled:opacity-50 flex items-center justify-center shadow-lg transform active:scale-95"
+                        >
+                            <Send size={18} />
+                        </button>
+                    </form>
                 </div>
             </div>
           </div>
         ) : (
-            // Fallback for Intermediate users who can't use AI
             <div className="lg:col-span-2 bg-gradient-to-r from-slate-50 to-white rounded-2xl p-6 border border-slate-200 flex flex-col justify-center items-center text-center shadow-sm">
-                <div className="p-4 bg-slate-100 rounded-full mb-3 text-slate-400">
-                    <Lock size={32} />
-                </div>
+                <div className="p-4 bg-slate-100 rounded-full mb-3 text-slate-400"><Lock size={32} /></div>
                 <h3 className="text-slate-800 font-bold mb-1">AI 기능 제한됨</h3>
-                <p className="text-slate-500 text-sm">상급자 권한이 필요합니다. 관리자에게 문의하세요.</p>
+                <p className="text-slate-500 text-sm">상급자 권한이 필요합니다.</p>
             </div>
         )}
 
-        {/* Quick To-Do (1 Column) */}
+        {/* Quick To-Do */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-full">
             <div className="flex items-center space-x-2 mb-4">
                 <div className="p-1.5 bg-brand-100 text-brand-700 rounded-lg"><CheckCircle size={18} /></div>
                 <h3 className="font-bold text-slate-800">Quick To-Do</h3>
             </div>
-            
             <div className="flex-1 bg-slate-50 rounded-xl border border-slate-100 p-4 mb-3 flex items-center justify-center text-center">
-                <p className="text-xs text-slate-400">등록된 빠른 할 일이 없습니다.<br/>아래 입력창을 통해 추가하세요.</p>
+                <p className="text-xs text-slate-400">등록된 빠른 할 일이 없습니다.</p>
             </div>
-
             <form onSubmit={handleAddTodo} className="flex gap-2 mt-auto">
                 <input 
                 type="text" 
                 value={todoText}
                 onChange={(e) => setTodoText(e.target.value)}
                 placeholder="할 일 입력..."
-                className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
+                className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all"
                 />
                 <button type="submit" disabled={isTodoSubmitting || !todoText.trim()} className="bg-brand-600 text-white px-3 py-2 rounded-lg hover:bg-brand-700 transition-colors disabled:opacity-50">
                     {isTodoSubmitting ? <Loader2 size={18} className="animate-spin" /> : <PlusCircle size={18} />}
@@ -371,41 +310,19 @@ const Dashboard: React.FC = () => {
 
       {/* 3. Main Content Controls */}
       <div className="bg-white p-2 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 sticky top-20 z-40 backdrop-blur-md bg-white/80">
-           {/* Filters */}
            <div className="flex space-x-1 overflow-x-auto pb-1 md:pb-0 no-scrollbar px-2 items-center">
-            {/* Show ALL filter only for Senior/Admin */}
             {(user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN) && (
                 <button onClick={() => setFilterDept('ALL')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${filterDept === 'ALL' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>전체</button>
             )}
-            
-            {/* Show Specific Departments */}
             {Object.values(Department).map(dept => {
-                // If Intermediate, only show their own department button
                 const isRestricted = (user?.role !== UserRole.SENIOR && user?.role !== UserRole.ADMIN) && user?.department !== dept;
-                
                 if (isRestricted) return null;
-
                 return (
-                    <button 
-                        key={dept} 
-                        onClick={() => setFilterDept(dept)} 
-                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap flex items-center ${filterDept === dept ? 'bg-brand-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
-                    >
-                        {dept}
-                        {(user?.role !== UserRole.SENIOR && user?.role !== UserRole.ADMIN) && <Lock size={10} className="ml-1.5 opacity-70" />}
-                    </button>
+                    <button key={dept} onClick={() => setFilterDept(dept)} className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors whitespace-nowrap flex items-center ${filterDept === dept ? 'bg-brand-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>{dept}{(user?.role !== UserRole.SENIOR && user?.role !== UserRole.ADMIN) && <Lock size={10} className="ml-1.5 opacity-70" />}</button>
                 );
             })}
           </div>
-
-          {/* View Toggles */}
           <div className="flex items-center gap-2 px-2">
-             {viewMode === 'calendar' && (
-                <button onClick={() => setIsSettingsOpen(true)} className={`p-2 rounded-lg border transition-all ${isAnyCalendarConnected ? 'bg-brand-50 text-brand-600 border-brand-200' : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600'}`}>
-                  <Settings size={18} />
-                </button>
-             )}
-             
              <div className="flex bg-slate-100 p-1 rounded-xl">
                 <button onClick={() => setViewMode('list')} className={`p-2 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><ListIcon size={18}/></button>
                 <button onClick={() => setViewMode('course')} className={`p-2 rounded-lg transition-all ${viewMode === 'course' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><LayoutGrid size={18}/></button>
@@ -419,52 +336,21 @@ const Dashboard: React.FC = () => {
         {viewMode === 'calendar' && (
           <CalendarView logs={deptFilteredLogs} externalEvents={externalEvents} onDateSelect={handleDateSelect} selectedDate={selectedCalendarDate} />
         )}
-
         {viewMode === 'course' && (
              <div className="space-y-8">
                 {Object.keys(groupedByCourse).length > 0 ? (
                     Object.entries(groupedByCourse).map(([courseName, courseLogs]: [string, LogEntry[]]) => (
                         <div key={courseName} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                             <div className="flex items-center mb-4 px-1">
-                                <div className="w-1 h-6 bg-brand-500 rounded-full mr-3"></div>
-                                <h3 className="text-xl font-bold text-slate-800">{courseName}</h3>
-                                <span className="ml-3 bg-slate-100 text-slate-500 text-xs font-bold px-2.5 py-1 rounded-full border border-slate-200">
-                                    {courseLogs.length}
-                                </span>
-                             </div>
-                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                                {courseLogs.map(log => (
-                                    <LogCard key={log.id} log={log} />
-                                ))}
-                             </div>
+                             <div className="flex items-center mb-4 px-1"><div className="w-1 h-6 bg-brand-500 rounded-full mr-3"></div><h3 className="text-xl font-bold text-slate-800">{courseName}</h3><span className="ml-3 bg-slate-100 text-slate-500 text-xs font-bold px-2.5 py-1 rounded-full border border-slate-200">{courseLogs.length}</span></div>
+                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">{courseLogs.map(log => (<LogCard key={log.id} log={log} />))}</div>
                         </div>
                     ))
-                ) : (
-                    <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
-                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300">
-                            <Search size={32}/>
-                        </div>
-                        <p className="text-slate-400 font-medium">
-                            {filterDept !== 'ALL' ? `'${filterDept}' 부서의 ` : ''}조건에 맞는 업무 기록이 없습니다.
-                        </p>
-                    </div>
-                )}
+                ) : (<div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"><div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-300"><Search size={32}/></div><p className="text-slate-400 font-medium">기록이 없습니다.</p></div>)}
              </div>
         )}
-
         {viewMode === 'list' && (
             <div className="space-y-4">
-                {finalDisplayLogs.length > 0 ? (
-                    finalDisplayLogs.map(log => (
-                        <LogCard key={log.id} log={log} />
-                    ))
-                ) : (
-                    <div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm">
-                        <p className="text-slate-400 font-medium">
-                            {filterDept !== 'ALL' ? `'${filterDept}' 부서의 ` : ''}조건에 맞는 업무 기록이 없습니다.
-                        </p>
-                    </div>
-                )}
+                {finalDisplayLogs.length > 0 ? (finalDisplayLogs.map(log => (<LogCard key={log.id} log={log} />))) : (<div className="text-center py-20 bg-white rounded-3xl border border-slate-100 shadow-sm"><p className="text-slate-400 font-medium">기록이 없습니다.</p></div>)}
             </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -244,10 +244,10 @@ const WriteLog: React.FC = () => {
       {!editingLog && (
           <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-slate-200 mb-6 overflow-x-auto no-scrollbar">
             {[
-                { id: 'LOG', label: '수기 작성', icon: <FileText size={18}/> },
-                { id: 'AI', label: 'AI 스마트 업로드', icon: <Sparkles size={18}/> },
-                { id: 'PERSON', label: '인물 일괄 등록', icon: <UserPlus size={18}/> },
-                { id: 'SCHEDULE', label: '일정 일괄 등록', icon: <CalendarPlus size={18}/> }
+                { id: 'LOG', label: '업무 일지', icon: <FileText size={18}/> },
+                { id: 'AI', label: 'AI 분석 등록', icon: <Sparkles size={18}/> },
+                { id: 'PERSON', label: '인물 다중 등록', icon: <UserPlus size={18}/> },
+                { id: 'SCHEDULE', label: '일정 다중 등록', icon: <CalendarPlus size={18}/> }
             ].map(tab => (
                 <button
                   key={tab.id}
@@ -264,7 +264,9 @@ const WriteLog: React.FC = () => {
             {/* MANUAL LOG TAB */}
             {activeTab === 'LOG' && (
                 <form onSubmit={handleLogSubmit} className="space-y-6">
-                    <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center"><FileText className="mr-2 text-brand-600"/> 업무 일지 작성</h3>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center"><FileText className="mr-2 text-brand-600"/> 업무 일지 작성</h3>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">작성 날짜</label><input type="date" required className={getInputClass()} value={logDate} onChange={(e) => setLogDate(e.target.value)} /></div>
                         <div><label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">담당 부서</label><div className="relative"><select className={getSelectClass()} value={dept} onChange={(e) => setDept(e.target.value)}>{Object.values(Department).map(d => <option key={d} value={d}>{d}</option>)}</select><ChevronDown className="absolute right-4 top-3.5 text-slate-400" size={16}/></div></div>
@@ -278,7 +280,7 @@ const WriteLog: React.FC = () => {
                                 <Building2 className="absolute right-4 top-3.5 text-slate-300" size={16}/>
                             </div>
                             <button type="button" onClick={() => setIsCourseModalOpen(true)} className="p-3 bg-slate-100 text-slate-600 rounded-xl border border-slate-200 hover:bg-slate-200 transition-colors" title="신규 골프장 등록">
-                                <Plus size={20}/>
+                                <PlusCircle size={24}/>
                             </button>
                         </div>
                     </div>
@@ -292,37 +294,40 @@ const WriteLog: React.FC = () => {
             {activeTab === 'PERSON' && (
                 <form onSubmit={handleBulkPersonSubmit} className="space-y-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-slate-800 flex items-center"><UserPlus className="mr-2 text-brand-600"/> 인물 네트워크 일괄 등록</h3>
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center"><UserPlus className="mr-2 text-brand-600"/> 인물 네트워크 등록</h3>
                         <button type="button" onClick={addPersonRow} className="bg-brand-50 text-brand-700 px-4 py-2 rounded-xl text-xs font-black border border-brand-100 hover:bg-brand-100 flex items-center transition-all shadow-sm">
                             <Plus size={14} className="mr-1"/> 인물 추가
                         </button>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                         {personEntries.map((p, idx) => (
-                            <div key={p.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative group animate-in slide-in-from-top-2">
-                                {personEntries.length > 1 && (
-                                    <button type="button" onClick={() => removePersonRow(p.id)} className="absolute -right-2 -top-2 bg-white text-red-500 rounded-full p-1 border border-slate-200 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <MinusCircle size={18}/>
-                                    </button>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div className="md:col-span-1">
+                            <div key={p.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-6 relative group animate-in slide-in-from-top-2">
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className="text-[10px] font-black bg-slate-200 text-slate-600 px-2 py-0.5 rounded">Entry #{idx + 1}</span>
+                                    {personEntries.length > 1 && (
+                                        <button type="button" onClick={() => removePersonRow(p.id)} className="text-red-500 hover:text-red-700 flex items-center text-xs font-bold transition-colors">
+                                            <MinusCircle size={16} className="mr-1"/> 삭제
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">성함 *</label>
                                         <input type="text" className={getInputClass()} value={p.name} onChange={e => updatePersonEntry(p.id, 'name', e.target.value)} placeholder="홍길동" required />
                                     </div>
-                                    <div className="md:col-span-1">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">직책</label>
                                         <input type="text" className={getInputClass()} value={p.role} onChange={e => updatePersonEntry(p.id, 'role', e.target.value)} placeholder="예: 코스팀장" />
                                     </div>
-                                    <div className="md:col-span-1">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">소속 골프장</label>
                                         <div className="relative">
                                             <input list={`courses-person-${idx}`} className={getInputClass()} value={globalCourses.find(c => c.id === p.courseId)?.name || ''} onChange={e => { const f = globalCourses.find(c => c.name === e.target.value); updatePersonEntry(p.id, 'courseId', f ? f.id : ''); }} placeholder="검색 선택..." />
                                             <datalist id={`courses-person-${idx}`}>{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
                                         </div>
                                     </div>
-                                    <div className="md:col-span-1">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">연락처</label>
                                         <input type="text" className={getInputClass()} value={p.phone} onChange={e => updatePersonEntry(p.id, 'phone', e.target.value)} placeholder="010-0000-0000" />
                                     </div>
@@ -331,7 +336,11 @@ const WriteLog: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="pt-8 border-t border-slate-100">
+                    <div className="pt-8 flex flex-col items-center">
+                        <button type="button" onClick={addPersonRow} className="mb-6 group flex flex-col items-center text-slate-400 hover:text-brand-600 transition-all">
+                            <PlusCircle size={32} className="mb-1 group-hover:scale-110 transition-transform" />
+                            <span className="text-xs font-black uppercase tracking-widest">새 인물 추가</span>
+                        </button>
                         <button type="submit" disabled={isSubmitting} className="w-full bg-brand-600 text-white py-4 rounded-2xl font-black text-lg shadow-xl hover:bg-brand-700 flex justify-center items-center active:scale-[0.99] transition-all">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CheckCircle className="mr-2" />} 인물 정보 ({personEntries.length}건) 일괄 저장
                         </button>
@@ -343,37 +352,40 @@ const WriteLog: React.FC = () => {
             {activeTab === 'SCHEDULE' && (
                 <form onSubmit={handleBulkScheduleSubmit} className="space-y-6">
                     <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-slate-800 flex items-center"><CalendarPlus className="mr-2 text-brand-600"/> 일정 일괄 등록</h3>
-                        <button type="button" onClick={addScheduleRow} className="bg-brand-50 text-brand-700 px-4 py-2 rounded-xl text-xs font-black border border-brand-100 hover:bg-brand-100 flex items-center shadow-sm">
+                        <h3 className="text-lg font-bold text-slate-800 flex items-center"><CalendarPlus className="mr-2 text-brand-600"/> 일정 네트워크 등록</h3>
+                        <button type="button" onClick={addScheduleRow} className="bg-brand-50 text-brand-700 px-4 py-2 rounded-xl text-xs font-black border border-brand-100 hover:bg-brand-100 flex items-center transition-all shadow-sm">
                             <Plus size={14} className="mr-1"/> 일정 추가
                         </button>
                     </div>
 
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                         {scheduleEntries.map((s, idx) => (
-                            <div key={s.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-5 relative group animate-in slide-in-from-top-2">
-                                {scheduleEntries.length > 1 && (
-                                    <button type="button" onClick={() => removeScheduleRow(s.id)} className="absolute -right-2 -top-2 bg-white text-red-500 rounded-full p-1 border border-slate-200 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <MinusCircle size={18}/>
-                                    </button>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                    <div className="md:col-span-1">
+                            <div key={s.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-6 relative group animate-in slide-in-from-top-2">
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className="text-[10px] font-black bg-slate-200 text-slate-600 px-2 py-0.5 rounded">Schedule #{idx + 1}</span>
+                                    {scheduleEntries.length > 1 && (
+                                        <button type="button" onClick={() => removeScheduleRow(s.id)} className="text-red-500 hover:text-red-700 flex items-center text-xs font-bold transition-colors">
+                                            <MinusCircle size={16} className="mr-1"/> 삭제
+                                        </button>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">일정 제목 *</label>
                                         <input type="text" className={getInputClass()} value={s.title} onChange={e => updateScheduleEntry(s.id, 'title', e.target.value)} placeholder="예: 미팅, 방문" required />
                                     </div>
-                                    <div className="md:col-span-1">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">날짜</label>
                                         <input type="date" className={getInputClass()} value={s.date} onChange={e => updateScheduleEntry(s.id, 'date', e.target.value)} />
                                     </div>
-                                    <div className="md:col-span-1">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">시간</label>
                                         <div className="relative">
                                             <input type="time" className={getInputClass()} value={s.time} onChange={e => updateScheduleEntry(s.id, 'time', e.target.value)} />
                                             <Clock className="absolute right-4 top-3 text-slate-300" size={16}/>
                                         </div>
                                     </div>
-                                    <div className="md:col-span-1">
+                                    <div>
                                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">관련 골프장</label>
                                         <div className="relative">
                                             <input list={`courses-sched-${idx}`} className={getInputClass()} value={globalCourses.find(c => c.id === s.courseId)?.name || ''} onChange={e => { const f = globalCourses.find(c => c.name === e.target.value); updateScheduleEntry(s.id, 'courseId', f ? f.id : ''); }} placeholder="골프장 검색..." />
@@ -385,7 +397,11 @@ const WriteLog: React.FC = () => {
                         ))}
                     </div>
 
-                    <div className="pt-8 border-t border-slate-100">
+                    <div className="pt-8 flex flex-col items-center">
+                        <button type="button" onClick={addScheduleRow} className="mb-6 group flex flex-col items-center text-slate-400 hover:text-brand-600 transition-all">
+                            <PlusCircle size={32} className="mb-1 group-hover:scale-110 transition-transform" />
+                            <span className="text-xs font-black uppercase tracking-widest">새 일정 추가</span>
+                        </button>
                         <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black text-lg shadow-xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.99] transition-all">
                             {isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <CalendarPlus className="mr-2" />} 일정 ({scheduleEntries.length}건) 일괄 등록
                         </button>
@@ -393,7 +409,7 @@ const WriteLog: React.FC = () => {
                 </form>
             )}
 
-            {/* AI SMART UPLOAD TAB (As existing functionality) */}
+            {/* AI SMART UPLOAD TAB */}
             {activeTab === 'AI' && (
                 <div className="space-y-6">
                     <div className="text-center mb-8">
@@ -407,6 +423,7 @@ const WriteLog: React.FC = () => {
                             <input type="file" multiple accept="image/*,.pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
                             <UploadCloud size={64} className="mx-auto text-slate-200 group-hover:text-indigo-500 mb-4 transition-colors" />
                             <p className="font-black text-slate-700">파일을 클릭하여 업로드하세요 (최대 10개)</p>
+                            <p className="text-[10px] text-slate-400 mt-2 font-bold tracking-widest uppercase">IMAGE / PDF SUPPORTED</p>
                         </div>
                     )}
 
@@ -422,25 +439,24 @@ const WriteLog: React.FC = () => {
                             <h3 className="font-black text-slate-800 text-lg">AI가 실시간 분석을 진행하고 있습니다...</h3>
                         </div>
                     )}
-
-                    {/* (Analysis Results display code as before) */}
                 </div>
             )}
       </div>
 
       {/* Course Modal maintained for new entries */}
       {isCourseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in zoom-in-95">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in zoom-in-95">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
              <div className="flex justify-between items-center mb-6 border-b pb-4"><h3 className="font-black text-xl text-slate-900 flex items-center"><Building2 size={24} className="mr-3 text-brand-600"/>신규 골프장 등록</h3><button onClick={() => setIsCourseModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors"><X size={24}/></button></div>
-             <div className="space-y-5">
-                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">골프장 명칭</label><input type="text" className={getInputClass()} value={newCourse.name} onChange={(e) => setNewCourse({...newCourse, name: e.target.value})} placeholder="예: 그린마스터 CC" /></div>
+             <div className="space-y-5 overflow-y-auto max-h-[70vh] p-1">
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">골프장 명칭</label><input type="text" className={getInputClass()} value={newCourse.name} onChange={(e) => setNewCourse({...newCourse, name: e.target.value})} placeholder="예: 그린마스터 CC" /></div>
                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">지역</label><select className={getSelectClass()} value={newCourse.region} onChange={(e) => setNewCourse({...newCourse, region: e.target.value as Region})}>{regions.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
-                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">홀 수</label><input type="number" className={getInputClass()} value={newCourse.holes} onChange={(e) => setNewCourse({...newCourse, holes: parseInt(e.target.value)})} /></div>
+                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">지역</label><select className={getSelectClass()} value={newCourse.region} onChange={(e) => setNewCourse({...newCourse, region: e.target.value as Region})}>{regions.map(r => <option key={r} value={r}>{r}</option>)}</select></div>
+                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">홀 수</label><input type="number" className={getInputClass()} value={newCourse.holes} onChange={(e) => setNewCourse({...newCourse, holes: parseInt(e.target.value)})} /></div>
                  </div>
-                 <div className="flex justify-end space-x-3 mt-8 pt-4 border-t"><button onClick={() => setIsCourseModalOpen(false)} className="px-6 py-3 text-sm font-black text-slate-500 hover:text-slate-800">취소</button><button onClick={handleSaveNewCourse} className="px-10 py-3.5 bg-brand-600 text-white rounded-2xl text-sm font-black shadow-xl hover:bg-brand-700 flex items-center active:scale-95 transition-all"><CheckCircle size={18} className="mr-2"/> 등록 완료</button></div>
+                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">상세 주소</label><input type="text" className={getInputClass()} value={newCourse.address} onChange={(e) => setNewCourse({...newCourse, address: e.target.value})} placeholder="도로명 주소 등" /></div>
              </div>
+             <div className="flex justify-end space-x-3 mt-8 pt-4 border-t"><button onClick={() => setIsCourseModalOpen(false)} className="px-6 py-3 text-sm font-black text-slate-500 hover:text-slate-800">취소</button><button onClick={handleSaveNewCourse} className="px-10 py-3.5 bg-brand-600 text-white rounded-2xl text-sm font-black shadow-xl hover:bg-brand-700 flex items-center active:scale-95 transition-all"><CheckCircle size={18} className="mr-2"/> 등록 완료</button></div>
           </div>
         </div>
       )}

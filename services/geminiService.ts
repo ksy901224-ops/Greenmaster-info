@@ -1,6 +1,6 @@
 
 // @google/genai service for intelligence processing
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse, Chat } from "@google/genai";
 import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -20,7 +20,6 @@ export const analyzeDocument = async (
       }
   }
 
-  // Optimize context for matching
   const courseListStr = existingCourseNames.slice(0, 300).join(', ');
 
   contentParts.push({
@@ -82,7 +81,44 @@ export const analyzeDocument = async (
   return JSON.parse(response.text);
 };
 
-// ... (existing code below remains same)
+// Streaming Chat Session for Multi-turn Conversation
+export const createChatSession = (
+  appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] }
+): Chat => {
+  const prunedLogs = appContextData.logs.slice(0, 50).map(l => ({ 
+    date: l.date, course: l.courseName, title: l.title, content: l.content.substring(0, 150) 
+  }));
+  const prunedCourses = appContextData.courses.slice(0, 100).map(c => ({ 
+    name: c.name, region: c.region, holes: c.holes, type: c.type 
+  }));
+  const prunedPeople = appContextData.people.slice(0, 100).map(p => ({ 
+    name: p.name, role: p.currentRole, course: prunedCourses.find(c => c.name === p.currentCourseId)?.name || '기타', affinity: p.affinity 
+  }));
+
+  const systemInstruction = `
+    당신은 골프장 비즈니스 및 인적 네트워크 전문가 '그린마스터 AI'입니다.
+    다음 제공되는 시스템 데이터를 바탕으로 사용자의 질문에 답하세요.
+    데이터에는 골프장 정보, 업무 일지, 인물 관계도가 포함되어 있습니다.
+    
+    [시스템 데이터 요약]
+    - 골프장: ${JSON.stringify(prunedCourses)}
+    - 인물: ${JSON.stringify(prunedPeople)}
+    - 주요 일지: ${JSON.stringify(prunedLogs)}
+
+    사용자가 특정 인물이나 골프장의 이력을 물으면 데이터를 검색하여 정확히 답변하세요.
+    데이터에 없는 내용은 추측하지 말고 모른다고 답변하세요.
+    답변은 전문적이면서도 친절한 한국어로 작성하세요.
+  `;
+
+  return ai.chats.create({
+    model: 'gemini-3-flash-preview',
+    config: {
+      systemInstruction: systemInstruction,
+      temperature: 0.7,
+    },
+  });
+};
+
 export const generateCourseSummary = async (
   course: GolfCourse,
   logs: LogEntry[],
@@ -111,51 +147,6 @@ export const generateCourseSummary = async (
   });
 
   return response.text;
-};
-
-export const searchAppWithAIStream = async (
-  query: string, 
-  appContextData: { logs: LogEntry[], courses: GolfCourse[], people: Person[] },
-  onChunk: (text: string) => void
-): Promise<void> => {
-  const prunedLogs = (appContextData.logs || []).slice(0, 30).map(l => ({ 
-    d: l.date, 
-    c: l.courseName, 
-    t: l.title, 
-    content: l.content.substring(0, 100) 
-  }));
-  
-  const prunedCourses = (appContextData.courses || []).slice(0, 50).map(c => ({ 
-    n: c.name, 
-    r: c.region, 
-    h: c.holes 
-  }));
-  
-  const prunedPeople = (appContextData.people || []).slice(0, 20).map(p => ({ 
-    n: p.name, 
-    r: p.currentRole, 
-    a: p.affinity 
-  }));
-
-  const contextString = JSON.stringify({ 
-      logs: prunedLogs, 
-      courses: prunedCourses, 
-      people: prunedPeople 
-  });
-  
-  const prompt = `당신은 GreenMaster AI 비서입니다. 다음 데이터를 바탕으로 사용자의 질문에 답하세요.
-  [Context]: ${contextString}
-  [Question]: "${query}"
-  답변은 한국어로 작성하세요.`;
-
-  const responseStream = await ai.models.generateContentStream({
-    model: 'gemini-3-flash-preview',
-    contents: prompt,
-  });
-
-  for await (const chunk of responseStream) {
-    if (chunk.text) onChunk(chunk.text);
-  }
 };
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
