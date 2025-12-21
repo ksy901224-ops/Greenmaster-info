@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord } from '../types';
 import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS } from '../constants';
@@ -13,6 +14,7 @@ interface AppContextType {
   updateUserRole: (userId: string, role: UserRole) => void;
   updateUserDepartment: (userId: string, department: Department) => void;
   updateUser: (userId: string, data: Partial<UserProfile>) => Promise<void>;
+  createUserManually: (data: { name: string, email: string, department: Department, role: UserRole }) => Promise<void>;
   
   logs: LogEntry[];
   courses: GolfCourse[];
@@ -60,7 +62,7 @@ const DEFAULT_ADMIN: UserProfile = {
   id: 'admin-01',
   name: '김관리 (System)',
   email: 'admin@greenmaster.com',
-  role: UserRole.SENIOR, 
+  role: UserRole.ADMIN, 
   department: Department.MANAGEMENT,
   avatar: 'https://ui-avatars.com/api/?name=Admin+Kim&background=0D9488&color=fff',
   status: 'APPROVED'
@@ -209,6 +211,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     await saveDocument('users', newUser);
   };
 
+  const createUserManually = async (data: { name: string, email: string, department: Department, role: UserRole }) => {
+    if (allUsers.some(u => u.email.toLowerCase() === data.email.trim().toLowerCase())) {
+        throw new Error('이미 존재하는 이메일입니다.');
+    }
+    const newUser: UserProfile = {
+      id: `user-manual-${Date.now()}`,
+      ...data,
+      email: data.email.trim(),
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name)}&background=0F172A&color=fff`,
+      status: 'APPROVED'
+    };
+    await saveDocument('users', newUser);
+    logActivity('CREATE', 'USER', data.name, `Admin created user with role: ${data.role}`);
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem('greenmaster_user');
@@ -315,9 +332,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('DELETE', 'MATERIAL', target?.name || '자재');
   };
 
-  // Fix: Added missing refreshLogs function to satisfy the context interface.
-  // Real-time updates are already handled by subscribeToCollection (onSnapshot), 
-  // but we keep this function to ensure the AppContext value is complete.
   const refreshLogs = () => {
     console.log("Real-time synchronization active via Firestore listeners.");
   };
@@ -364,7 +378,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const isAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
 
   const value = {
-    user, allUsers, login, register, logout, updateUserStatus, updateUserRole, updateUserDepartment, updateUser,
+    user, allUsers, login, register, logout, updateUserStatus, updateUserRole, updateUserDepartment, updateUser, createUserManually,
     logs, courses, people, externalEvents, systemLogs, financials, materials,
     addLog, updateLog, deleteLog,
     addCourse, updateCourse, deleteCourse,

@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole, UserStatus, Department, UserProfile, SystemLog, GolfCourse, CourseType, GrassType, Region } from '../types';
-import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2 } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2, Key, Mail, User as UserIcon } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 
 interface EnhancedSyncItem {
@@ -25,7 +25,7 @@ interface EnhancedSyncItem {
 }
 
 const AdminDashboard: React.FC = () => {
-  const { user, allUsers, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse } = useApp();
+  const { user, allUsers, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse, createUserManually } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'MASTER'>('MASTER');
 
@@ -37,6 +37,16 @@ const AdminDashboard: React.FC = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+
+  // Create User State
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    department: Department.SALES,
+    role: UserRole.INTERMEDIATE
+  });
 
   // Access Control
   React.useEffect(() => {
@@ -110,6 +120,23 @@ const AdminDashboard: React.FC = () => {
       } finally {
           setIsSyncing(false);
           setSelectedFiles([]);
+      }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+      e.preventDefault();
+      try {
+          await createUserManually({
+              name: newUserForm.name,
+              email: newUserForm.email,
+              department: newUserForm.department,
+              role: newUserForm.role
+          });
+          alert('신규 사용자가 생성되었습니다.');
+          setIsCreateModalOpen(false);
+          setNewUserForm({ name: '', email: '', password: '', department: Department.SALES, role: UserRole.INTERMEDIATE });
+      } catch (err: any) {
+          alert(err.message || '사용자 생성에 실패했습니다.');
       }
   };
 
@@ -274,7 +301,7 @@ const AdminDashboard: React.FC = () => {
                             <p className="text-xs text-slate-500 mt-1">시스템에서 자동으로 매칭된 결과를 검토하세요.</p>
                           </div>
                           <div className="flex items-center gap-3 w-full sm:w-auto">
-                              <button onClick={() => setSyncResults(null)} className="flex-1 sm:flex-none px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-sm transition-colors uppercase tracking-widest">Discard</button>
+                              <button onClick={() => setSyncResults(null)} className="px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-sm transition-colors uppercase tracking-widest">Discard</button>
                               <button 
                                 onClick={handleBulkApply}
                                 disabled={batchProcessing || syncResults.every(i => i.status === 'success')}
@@ -377,8 +404,14 @@ const AdminDashboard: React.FC = () => {
 
       {activeTab === 'USERS' && (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-6 bg-slate-50 border-b border-slate-200">
+              <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                   <h3 className="font-bold text-slate-800 flex items-center"><Users className="mr-2" size={20}/> 사용자 계정 관리 ({allUsers.length})</h3>
+                  <button 
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center hover:bg-slate-800 transition-all shadow-md active:scale-95"
+                  >
+                      <UserPlus size={18} className="mr-2"/> 신규 사용자 생성
+                  </button>
               </div>
               <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left">
@@ -394,7 +427,15 @@ const AdminDashboard: React.FC = () => {
                       <tbody className="divide-y divide-slate-100">
                           {allUsers.map(u => (
                               <tr key={u.id} className="hover:bg-slate-50 transition-colors">
-                                  <td className="px-6 py-4 font-bold text-slate-900">{u.name}<div className="text-xs font-normal text-slate-500">{u.email}</div></td>
+                                  <td className="px-6 py-4 font-bold text-slate-900">
+                                      <div className="flex items-center">
+                                          <img src={u.avatar} className="w-8 h-8 rounded-full mr-3 border border-slate-200" alt="avatar" />
+                                          <div>
+                                              <div>{u.name}</div>
+                                              <div className="text-xs font-normal text-slate-400">{u.email}</div>
+                                          </div>
+                                      </div>
+                                  </td>
                                   <td className="px-6 py-4">{u.department}</td>
                                   <td className="px-6 py-4">
                                       <select 
@@ -426,6 +467,97 @@ const AdminDashboard: React.FC = () => {
           </div>
       )}
 
+      {/* Manual User Creation Modal */}
+      {isCreateModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-lg text-slate-800 flex items-center">
+                          <UserPlus className="mr-2 text-brand-600" size={24}/> 신규 사용자 직접 생성
+                      </h3>
+                      <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors"><X size={20}/></button>
+                  </div>
+                  <form onSubmit={handleCreateUser} className="p-8 space-y-5">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">이름 (실명)</label>
+                          <div className="relative">
+                            <UserIcon className="absolute left-3 top-3 text-slate-300" size={18}/>
+                            <input 
+                                required
+                                type="text" 
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
+                                placeholder="사용자 성함 입력"
+                                value={newUserForm.name}
+                                onChange={e => setNewUserForm({...newUserForm, name: e.target.value})}
+                            />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">이메일 (ID)</label>
+                          <div className="relative">
+                            <Mail className="absolute left-3 top-3 text-slate-300" size={18}/>
+                            <input 
+                                required
+                                type="email" 
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
+                                placeholder="email@greenmaster.com"
+                                value={newUserForm.email}
+                                onChange={e => setNewUserForm({...newUserForm, email: e.target.value})}
+                            />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">임시 비밀번호</label>
+                          <div className="relative">
+                            <Key className="absolute left-3 top-3 text-slate-300" size={18}/>
+                            <input 
+                                required
+                                type="password" 
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-all text-sm outline-none"
+                                placeholder="초기 접속 시 사용할 비밀번호"
+                                value={newUserForm.password}
+                                onChange={e => setNewUserForm({...newUserForm, password: e.target.value})}
+                            />
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">소속 부서</label>
+                              <select 
+                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 text-sm outline-none bg-white"
+                                value={newUserForm.department}
+                                onChange={e => setNewUserForm({...newUserForm, department: e.target.value as Department})}
+                              >
+                                  {Object.values(Department).map(d => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">권한 (Role)</label>
+                              <select 
+                                className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-brand-500 text-sm outline-none bg-white font-bold"
+                                value={newUserForm.role}
+                                onChange={e => setNewUserForm({...newUserForm, role: e.target.value as UserRole})}
+                              >
+                                  <option value={UserRole.JUNIOR}>Junior</option>
+                                  <option value={UserRole.INTERMEDIATE}>Intermediate</option>
+                                  <option value={UserRole.SENIOR}>Senior</option>
+                                  <option value={UserRole.ADMIN}>Admin</option>
+                              </select>
+                          </div>
+                      </div>
+                      <div className="pt-4">
+                          <button 
+                            type="submit"
+                            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl transform active:scale-[0.98]"
+                          >
+                              사용자 즉시 생성
+                          </button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+
       {activeTab === 'LOGS' && (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 bg-slate-50 border-b border-slate-200">
@@ -448,7 +580,7 @@ const AdminDashboard: React.FC = () => {
                                   <td className="px-6 py-4 text-slate-400 font-mono">{new Date(sl.timestamp).toLocaleString()}</td>
                                   <td className="px-6 py-4 font-bold">{sl.userName}</td>
                                   <td className="px-6 py-4">
-                                      <span className={`px-1.5 py-0.5 rounded ${sl.actionType === 'DELETE' ? 'bg-red-50 text-red-600' : sl.actionType === 'CREATE' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>{sl.actionType}</span>
+                                      <span className={`px-1.5 py-0.5 rounded ${sl.actionType === 'DELETE' ? 'bg-red-50 text-red-600' : sl.actionType === 'CREATE' ? 'bg-emerald-50 text-emerald-600' : sl.actionType === 'UPDATE' ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-600'}`}>{sl.actionType}</span>
                                   </td>
                                   <td className="px-6 py-4">{sl.targetType}: {sl.targetName}</td>
                                   <td className="px-6 py-4 text-slate-500">{sl.details || '-'}</td>
