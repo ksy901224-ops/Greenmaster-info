@@ -18,12 +18,13 @@ const WorkLogList: React.FC = () => {
   // Filter Logic
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
+      const term = searchTerm.toLowerCase();
       const matchSearch = 
-        log.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        log.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.courseName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        log.author.includes(searchTerm) ||
-        (log.tags && log.tags.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())));
+        (log.title || '').toLowerCase().includes(term) || 
+        (log.content || '').toLowerCase().includes(term) ||
+        (log.courseName || '').toLowerCase().includes(term) ||
+        (log.author || '').toLowerCase().includes(term) ||
+        (log.tags && log.tags.some(tag => tag.toLowerCase().includes(term)));
 
       const matchDept = filterDept === 'ALL' || log.department === filterDept;
       
