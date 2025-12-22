@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary, analyzeMaterialInventory, generateCourseRelationshipIntelligence } from '../services/geminiService';
-import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus } from 'lucide-react';
+import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus, UserCheck } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region, Person, LogEntry, GolfCoursePerson } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -23,7 +23,7 @@ const formatKRW = (amount: number) => {
 };
 
 const CourseDetail: React.FC = () => {
-  const { user, courses, logs, updateCourse, deleteCourse, people, canUseAI, canViewFullData, isAdmin, navigate, routeParams, locationState, financials, materials, addFinancial, updateFinancial, deleteFinancial, addMaterial, updateMaterial, deleteMaterial } = useApp();
+  const { user, courses, logs, updateCourse, deleteCourse, people, canUseAI, canViewFullData, isAdmin, navigate, routeParams, locationState, financials, materials, addFinancial, updateFinancial, deleteFinancial, addMaterial, updateMaterial, deleteMaterial, updatePerson } = useApp();
   const id = routeParams.id;
   
   const [activeTab, setActiveTab] = useState<'INFO' | 'LOGS' | 'PEOPLE' | 'MANAGEMENT'>('INFO');
@@ -55,6 +55,10 @@ const CourseDetail: React.FC = () => {
   // --- Intelligence States ---
   const [isAnalyzingIntelligence, setIsAnalyzingIntelligence] = useState(false);
   const [intelReport, setIntelReport] = useState<string | null>(null);
+
+  // --- Link Person Modal ---
+  const [isLinkPersonModalOpen, setIsLinkPersonModalOpen] = useState(false);
+  const [linkPersonSearch, setLinkPersonSearch] = useState('');
 
   // Derived Values via useMemo
   const course = useMemo(() => courses.find(c => c.id === id), [courses, id]);
@@ -108,7 +112,6 @@ const CourseDetail: React.FC = () => {
       .filter(m => (m.year || currentYear) === matYearFilter);
   }, [courseMaterials, matCategory, matYearFilter, currentYear]);
 
-  // Use the formalized associatedPeople from the GolfCourse interface
   const currentStaff = useMemo(() => 
     course?.associatedPeople?.filter(p => p.isCurrent) || [], 
     [course]
@@ -133,8 +136,6 @@ const CourseDetail: React.FC = () => {
     if (!course) return;
     setIsAnalyzingIntelligence(true);
     setIntelReport(null);
-    // Convert GolfCoursePerson back to full Person for analysis if needed, 
-    // or pass the basic info to the AI service
     const fullCurrentStaff = people.filter(p => p.currentCourseId === id);
     try {
         const report = await generateCourseRelationshipIntelligence(course, fullCurrentStaff, relatedLogs);
@@ -143,6 +144,29 @@ const CourseDetail: React.FC = () => {
         alert('분석 중 오류가 발생했습니다.');
     } finally {
         setIsAnalyzingIntelligence(false);
+    }
+  };
+
+  const handleLinkPerson = async () => {
+    const matched = people.find(p => p.name === linkPersonSearch);
+    if (!matched) {
+        alert('존재하지 않는 인물입니다. 먼저 인물을 등록해 주세요.');
+        return;
+    }
+    if (matched.currentCourseId === id) {
+        alert('이미 본 골프장에 소속된 인물입니다.');
+        return;
+    }
+    
+    if (window.confirm(`'${matched.name}' 인물을 '${course.name}' 소속으로 변경하시겠습니까?`)) {
+        await updatePerson({
+            ...matched,
+            currentCourseId: id,
+            notes: (matched.notes || '') + `\n[소속 변경] ${new Date().toISOString().split('T')[0]} - ${course.name}으로 발령`
+        });
+        alert('소속 정보가 성공적으로 업데이트되었습니다.');
+        setLinkPersonSearch('');
+        setIsLinkPersonModalOpen(false);
     }
   };
 
@@ -704,7 +728,7 @@ const CourseDetail: React.FC = () => {
         )}
 
         {activeTab === 'LOGS' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-in fade-in duration-500">
                 <div className="col-span-full mb-2">
                     <div className="relative group">
                         <Search className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={20}/>
@@ -727,7 +751,6 @@ const CourseDetail: React.FC = () => {
 
         {activeTab === 'PEOPLE' && (
             <div className="space-y-10 animate-in fade-in duration-500">
-                {/* AI Intelligence Briefing Section */}
                 {canUseAI && (
                     <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden ring-1 ring-white/10">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
@@ -796,12 +819,20 @@ const CourseDetail: React.FC = () => {
                         <h3 className="text-xl font-black text-slate-900 flex items-center tracking-tight">
                             <Users size={24} className="mr-3 text-brand-600 bg-brand-50 p-1 rounded-lg"/> 현재 소속 주요 인맥 <span className="ml-3 text-xs font-black text-brand-600 bg-brand-100 px-3 py-1 rounded-full shadow-sm">{currentStaff.length}</span>
                         </h3>
-                        <button 
-                            onClick={() => navigate('/write', { activeTab: 'PERSON', currentCourseId: course.id })}
-                            className="bg-brand-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-brand-700 transition-all shadow-md flex items-center"
-                        >
-                            <UserPlus size={18} className="mr-2"/> 인물 등록
-                        </button>
+                        <div className="flex items-center gap-3">
+                          <button 
+                              onClick={() => setIsLinkPersonModalOpen(true)}
+                              className="bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-md flex items-center"
+                          >
+                              <ArrowRightLeft size={18} className="mr-2"/> 인물 소속 연동
+                          </button>
+                          <button 
+                              onClick={() => navigate('/write', { activeTab: 'PERSON', currentCourseId: course.id })}
+                              className="bg-brand-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-brand-700 transition-all shadow-md flex items-center"
+                          >
+                              <UserPlus size={18} className="mr-2"/> 신규 인물 등록
+                          </button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {currentStaff.map(assoc => (
@@ -843,9 +874,41 @@ const CourseDetail: React.FC = () => {
         )}
       </div>
 
-      {/* --- Modals --- */}
-      
-      {/* Financial Modal */}
+      {isLinkPersonModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <h3 className="font-black text-xl text-slate-900 flex items-center tracking-tight"><ArrowRightLeft size={24} className="mr-3 text-indigo-600"/> 기존 인물 소속 연동</h3>
+                    <button onClick={() => setIsLinkPersonModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-1.5 hover:bg-slate-200 rounded-xl"><X size={24}/></button>
+                </div>
+                <div className="p-10 space-y-8">
+                    <p className="text-sm text-slate-500 font-medium">마스터 DB에 이미 등록된 인물을 검색하여 본 골프장으로 소속 정보를 업데이트합니다.</p>
+                    <div className="relative group">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block ml-1">인물 성명 검색 (Master DB)</label>
+                        <input 
+                            list="master-people-link-list"
+                            className="w-full border-slate-200 rounded-2xl p-4 font-black text-lg text-slate-900 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 shadow-sm" 
+                            value={linkPersonSearch} 
+                            onChange={(e) => setLinkPersonSearch(e.target.value)}
+                            placeholder="이름 입력..."
+                        />
+                        <datalist id="master-people-link-list">
+                            {people.map(p => <option key={p.id} value={p.name} />)}
+                        </datalist>
+                        <div className="absolute right-4 bottom-4 text-slate-300 group-focus-within:text-indigo-500"><Search size={20}/></div>
+                    </div>
+                </div>
+                <div className="p-8 bg-slate-50 flex justify-end space-x-4 border-t border-slate-100">
+                    <button onClick={() => setIsLinkPersonModalOpen(false)} className="px-6 py-3 text-sm font-black text-slate-500 hover:text-slate-800 transition-colors">취소</button>
+                    <button onClick={handleLinkPerson} className="px-10 py-3.5 bg-indigo-600 text-white rounded-2xl text-sm font-black shadow-xl hover:bg-indigo-700 transition-all active:scale-95 flex items-center">
+                        <UserCheck size={18} className="mr-2"/> 현재 코스로 소속 업데이트
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* --- Modals (Financial, Material, etc.) --- */}
       {isFinModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md animate-in fade-in duration-300">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -877,7 +940,6 @@ const CourseDetail: React.FC = () => {
           </div>
       )}
 
-      {/* Material Modal */}
       {isMatModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md animate-in fade-in duration-300">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -889,6 +951,7 @@ const CourseDetail: React.FC = () => {
                       <div className="grid grid-cols-2 gap-5">
                         <div>
                             <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block ml-1">자재 분류</label>
+                            {/* Changed setMetForm to setMatForm below */}
                             <select className="w-full border-slate-200 rounded-2xl p-4 text-sm font-black bg-white focus:ring-4 focus:ring-emerald-500/10 shadow-sm" value={matForm.category} onChange={(e) => setMatForm({...matForm, category: e.target.value as MaterialCategory})}>
                                 {Object.values(MaterialCategory).map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
@@ -909,16 +972,16 @@ const CourseDetail: React.FC = () => {
                         </div>
                         <div>
                             <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block ml-1">단위 (Unit)</label>
-                            <input type="text" className="w-full border-slate-200 rounded-2xl p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-emerald-500/10" value={matForm.unit} onChange={(e) => setMatForm({...matForm, unit: e.target.value})} placeholder="kg, L, PKG 등" />
+                            <input type="text" className="w-full border-slate-200 rounded-2xl p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={matForm.unit} onChange={(e) => setMatForm({...matForm, unit: e.target.value})} placeholder="kg, L, PKG 등" />
                         </div>
                       </div>
                       <div>
                           <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block ml-1">공급/제조 업체</label>
-                          <input type="text" className="w-full border-slate-200 rounded-2xl p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-emerald-500/10" value={matForm.supplier} onChange={(e) => setMatForm({...matForm, supplier: e.target.value})} placeholder="제조사 또는 납품 업체명" />
+                          <input type="text" className="w-full border-slate-200 rounded-2xl p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={matForm.supplier} onChange={(e) => setMatForm({...matForm, supplier: e.target.value})} placeholder="제조사 또는 납품 업체명" />
                       </div>
                       <div>
                           <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block ml-1">관리 특이사항</label>
-                          <textarea className="w-full border-slate-200 rounded-2xl p-4 text-sm font-medium h-28 leading-relaxed focus:ring-4 focus:ring-emerald-500/10 shadow-sm" value={matForm.notes} onChange={(e) => setMatForm({...matForm, notes: e.target.value})} placeholder="사용 현황, 보관 위치, 보관 기한 등" />
+                          <textarea className="w-full border-slate-200 rounded-2xl p-4 text-sm font-medium h-28 leading-relaxed focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-sm" value={matForm.notes} onChange={(e) => setMatForm({...matForm, notes: e.target.value})} placeholder="사용 현황, 보관 위치, 보관 기한 등" />
                       </div>
                   </div>
                   <div className="p-8 bg-slate-50 flex justify-end space-x-4 border-t border-slate-100">
@@ -929,7 +992,6 @@ const CourseDetail: React.FC = () => {
           </div>
       )}
 
-      {/* AI Material Preview Modal */}
       {isPreviewModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md animate-in fade-in duration-300">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200">
@@ -965,7 +1027,6 @@ const CourseDetail: React.FC = () => {
           </div>
       )}
 
-      {/* Edit Course Info Modal */}
       {isEditModalOpen && editForm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/70 p-4 backdrop-blur-md animate-in fade-in duration-300">
             <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">

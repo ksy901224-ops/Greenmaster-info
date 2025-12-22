@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History as HistoryIcon, UserX, ExternalLink, Database, Info, Map, FileText, Search, PlusCircle } from 'lucide-react';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History as HistoryIcon, UserX, ExternalLink, Database, Info, Map, FileText, Search, PlusCircle, UserCheck } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord, CourseType, GrassType, Region } from '../types';
 import { useApp } from '../contexts/AppContext';
 import { generatePersonReputationReport } from '../services/geminiService';
@@ -9,7 +9,6 @@ const PersonDetail: React.FC = () => {
   const { people, courses, updatePerson, deletePerson, addCourse, routeParams, navigate, canUseAI, logs } = useApp();
   const id = routeParams.id;
   
-  // 1. Hooks
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<Person | null>(null);
@@ -20,11 +19,9 @@ const PersonDetail: React.FC = () => {
   const [isAnalyzingReputation, setIsAnalyzingReputation] = useState(false);
   const [reputationReport, setReputationReport] = useState<string | null>(null);
 
-  // --- Temporary State for Form Context ---
   const [currentCourseSearch, setCurrentCourseSearch] = useState('');
   const [activeCareerIndexForQuickAdd, setActiveCareerIndexForQuickAdd] = useState<number | null>(null);
 
-  // Derived Values via useMemo
   const person = useMemo(() => people.find(p => p.id === id), [people, id]);
 
   const hasRoleChanged = useMemo(() => {
@@ -139,7 +136,6 @@ const PersonDetail: React.FC = () => {
       };
       addCourse(newCourse);
       
-      // Auto-populate based on context
       if (editForm) {
           if (activeCareerIndexForQuickAdd !== null) {
               const newCareers = [...editForm.careers];
@@ -166,7 +162,6 @@ const PersonDetail: React.FC = () => {
 
       let finalPerson = { ...editForm };
       
-      // AUTO-ARCHIVE LOGIC
       if (shouldArchive && originalPerson && originalPerson.currentCourseId) {
           const oldCourseName = courses.find(c => c.id === originalPerson.currentCourseId)?.name || '미지정';
           const archivedRecord: CareerRecord = {
@@ -244,24 +239,26 @@ const PersonDetail: React.FC = () => {
                     {currentCourse ? (
                       <button 
                         onClick={() => navigate(`/courses/${currentCourse.id}`)}
-                        className="text-brand-700 font-bold text-xl flex items-center hover:bg-brand-50 px-2 py-1 rounded-lg transition-colors border border-transparent hover:border-brand-200"
+                        className="text-brand-700 font-black text-xl flex items-center hover:bg-brand-50 px-2 py-1 rounded-lg transition-all border border-transparent hover:border-brand-200 group/course"
                       >
-                        <Building2 size={20} className="mr-2 opacity-70"/> {currentCourse.name}
-                        <ExternalLink size={14} className="ml-2 opacity-50"/>
+                        <Building2 size={20} className="mr-2 opacity-70 text-brand-500"/> 
+                        {currentCourse.name}
+                        <ArrowRight size={14} className="ml-2 opacity-0 group-hover/course:opacity-100 transform translate-x-0 group-hover/course:translate-x-1 transition-all"/>
+                        <span className="ml-3 text-[10px] bg-brand-600 text-white px-2 py-0.5 rounded uppercase tracking-tighter shadow-sm font-black">MASTER SYNCED</span>
                       </button>
                     ) : (
-                      <p className="text-slate-400 font-bold text-xl flex items-center px-2 py-1">
-                        <Building2 size={20} className="mr-2 opacity-70"/> 소속 정보 미지정
+                      <p className="text-slate-400 font-bold text-xl flex items-center px-2 py-1 italic">
+                        <Building2 size={20} className="mr-2 opacity-50"/> 소속 정보 미지정
                       </p>
                     )}
                     <span className="mx-4 text-slate-200 hidden md:block">|</span>
-                    <span className="text-slate-600 text-xl font-medium px-2">{person.currentRole}</span>
+                    <span className="text-slate-600 text-xl font-black px-2">{person.currentRole}</span>
                 </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 pt-8 border-t border-slate-100 text-sm font-medium text-slate-500">
                 <div className="flex items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-inner group transition-all hover:bg-white hover:border-brand-200"><Phone size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-black text-base">{person.phone || '연락처 미등록'}</span></div>
-                <div className="flex items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-inner group transition-all hover:bg-white hover:border-brand-200"><Calendar size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-black text-base">발령일: {person.currentRoleStartDate || '정보 없음'}</span></div>
+                <div className="flex items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-inner group transition-all hover:bg-white hover:border-brand-200"><Calendar size={18} className="mr-3 text-brand-500" /> <span className="text-slate-800 font-black text-base">현 직책 발령: {person.currentRoleStartDate || '정보 없음'}</span></div>
             </div>
         </div>
       </div>
@@ -414,7 +411,6 @@ const PersonDetail: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* AUTO-ARCHIVE CONFIRMATION */}
                         {hasRoleChanged && originalPerson?.currentCourseId && (
                             <div className="mt-8 bg-amber-50 p-6 rounded-[2rem] border border-amber-200 flex items-start gap-5 animate-in slide-in-from-top-2 shadow-soft">
                                 <div className="p-3 bg-white rounded-2xl text-amber-600 shadow-sm border border-amber-100"><Archive size={24}/></div>
@@ -429,7 +425,6 @@ const PersonDetail: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Advanced Career History Management */}
                     <div className="space-y-6">
                         <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                             <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center"><HistoryIcon size={14} className="mr-2 text-brand-600"/> 과거 경력 이력 관리</h4>
@@ -480,12 +475,11 @@ const PersonDetail: React.FC = () => {
                     </div>
                     
                     <div className="space-y-4">
-                        <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">관계 전략 및 특징 메모</label>
-                        <textarea className="w-full rounded-[2rem] border-slate-200 p-6 h-40 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-inner font-medium leading-relaxed bg-slate-50/30" value={editForm.notes} onChange={(e) => handleEditChange('notes', e.target.value)} placeholder="인물의 성격, 관계 관리 전략 등을 상세히 기록하세요..." />
+                        <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">인물 비즈니스 공략 포인트 및 관계 전략</label>
+                        <textarea className="w-full rounded-[2rem] border-slate-200 p-6 h-40 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 shadow-inner font-medium leading-relaxed bg-slate-50/30" value={editForm.notes} onChange={(e) => handleEditChange('notes', e.target.value)} placeholder="인물의 성격, 주요 관심사, 우리 회사와의 협력 가치 등을 상세히 기록하세요..." />
                     </div>
                 </div>
 
-                {/* Common Datalist for Course Search */}
                 <datalist id="master-courses-datalist">
                     {courses.map(c => <option key={c.id} value={c.name} />)}
                 </datalist>

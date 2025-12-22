@@ -1,12 +1,12 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region, CareerRecord } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter, CheckSquare, Square, UserCheck } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
 const WriteLog: React.FC = () => {
-  const { user, addLog, updateLog, addCourse, updateCourse, addPerson, addExternalEvent, courses: globalCourses, people: globalPeople, navigate, locationState } = useApp();
+  const { user, addLog, updateLog, addCourse, updateCourse, addPerson, updatePerson, courses: globalCourses, people: globalPeople, navigate, locationState } = useApp();
   const editingLog = locationState?.log as LogEntry | undefined;
   
   const [activeTab, setActiveTab] = useState<'LOG' | 'AI' | 'PERSON'>('LOG');
@@ -23,14 +23,20 @@ const WriteLog: React.FC = () => {
       extractedPeople: any[]
   } | null>(null);
 
+  // Selection States
+  const [selectedCourseIndices, setSelectedCourseIndices] = useState<Set<number>>(new Set());
+  const [selectedLogIndices, setSelectedLogIndices] = useState<Set<number>>(new Set());
+  const [selectedPeopleIndices, setSelectedPeopleIndices] = useState<Set<number>>(new Set());
+
   // AI Result Filters
   const [aiFilterPriority, setAiFilterPriority] = useState<number | 'ALL'>('ALL');
   const [aiFilterType, setAiFilterType] = useState<'ALL' | 'NEW_COURSE' | 'RISK'>('ALL');
 
   const filteredAiLogs = useMemo(() => {
       if (!aiResults) return [];
-      return aiResults.extractedLogs.filter(l => {
+      return aiResults.extractedLogs.map((l, idx) => ({ ...l, originalIdx: idx })).filter(l => {
           const matchPriority = aiFilterPriority === 'ALL' || l.priority >= aiFilterPriority;
+          // Fixed apiFilterType to aiFilterType below
           const matchType = aiFilterType === 'ALL' || (aiFilterType === 'RISK' && l.risk);
           return matchPriority && matchType;
       });
@@ -53,10 +59,13 @@ const WriteLog: React.FC = () => {
   const [content, setContent] = useState('');
   
   // --- Person Registration State ---
+  const [isUpdateMode, setIsUpdateMode] = useState(false);
+  const [selectedPersonId, setSelectedPersonId] = useState<string>('');
   const [personForm, setPersonForm] = useState({
     name: '',
     phone: '',
     currentRole: '',
+    currentCourseId: '',
     currentCourseName: '',
     affinity: AffinityLevel.NEUTRAL,
     notes: ''
@@ -108,58 +117,44 @@ const WriteLog: React.FC = () => {
     }
   };
 
-  const handleQuickCourseAdd = () => {
-      if (!newCourseForm.name.trim()) return;
-      const newId = `c-quick-${Date.now()}`;
-      const newCourse: GolfCourse = {
-          id: newId,
-          name: newCourseForm.name,
-          region: newCourseForm.region,
-          holes: newCourseForm.holes,
-          type: newCourseForm.type,
-          openYear: new Date().getFullYear().toString(),
-          address: `${newCourseForm.region} 신규 등록지`,
-          grassType: GrassType.ZOYSIA,
-          area: '정보없음',
-          description: '일지 작성 중 퀵 등록됨',
-          issues: []
-      };
-      addCourse(newCourse);
-      
-      if (activeTab === 'PERSON') {
-          setPersonForm({...personForm, currentCourseName: newCourseForm.name});
-      } else {
-          setCourseId(newId);
-      }
-      
-      setIsCourseModalOpen(false);
-      setNewCourseForm({ name: '', region: '경기', holes: 18, type: CourseType.PUBLIC });
-      alert(`'${newCourse.name}' 골프장이 마스터 DB에 추가되었습니다.`);
-  };
-
   const handlePersonSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!personForm.name || !personForm.currentRole) {
-      alert('성명과 직책을 입력해주세요.');
+      alert('성명과 직책은 필수 입력 사항입니다.');
       return;
     }
     setIsSubmitting(true);
     try {
-      const course = globalCourses.find(c => c.name === personForm.currentCourseName);
-      const newPerson: Person = {
-        id: `p-${Date.now()}`,
+      const personData: Person = {
+        id: isUpdateMode ? selectedPersonId : `p-man-${Date.now()}`,
         name: personForm.name,
         phone: personForm.phone,
         currentRole: personForm.currentRole,
-        currentCourseId: course?.id || '',
-        currentRoleStartDate: new Date().toISOString().split('T')[0],
+        currentCourseId: personForm.currentCourseId || undefined,
         affinity: personForm.affinity,
         notes: personForm.notes,
-        careers: []
+        careers: isUpdateMode ? globalPeople.find(p => p.id === selectedPersonId)?.careers || [] : []
       };
-      await addPerson(newPerson);
-      alert('인물 정보가 마스터 DB에 등록되었습니다.');
-      setPersonForm({ name: '', phone: '', currentRole: '', currentCourseName: '', affinity: AffinityLevel.NEUTRAL, notes: '' });
+
+      if (isUpdateMode) {
+        await updatePerson(personData);
+        alert('인물 정보가 업데이트되었습니다.');
+      } else {
+        await addPerson(personData);
+        alert('인물 정보가 신규 등록되었습니다.');
+      }
+
+      setPersonForm({
+        name: '',
+        phone: '',
+        currentRole: '',
+        currentCourseId: '',
+        currentCourseName: '',
+        affinity: AffinityLevel.NEUTRAL,
+        notes: ''
+      });
+      setIsUpdateMode(false);
+      setSelectedPersonId('');
       setActiveTab('LOG');
     } catch (error) {
       alert('저장 중 오류가 발생했습니다.');
@@ -168,10 +163,49 @@ const WriteLog: React.FC = () => {
     }
   };
 
+  const handleQuickCourseAdd = async () => {
+    if (!newCourseForm.name) {
+      alert('골프장 명칭을 입력해주세요.');
+      return;
+    }
+    try {
+      const newId = `c-quick-${Date.now()}`;
+      const courseData: GolfCourse = {
+        id: newId,
+        name: newCourseForm.name,
+        region: newCourseForm.region,
+        holes: newCourseForm.holes,
+        type: newCourseForm.type,
+        openYear: new Date().getFullYear().toString(),
+        address: `${newCourseForm.region} 신규 등록 골프장`,
+        grassType: GrassType.ZOYSIA,
+        area: '정보없음',
+        description: '작업 중 즉시 추가됨',
+        issues: []
+      };
+      await addCourse(courseData);
+      
+      if (activeTab === 'LOG') {
+          setCourseId(newId);
+      } else if (activeTab === 'PERSON') {
+          setPersonForm(prev => ({ ...prev, currentCourseId: newId, currentCourseName: courseData.name }));
+      }
+      
+      setIsCourseModalOpen(false);
+      setNewCourseForm({ name: '', region: '경기', holes: 18, type: CourseType.PUBLIC });
+      alert('새로운 골프장이 등록되었습니다.');
+    } catch (error) {
+      alert('등록 중 오류가 발생했습니다.');
+    }
+  };
+
   const startAiAnalysis = async () => {
     if (selectedFiles.length === 0) return;
     setIsAnalyzing(true);
     setAiResults(null);
+    setSelectedCourseIndices(new Set());
+    setSelectedLogIndices(new Set());
+    setSelectedPeopleIndices(new Set());
     setAnalysisProgress('문서 텍스트 스캔 및 인텔리전스 도출 중...');
     try {
       const inputData = await Promise.all(selectedFiles.map(async (file) => {
@@ -184,7 +218,20 @@ const WriteLog: React.FC = () => {
       }));
       const existingNames = globalCourses.map(c => c.name);
       const results = await analyzeDocument(inputData, existingNames);
-      if (results) setAiResults(results);
+      if (results) {
+          setAiResults(results);
+          const highConfCourses = new Set<number>();
+          results.extractedCourses.forEach((c: any, i: number) => { if(c.confidence > 0.8) highConfCourses.add(i); });
+          setSelectedCourseIndices(highConfCourses);
+
+          const highConfLogs = new Set<number>();
+          results.extractedLogs.forEach((l: any, i: number) => { if(l.confidence > 0.7) highConfLogs.add(i); });
+          setSelectedLogIndices(highConfLogs);
+
+          const highConfPeople = new Set<number>();
+          results.extractedPeople.forEach((p: any, i: number) => { if(p.confidence > 0.8) highConfPeople.add(i); });
+          setSelectedPeopleIndices(highConfPeople);
+      }
     } catch (error: any) {
       alert(`AI 분석 오류: ${error.message}`);
     } finally {
@@ -192,23 +239,51 @@ const WriteLog: React.FC = () => {
     }
   };
 
+  const toggleSelection = (type: 'COURSE' | 'LOG' | 'PERSON', index: number) => {
+      if (type === 'COURSE') {
+          const newSet = new Set(selectedCourseIndices);
+          if (newSet.has(index)) newSet.delete(index); else newSet.add(index);
+          setSelectedCourseIndices(newSet);
+      } else if (type === 'LOG') {
+          const newSet = new Set(selectedLogIndices);
+          if (newSet.has(index)) newSet.delete(index); else newSet.add(index);
+          setSelectedLogIndices(newSet);
+      } else {
+          const newSet = new Set(selectedPeopleIndices);
+          if (newSet.has(index)) newSet.delete(index); else newSet.add(index);
+          setSelectedPeopleIndices(newSet);
+      }
+  };
+
   const commitAiResults = async () => {
       if (!aiResults) return;
+      
+      const totalToCommit = selectedCourseIndices.size + selectedLogIndices.size + selectedPeopleIndices.size;
+      if (totalToCommit === 0) {
+          alert('반영할 항목을 하나 이상 선택해주세요.');
+          return;
+      }
+
       setIsSubmitting(true);
       try {
-          for (const c of aiResults.extractedCourses) {
+          for (let idx of Array.from(selectedCourseIndices)) {
+              const c = aiResults.extractedCourses[idx];
               const existing = globalCourses.find(gc => gc.name === c.name);
-              if (!existing) await addCourse({ id: `c-ai-${Date.now()}-${Math.random()}`, name: c.name, region: (c.region as Region) || '기타', address: c.address || '', holes: c.holes || 18, type: CourseType.PUBLIC, grassType: GrassType.ZOYSIA, area: '정보없음', description: c.description || 'AI 추출 정보', openYear: '미상', issues: [] });
+              if (!existing) {
+                  await addCourse({ id: `c-ai-${Date.now()}-${idx}`, name: c.name, region: (c.region as Region) || '기타', address: c.address || '', holes: c.holes || 18, type: CourseType.PUBLIC, grassType: GrassType.ZOYSIA, area: '정보없음', description: c.description || 'AI 추출 정보', openYear: '미상', issues: [] });
+              }
           }
-          for (const p of aiResults.extractedPeople) {
+          for (let idx of Array.from(selectedPeopleIndices)) {
+              const p = aiResults.extractedPeople[idx];
               const course = globalCourses.find(gc => gc.name === p.courseName);
-              await addPerson({ id: `p-ai-${Date.now()}-${Math.random()}`, name: p.name, phone: '정보없음', currentRole: p.role, currentCourseId: course?.id, affinity: p.affinity as AffinityLevel, notes: p.notes || '', careers: [] });
+              await addPerson({ id: `p-ai-${Date.now()}-${idx}`, name: p.name, phone: '정보없음', currentRole: p.role, currentCourseId: course?.id, affinity: p.affinity as AffinityLevel, notes: p.notes || '', careers: [] });
           }
-          for (const l of filteredAiLogs) {
+          for (let idx of Array.from(selectedLogIndices)) {
+              const l = aiResults.extractedLogs[idx];
               const course = globalCourses.find(gc => gc.name === l.courseName);
               const combinedContent = `${l.summary}\n\n[상세 내용]\n${l.details}\n\n[전략 가치]\n${l.strategy}\n\n[리스크]\n${l.risk}`;
               await addLog({ 
-                  id: `l-ai-${Date.now()}-${Math.random()}`, 
+                  id: `l-ai-${Date.now()}-${idx}`, 
                   date: l.date || new Date().toISOString().split('T')[0], 
                   author: 'AI Intelligence', 
                   department: (l.department as Department) || Department.SALES, 
@@ -220,14 +295,44 @@ const WriteLog: React.FC = () => {
                   createdAt: Date.now() 
               });
           }
-          alert('전체 데이터가 시스템에 반영되었습니다.');
+          alert(`총 ${totalToCommit}건의 데이터가 시스템에 반영되었습니다.`);
           navigate('/');
       } catch (err) { alert('데이터 저장 중 오류가 발생했습니다.'); } finally { setIsSubmitting(false); }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files) setSelectedFiles(Array.from(e.target.files)); };
-  const getInputClass = () => `w-full rounded-xl border py-3 px-4 transition-all outline-none focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 bg-slate-50 border-slate-200 text-sm font-bold shadow-sm`;
-  const getSelectClass = () => `w-full rounded-xl border py-3 px-4 transition-all outline-none focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 appearance-none bg-white border-slate-200 text-sm font-black shadow-sm`;
+  const getInputClass = () => `w-full rounded-xl border py-3.5 px-4 transition-all outline-none focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 bg-slate-50 border-slate-200 text-sm font-bold shadow-sm`;
+  const getSelectClass = () => `w-full rounded-xl border py-3.5 px-4 transition-all outline-none focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 appearance-none bg-white border-slate-200 text-sm font-black shadow-sm`;
+
+  const handlePersonSearch = (val: string) => {
+    const matched = globalPeople.find(p => p.name === val);
+    if (matched) {
+      setIsUpdateMode(true);
+      setSelectedPersonId(matched.id);
+      setPersonForm({
+        name: matched.name,
+        phone: matched.phone || '',
+        currentRole: matched.currentRole || '',
+        currentCourseId: matched.currentCourseId || '',
+        currentCourseName: globalCourses.find(c => c.id === matched.currentCourseId)?.name || '',
+        affinity: matched.affinity,
+        notes: matched.notes || ''
+      });
+    } else {
+      setIsUpdateMode(false);
+      setSelectedPersonId('');
+      setPersonForm(prev => ({ ...prev, name: val }));
+    }
+  };
+
+  const handleCourseSelectInPerson = (val: string) => {
+    const matched = globalCourses.find(c => c.name === val);
+    setPersonForm(prev => ({
+      ...prev,
+      currentCourseName: val,
+      currentCourseId: matched ? matched.id : ''
+    }));
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-in fade-in duration-300">
@@ -236,7 +341,7 @@ const WriteLog: React.FC = () => {
             {[
                 { id: 'LOG', label: '업무 일지', icon: <FileText size={18}/> },
                 { id: 'AI', label: 'AI 스마트 등록', icon: <Sparkles size={18}/> },
-                { id: 'PERSON', label: '인물 신규 등록', icon: <UserPlus size={18}/> },
+                { id: 'PERSON', label: '인물 정보 연동', icon: <UserPlus size={18}/> },
             ].map(tab => (
                 <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`flex-1 min-w-[140px] py-3.5 text-sm font-black rounded-xl transition-all duration-200 flex items-center justify-center ${activeTab === tab.id ? 'bg-brand-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'}`}>
                   <span className="mr-2">{tab.icon}</span> {tab.label}
@@ -252,8 +357,8 @@ const WriteLog: React.FC = () => {
                         <div className="space-y-8">
                             <div className="text-center max-w-2xl mx-auto">
                                 <div className="inline-flex p-6 bg-indigo-50 text-indigo-600 rounded-[2rem] mb-6 shadow-soft ring-1 ring-indigo-100"><Sparkles size={48} className="animate-pulse" /></div>
-                                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-4">AI 지능형 데이터 분석</h2>
-                                <p className="text-slate-500 leading-relaxed font-medium">분석 결과는 요약, 상세설명, 전략, 리스크로 세분화됩니다. <br/>추출된 데이터를 검토하고 필터링하여 원하는 정보만 선택 등록하세요.</p>
+                                <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-4">AI 지능형 데이터 분석 및 선택적 반영</h2>
+                                <p className="text-slate-500 leading-relaxed font-medium">분석된 결과 중 시스템에 반영할 항목을 직접 선택할 수 있습니다. <br/>신뢰도가 높은 항목은 AI가 자동으로 1차 제안합니다.</p>
                             </div>
                             {!isAnalyzing ? (
                                 <div className="border-2 border-dashed border-slate-200 rounded-[3rem] p-20 text-center hover:border-brand-500 hover:bg-brand-50/10 cursor-pointer group transition-all duration-500" onClick={() => fileInputRef.current?.click()}>
@@ -261,12 +366,11 @@ const WriteLog: React.FC = () => {
                                     <UploadCloud size={80} className="mx-auto text-slate-100 group-hover:text-brand-400 mb-6 transition-all duration-500 group-hover:scale-110" />
                                     <p className="font-black text-slate-800 text-xl group-hover:text-brand-700">분석할 파일을 업로드하세요</p>
                                     <p className="text-xs text-slate-400 mt-4 font-bold tracking-widest uppercase">Images, PDF, Text Logs supported</p>
-                                    {selectedFiles.length > 0 && <div className="mt-8 flex flex-wrap justify-center gap-3">{selectedFiles.map((f, i) => (<div key={i} className="bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200 text-xs font-bold text-slate-600 flex items-center"><FileIcon size={14} className="mr-2 text-brand-500"/> {f.name}</div>))}</div>}
                                 </div>
                             ) : (
                                 <div className="py-24 text-center bg-slate-50 rounded-[3rem] border border-slate-100 shadow-inner">
                                     <Loader2 size={64} className="mx-auto text-brand-600 animate-spin mb-8" />
-                                    <h3 className="font-black text-slate-900 text-2xl tracking-tight mb-2">정밀 분석 엔진 가동 중...</h3>
+                                    <h3 className="font-black text-slate-900 text-2xl tracking-tight mb-2">지능형 분석 엔진 가동 중...</h3>
                                     <p className="text-brand-600 font-bold animate-pulse text-sm">{analysisProgress}</p>
                                 </div>
                             )}
@@ -277,106 +381,137 @@ const WriteLog: React.FC = () => {
                     ) : (
                         <div className="animate-in fade-in slide-in-from-bottom-6 duration-700">
                             <div className="flex flex-col md:flex-row justify-between items-end mb-10 border-b border-slate-100 pb-8 gap-4">
-                                <div><h2 className="text-3xl font-black text-slate-900 flex items-center tracking-tight"><ListChecks size={32} className="mr-3 text-brand-600"/> 분석 결과 검토 센터</h2><p className="text-slate-500 mt-2 font-medium">분류된 결과를 확인하고 최종 승인하세요.</p></div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => setAiResults(null)} className="px-4 py-2 text-slate-400 hover:text-red-500 font-black text-xs uppercase tracking-widest transition-colors flex items-center"><RotateCcw size={16} className="mr-2"/> 분석 초기화</button>
+                                <div><h2 className="text-3xl font-black text-slate-900 flex items-center tracking-tight"><ListChecks size={32} className="mr-3 text-brand-600"/> 데이터 선별 및 통합 센터</h2><p className="text-slate-500 mt-2 font-medium">체크된 항목만 마스터 데이터베이스에 반영됩니다.</p></div>
+                                <div className="flex gap-4">
+                                    <div className="bg-slate-100 px-6 py-3 rounded-2xl border border-slate-200 flex flex-col justify-center items-center min-w-[120px]">
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SELECTED</span>
+                                        <span className="text-xl font-black text-brand-600">{selectedCourseIndices.size + selectedLogIndices.size + selectedPeopleIndices.size}건</span>
+                                    </div>
+                                    <button onClick={() => setAiResults(null)} className="px-4 py-2 text-slate-400 hover:text-red-500 font-black text-xs uppercase tracking-widest transition-colors flex items-center"><RotateCcw size={16} className="mr-2"/> 초기화</button>
                                 </div>
                             </div>
 
-                            {/* Advanced AI Filters */}
-                            <div className="bg-slate-50 p-6 rounded-3xl mb-10 border border-slate-200 flex flex-wrap gap-6 items-center shadow-inner">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center"><Filter size={14} className="mr-2"/> Result Filters</span>
-                                    <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200">
-                                        {[
-                                            {id: 'ALL', label: '전체'},
-                                            {id: 'RISK', label: '리스크 집중'},
-                                            {id: 'NEW_COURSE', label: '신규 골프장만'}
-                                        ].map(f => (
-                                            <button key={f.id} onClick={() => setAiFilterType(f.id as any)} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all ${aiFilterType === f.id ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}>{f.label}</button>
+                            <div className="space-y-16">
+                                <section>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center"><Building2 size={16} className="mr-2"/> 식별된 골프장 ({aiResults.extractedCourses.length})</h3>
+                                        <button onClick={() => setSelectedCourseIndices(selectedCourseIndices.size === aiResults.extractedCourses.length ? new Set() : new Set(aiResults.extractedCourses.map((_, i) => i)))} className="text-[10px] font-bold text-brand-600 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100">전체 선택/해제</button>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {aiResults.extractedCourses.map((c, i) => (
+                                            <div 
+                                                key={i} 
+                                                onClick={() => toggleSelection('COURSE', i)}
+                                                className={`p-6 rounded-[1.5rem] border cursor-pointer transition-all flex items-start gap-4 ${selectedCourseIndices.has(i) ? 'bg-emerald-50 border-emerald-400 shadow-md ring-1 ring-emerald-400' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                            >
+                                                <div className={`shrink-0 transition-colors ${selectedCourseIndices.has(i) ? 'text-emerald-600' : 'text-slate-300'}`}>
+                                                    {selectedCourseIndices.has(i) ? <CheckSquare size={24}/> : <Square size={24}/>}
+                                                </div>
+                                                <div className="flex-1 overflow-hidden">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <h4 className="font-black text-slate-800">{c.name}</h4>
+                                                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${c.confidence > 0.8 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-400'}`}>AI Conf: {Math.round(c.confidence * 100)}%</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 font-medium truncate mb-2">{c.region} | {c.address}</p>
+                                                    <div className="text-[10px] text-slate-400 italic bg-white/50 p-2 rounded-lg border border-slate-100">{c.reason || '문서 분석을 통해 자동 추출된 장소입니다.'}</div>
+                                                </div>
+                                            </div>
                                         ))}
                                     </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Min Priority</span>
-                                    <select value={aiFilterPriority} onChange={e => setAiFilterPriority(e.target.value === 'ALL' ? 'ALL' : Number(e.target.value))} className="text-[11px] font-black border-slate-200 rounded-xl px-3 py-1.5 shadow-sm outline-none focus:ring-brand-500">
-                                        <option value="ALL">All Levels</option>
-                                        <option value="3">P3 or Higher</option>
-                                        <option value="4">P4 or Higher</option>
-                                        <option value="5">Critical Only (P5)</option>
-                                    </select>
-                                </div>
-                                <div className="ml-auto text-xs font-bold text-brand-600 flex items-center bg-brand-50 px-3 py-1.5 rounded-full border border-brand-100"><Zap size={12} className="mr-1.5"/> Showing {filteredAiLogs.length} intelligent records</div>
-                            </div>
-
-                            <div className="space-y-12">
-                                {/* Courses */}
-                                {aiResults.extractedCourses.length > 0 && aiFilterType !== 'RISK' && (
-                                    <section className="animate-in slide-in-from-left-4 duration-500">
-                                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center"><Building2 size={16} className="mr-2"/> 식별된 골프장 ({aiResults.extractedCourses.length})</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {aiResults.extractedCourses.map((c, i) => (<div key={i} className={`p-6 rounded-[1.5rem] border ${c.isNew ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'} shadow-sm flex items-start gap-4 transition-all hover:scale-[1.02]`}><div className={`p-3 rounded-2xl ${c.isNew ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}><Database size={24} /></div><div><div className="flex items-center gap-2 mb-1"><h4 className="font-black text-slate-800">{c.name}</h4>{c.isNew && <span className="px-2 py-0.5 bg-emerald-500 text-white text-[9px] font-black rounded-full">NEW ENTRY</span>}</div><p className="text-xs text-slate-500 font-medium"><MapPin size={10} className="inline mr-1"/> {c.region} | {c.address}</p></div></div>))}
-                                        </div>
-                                    </section>
-                                )}
+                                </section>
                                 
-                                {/* Logs */}
-                                {filteredAiLogs.length > 0 && (
-                                    <section className="animate-in slide-in-from-left-4 duration-500" style={{animationDelay: '100ms'}}>
-                                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center"><FileText size={16} className="mr-2"/> 분석된 전략 히스토리 ({filteredAiLogs.length})</h3>
-                                        <div className="space-y-6">
-                                            {filteredAiLogs.map((l, i) => (
-                                                <div key={i} className="bg-white border border-slate-200 rounded-[2rem] p-8 shadow-soft group hover:border-brand-300 transition-all">
-                                                    <div className="flex justify-between items-start mb-6">
-                                                        <div className="flex items-center gap-3">
-                                                            <span className="bg-brand-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full uppercase tracking-widest shadow-sm">{l.department || 'INTEL'}</span>
+                                <section>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center"><User size={16} className="mr-2"/> 식별된 인물 ({aiResults.extractedPeople.length})</h3>
+                                        <button onClick={() => setSelectedPeopleIndices(selectedPeopleIndices.size === aiResults.extractedPeople.length ? new Set() : new Set(aiResults.extractedPeople.map((_, i) => i)))} className="text-[10px] font-bold text-brand-600 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100">전체 선택/해제</button>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {aiResults.extractedPeople.map((p, i) => (
+                                            <div 
+                                                key={i} 
+                                                onClick={() => toggleSelection('PERSON', i)}
+                                                className={`p-5 rounded-2xl border cursor-pointer transition-all flex items-center gap-4 ${selectedPeopleIndices.has(i) ? 'bg-blue-50 border-blue-400 shadow-md ring-1 ring-blue-400' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                            >
+                                                <div className={`shrink-0 ${selectedPeopleIndices.has(i) ? 'text-blue-600' : 'text-slate-300'}`}>
+                                                    {selectedPeopleIndices.has(i) ? <CheckSquare size={20}/> : <Square size={20}/>}
+                                                </div>
+                                                <div className="overflow-hidden">
+                                                    <div className="font-black text-slate-800 truncate">{p.name}</div>
+                                                    <div className="text-[10px] font-bold text-brand-600 truncate">{p.role}</div>
+                                                    <div className="text-[10px] text-slate-400 truncate mt-1">소속: {p.courseName}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                <section>
+                                    <div className="flex items-center justify-between mb-6">
+                                        <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center"><FileText size={16} className="mr-2"/> 분석된 업무 기록 ({aiResults.extractedLogs.length})</h3>
+                                        <button onClick={() => setSelectedLogIndices(selectedLogIndices.size === aiResults.extractedLogs.length ? new Set() : new Set(aiResults.extractedLogs.map((_, i) => i)))} className="text-[10px] font-bold text-brand-600 bg-brand-50 px-3 py-1.5 rounded-lg border border-brand-100">전체 선택/해제</button>
+                                    </div>
+                                    <div className="space-y-6">
+                                        {aiResults.extractedLogs.map((l, i) => (
+                                            <div 
+                                                key={i} 
+                                                onClick={() => toggleSelection('LOG', i)}
+                                                className={`bg-white border rounded-[2rem] p-8 shadow-soft transition-all cursor-pointer relative overflow-hidden group ${selectedLogIndices.has(i) ? 'border-brand-500 ring-1 ring-brand-500 bg-brand-50/10' : 'border-slate-200 hover:border-brand-300'}`}
+                                            >
+                                                {selectedLogIndices.has(i) && <div className="absolute top-0 right-0 p-4 text-brand-600 animate-in zoom-in"><CheckCircle size={32}/></div>}
+                                                <div className="flex justify-between items-start mb-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`p-2 rounded-lg ${selectedLogIndices.has(i) ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                                            {selectedLogIndices.has(i) ? <CheckSquare size={20}/> : <Square size={20}/>}
+                                                        </div>
+                                                        <div>
+                                                            <span className="bg-slate-900 text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest mr-3">{l.department || 'INTEL'}</span>
                                                             <span className="text-lg font-black text-slate-900">{l.courseName}</span>
                                                         </div>
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="flex gap-1">{Array.from({length: 5}).map((_, idx) => (<div key={idx} className={`w-2 h-2 rounded-full ${idx < l.priority ? 'bg-amber-500' : 'bg-slate-100'}`}></div>))}</div>
-                                                            <span className="text-xs font-mono text-slate-300">{l.date}</span>
-                                                        </div>
                                                     </div>
-
-                                                    <h4 className="font-black text-slate-800 text-xl mb-6">{l.title}</h4>
-                                                    
-                                                    {/* Categorized AI Results */}
-                                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                                        <div className="space-y-6">
-                                                            <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                                                                <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center"><Info size={12} className="mr-2"/> Executive Summary</h5>
-                                                                <p className="text-sm text-slate-800 font-bold leading-relaxed">{l.summary}</p>
-                                                            </div>
-                                                            <div>
-                                                                <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center ml-1"><FileText size={12} className="mr-2"/> Detailed Description</h5>
-                                                                <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{l.details}</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="space-y-4">
-                                                            <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-5 shadow-sm">
-                                                                <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 flex items-center"><Target size={14} className="mr-2"/> Strategic Insights</h5>
-                                                                <p className="text-xs text-emerald-900 font-bold leading-relaxed">{l.strategy}</p>
-                                                            </div>
-                                                            {l.risk && (
-                                                                <div className="bg-red-50 border border-red-100 rounded-2xl p-5 shadow-sm">
-                                                                    <h5 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 flex items-center"><ShieldAlert size={14} className="mr-2"/> Risk Assessment</h5>
-                                                                    <p className="text-xs text-red-900 font-bold leading-relaxed">{l.risk}</p>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="flex gap-1">{Array.from({length: 5}).map((_, idx) => (<div key={idx} className={`w-2.5 h-2.5 rounded-full ${idx < l.priority ? 'bg-amber-500' : 'bg-slate-100'}`}></div>))}</div>
+                                                        <span className="text-[10px] font-mono font-bold text-slate-300">{l.date}</span>
                                                     </div>
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </section>
-                                )}
+
+                                                <h4 className="font-black text-slate-800 text-xl mb-6">{l.title}</h4>
+                                                
+                                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                                    <div className="space-y-4">
+                                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">AI Summary</h5>
+                                                            <p className="text-xs text-slate-800 font-bold leading-relaxed">{l.summary}</p>
+                                                        </div>
+                                                        <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line px-1">{l.details}</p>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                                                            <h5 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1 flex items-center"><Target size={12} className="mr-1.5"/> Strategy</h5>
+                                                            <p className="text-[11px] text-emerald-900 font-bold">{l.strategy}</p>
+                                                        </div>
+                                                        {l.risk && (
+                                                            <div className="bg-red-50 border border-red-100 rounded-xl p-4">
+                                                                <h5 className="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1 flex items-center"><ShieldAlert size={12} className="mr-1.5"/> Risk</h5>
+                                                                <p className="text-[11px] text-red-900 font-bold">{l.risk}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
                             </div>
                             
                             <div className="mt-16 pt-8 border-t border-slate-100 flex flex-col items-center">
-                                <button onClick={commitAiResults} disabled={isSubmitting} className="w-full max-w-md bg-slate-900 text-white py-6 rounded-[2.5rem] font-black text-xl shadow-2xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.98] transition-all">
-                                    {isSubmitting ? <Loader2 size={24} className="animate-spin mr-3"/> : <CheckCircle size={24} className="mr-3 text-brand-400" />} 전체 분석 데이터 최종 승인
+                                <button 
+                                    onClick={commitAiResults} 
+                                    disabled={isSubmitting || (selectedCourseIndices.size + selectedLogIndices.size + selectedPeopleIndices.size === 0)} 
+                                    className="w-full max-w-md bg-slate-900 text-white py-6 rounded-[2.5rem] font-black text-xl shadow-2xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.98] transition-all disabled:opacity-50"
+                                >
+                                    {isSubmitting ? <Loader2 size={24} className="animate-spin mr-3"/> : <CheckCircle size={24} className="mr-3 text-brand-400" />} 선택된 {selectedCourseIndices.size + selectedLogIndices.size + selectedPeopleIndices.size}개 데이터 최종 승인
                                 </button>
-                                <p className="text-xs text-slate-400 mt-4 font-bold tracking-tight">승인된 데이터는 즉시 전사 지식 베이스에 통합됩니다.</p>
+                                <p className="text-xs text-slate-400 mt-4 font-bold tracking-tight text-center">승인된 데이터는 즉시 전사 지식 베이스에 통합됩니다.<br/>반영 전 데이터의 정확성을 한 번 더 검토해 주세요.</p>
                             </div>
                         </div>
                     )}
@@ -391,10 +526,11 @@ const WriteLog: React.FC = () => {
                         <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">담당 부서</label><select className={getSelectClass()} value={dept} onChange={(e) => setDept(e.target.value as Department)}>{Object.values(Department).map(d => <option key={d} value={d}>{d}</option>)}</select></div>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 flex justify-between">대상 골프장 <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-brand-600 hover:underline flex items-center"><PlusCircle size={12} className="mr-1"/> 목록에 없나요? 신규 등록</button></label>
-                        <div className="relative">
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 flex justify-between">대상 골프장 <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-brand-600 hover:underline flex items-center font-bold"><PlusCircle size={12} className="mr-1"/> 신규 등록</button></label>
+                        <div className="relative group">
                             <input list="courses-logs-all" className={getInputClass()} value={globalCourses.find(c => c.id === courseId)?.name || ''} onChange={(e) => { const found = globalCourses.find(c => c.name === e.target.value); setCourseId(found ? found.id : ''); }} placeholder="골프장 검색 또는 선택..." />
                             <datalist id="courses-logs-all">{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-focus-within:text-brand-500 transition-colors"><Search size={18}/></div>
                         </div>
                     </div>
                     <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">업무 제목</label><input type="text" required className={getInputClass()} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="핵심 제목을 입력하세요" /></div>
@@ -406,17 +542,38 @@ const WriteLog: React.FC = () => {
             {activeTab === 'PERSON' && (
                 <div className="animate-in fade-in duration-300">
                     <div className="flex justify-between items-center mb-8">
-                      <h3 className="text-xl font-black text-slate-900 flex items-center"><UserPlus className="mr-3 text-brand-600"/> 인물 정보 정밀 등록</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Personal Relationship Mapping</p>
+                      <h3 className="text-xl font-black text-slate-900 flex items-center">
+                        <UserPlus className="mr-3 text-brand-600"/> 
+                        {isUpdateMode ? '인물 정보 업데이트' : '인물 마스터 DB 연동 등록'}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {isUpdateMode && (
+                          <button onClick={() => { setIsUpdateMode(false); setPersonForm({ name: '', phone: '', currentRole: '', currentCourseId: '', currentCourseName: '', affinity: AffinityLevel.NEUTRAL, notes: '' }); }} className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border border-red-100 hover:bg-red-100 transition-all flex items-center">
+                             <X size={14} className="mr-1"/> 초기화
+                          </button>
+                        )}
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Personnel Intelligence Integration</p>
+                      </div>
                     </div>
+
                     <form onSubmit={handlePersonSubmit} className="space-y-10">
                         <section className="space-y-6">
-                            <h4 className="text-[11px] font-black text-brand-700 uppercase tracking-widest border-b border-brand-100 pb-2">기본 인적 사항</h4>
+                            <div className="flex items-center justify-between border-b border-brand-100 pb-2">
+                                <h4 className="text-[11px] font-black text-brand-700 uppercase tracking-widest">기본 인적 사항</h4>
+                                {isUpdateMode && <span className="bg-brand-600 text-white text-[9px] font-black px-2 py-0.5 rounded flex items-center"><UserCheck size={10} className="mr-1"/> EXISTING RECORD MATCHED</span>}
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">성명 *</label><input type="text" className={getInputClass()} value={personForm.name} onChange={e => setPersonForm({...personForm, name: e.target.value})} required placeholder="이름" /></div>
-                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">연락처</label><input type="text" className={getInputClass()} value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} placeholder="010-0000-0000" /></div>
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">우리와의 친밀도</label>
+                                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">성명 (실명 검색) *</label>
+                                  <div className="relative group">
+                                    <input list="gm-people-datalist" type="text" className={getInputClass()} value={personForm.name} onChange={e => handlePersonSearch(e.target.value)} required placeholder="이름 입력 (중복 확인)" />
+                                    <datalist id="gm-people-datalist">{globalPeople.map(p => <option key={p.id} value={p.name} />)}</datalist>
+                                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-focus-within:text-brand-500 transition-colors"><Search size={18}/></div>
+                                  </div>
+                                </div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">공식 연락처</label><input type="text" className={getInputClass()} value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} placeholder="010-0000-0000" /></div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">당사 협력 친밀도</label>
                                     <select className={getSelectClass()} value={personForm.affinity} onChange={e => setPersonForm({...personForm, affinity: parseInt(e.target.value)})}>
                                         <option value={AffinityLevel.ALLY}>강력한 아군 (Ally)</option>
                                         <option value={AffinityLevel.FRIENDLY}>우호적 (Friendly)</option>
@@ -427,24 +584,30 @@ const WriteLog: React.FC = () => {
                                 </div>
                             </div>
                         </section>
-                        <section className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 shadow-inner space-y-6">
+
+                        <section className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner space-y-6">
                             <div className="flex justify-between items-center">
-                                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center"><Building2 size={16} className="mr-2 text-brand-600"/> 현재 소속 발령 정보</h4>
-                                <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] font-black text-brand-600 hover:underline flex items-center"><PlusCircle size={12} className="mr-1"/> 신규 골프장 퀵 등록</button>
+                                <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center"><Building2 size={16} className="mr-2 text-brand-600"/> 현재 소속 골프장 정보</h4>
+                                <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] font-black text-brand-600 hover:underline flex items-center font-bold"><PlusCircle size={12} className="mr-1"/> 마스터 DB 신규 추가</button>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장 (마스터 DB 검색)</label>
-                                    <input list="courses-person-reg" className={getInputClass()} value={personForm.currentCourseName} onChange={e => setPersonForm({...personForm, currentCourseName: e.target.value})} placeholder="골프장 검색 또는 입력..." />
-                                    <datalist id="courses-person-reg">{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
+                                    <label className="block text-[10px] font-black text-slate-400 mb-2 ml-1">소속 골프장 (마스터 DB 검색)</label>
+                                    <div className="relative group">
+                                      <input list="courses-person-reg" className={getInputClass()} value={personForm.currentCourseName} onChange={e => handleCourseSelectInPerson(e.target.value)} placeholder="골프장 검색 또는 입력..." />
+                                      <datalist id="courses-person-reg">{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
+                                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-focus-within:text-brand-500 transition-colors"><Search size={18}/></div>
+                                    </div>
+                                    {personForm.currentCourseId && <p className="mt-2 text-[10px] text-brand-600 font-bold px-1 flex items-center"><Check size={10} className="mr-1"/> Verified in Master DB (ID: {personForm.currentCourseId})</p>}
                                 </div>
                                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">현직 공식 직책 *</label><input type="text" className={getInputClass()} required value={personForm.currentRole} onChange={e => setPersonForm({...personForm, currentRole: e.target.value})} placeholder="예: 코스관리팀장" /></div>
                             </div>
-                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">인물 특징 및 관계 메모</label><textarea className={getInputClass()} rows={4} value={personForm.notes} onChange={e => setPersonForm({...personForm, notes: e.target.value})} placeholder="성격, 주요 관심사, 공략 포인트 등..." /></div>
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">인물 전략 특징 및 관계 관리 메모</label><textarea className={getInputClass()} rows={4} value={personForm.notes} onChange={e => setPersonForm({...personForm, notes: e.target.value})} placeholder="성격, 주요 관심사, 비즈니스 공략 포인트 등 상세 메모..." /></div>
                         </section>
                         <div className="pt-6">
-                            <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xl shadow-2xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.98] transition-all">
-                                {isSubmitting ? <Loader2 className="animate-spin mr-3" /> : <Save className="mr-3" />} 인물 마스터 DB 등록
+                            <button type="submit" disabled={isSubmitting} className={`w-full text-white py-6 rounded-[2rem] font-black text-xl shadow-2xl transition-all flex justify-center items-center active:scale-[0.98] ${isUpdateMode ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
+                                {isSubmitting ? <Loader2 className="animate-spin mr-3" /> : <Save className="mr-3" />} 
+                                {isUpdateMode ? '기존 인물 정보 마스터 DB 업데이트' : '신규 인물 마스터 DB 등록'}
                             </button>
                         </div>
                     </form>
@@ -474,7 +637,7 @@ const WriteLog: React.FC = () => {
                           </div>
                           <div>
                               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">홀 규모</label>
-                              <input type="number" className="w-full rounded-2xl border-slate-200 p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-brand-500/5" value={newCourseForm.holes} onChange={e => setNewCourseForm({...newCourseForm, holes: parseInt(e.target.value)})} />
+                              <input type="number" className="w-full rounded-2xl border-slate-200 p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-brand-500/5" value={newCourseForm.holes} onChange={(e) => setNewCourseForm({...newCourseForm, holes: parseInt(e.target.value)})} />
                           </div>
                       </div>
                       <div>

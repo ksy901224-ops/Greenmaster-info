@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole, UserStatus, Department, UserProfile, SystemLog, GolfCourse, CourseType, GrassType, Region } from '../types';
-import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2, Key, Mail, User as UserIcon, Filter, Info, ChevronRight, FileSearch } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2, Key, Mail, User as UserIcon, Filter, Info, ChevronRight, FileSearch, ArrowUpDown, CheckSquare, Square } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 
 interface EnhancedSyncItem {
@@ -24,6 +24,9 @@ interface EnhancedSyncItem {
     error?: string;
 }
 
+type SortField = 'name' | 'region' | 'holes' | 'conflict' | 'status';
+type SortDir = 'asc' | 'desc';
+
 const AdminDashboard: React.FC = () => {
   const { user, allUsers, isAdmin, isSeniorOrAdmin, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse, createUserManually } = useApp();
   const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'MASTER'>('MASTER');
@@ -32,14 +35,16 @@ const AdminDashboard: React.FC = () => {
   const [catalogText, setCatalogText] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResults, setSyncResults] = useState<EnhancedSyncItem[] | null>(null);
+  const [selectedSyncIds, setSelectedSyncIds] = useState<Set<string>>(new Set());
   const [docSummary, setDocSummary] = useState<string | null>(null);
   const [docDetail, setDocDetail] = useState<string | null>(null);
   const [aiReportTab, setAiReportTab] = useState<'SUMMARY' | 'DETAIL'>('SUMMARY');
   
-  // Filtering States
+  // Filtering & Sorting States
   const [filterConflict, setFilterConflict] = useState<'ALL' | 'new' | 'update'>('ALL');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'pending' | 'success' | 'error'>('ALL');
   const [masterSearch, setMasterSearch] = useState('');
+  const [sortConfig, setSortConfig] = useState<{ field: SortField, dir: SortDir }>({ field: 'name', dir: 'asc' });
 
   const [batchProcessing, setBatchProcessing] = useState(false);
   
@@ -74,6 +79,7 @@ const AdminDashboard: React.FC = () => {
       if (!catalogText.trim() && selectedFiles.length === 0) return;
       setIsSyncing(true);
       setSyncResults(null);
+      setSelectedSyncIds(new Set());
       setDocSummary(null);
       setDocDetail(null);
 
@@ -127,6 +133,8 @@ const AdminDashboard: React.FC = () => {
                       };
                   });
                   setSyncResults(enhanced);
+                  // Auto-select all pending items
+                  setSelectedSyncIds(new Set(enhanced.map(i => i.id)));
               }
           }
       } catch (error) {
@@ -138,9 +146,11 @@ const AdminDashboard: React.FC = () => {
       }
   };
 
-  const filteredSyncResults = useMemo(() => {
+  const processedSyncResults = useMemo(() => {
       if (!syncResults) return [];
-      return syncResults.filter(item => {
+      
+      // 1. Filter
+      let filtered = syncResults.filter(item => {
           const matchConflict = filterConflict === 'ALL' || item.conflictType === filterConflict;
           const matchStatus = filterStatus === 'ALL' || item.status === filterStatus;
           
@@ -153,7 +163,48 @@ const AdminDashboard: React.FC = () => {
           
           return matchConflict && matchStatus && matchSearch;
       });
-  }, [syncResults, filterConflict, filterStatus, masterSearch]);
+
+      // 2. Sort
+      filtered.sort((a, b) => {
+          let valA: any, valB: any;
+          switch (sortConfig.field) {
+              case 'name': valA = a.editable.courseName; valB = b.editable.courseName; break;
+              case 'region': valA = a.editable.region; valB = b.editable.region; break;
+              case 'holes': valA = a.editable.holes; valB = b.editable.holes; break;
+              case 'conflict': valA = a.conflictType; valB = b.conflictType; break;
+              case 'status': valA = a.status; valB = b.status; break;
+              default: valA = ''; valB = '';
+          }
+          
+          if (valA < valB) return sortConfig.dir === 'asc' ? -1 : 1;
+          if (valA > valB) return sortConfig.dir === 'asc' ? 1 : -1;
+          return 0;
+      });
+
+      return filtered;
+  }, [syncResults, filterConflict, filterStatus, masterSearch, sortConfig]);
+
+  const toggleSort = (field: SortField) => {
+      setSortConfig(prev => ({
+          field,
+          dir: prev.field === field && prev.dir === 'asc' ? 'desc' : 'asc'
+      }));
+  };
+
+  const toggleSelection = (id: string) => {
+      const newSet = new Set(selectedSyncIds);
+      if (newSet.has(id)) newSet.delete(id);
+      else newSet.add(id);
+      setSelectedSyncIds(newSet);
+  };
+
+  const toggleAllSelection = () => {
+      if (selectedSyncIds.size === processedSyncResults.length) {
+          setSelectedSyncIds(new Set());
+      } else {
+          setSelectedSyncIds(new Set(processedSyncResults.map(i => i.id)));
+      }
+  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
       e.preventDefault();
@@ -218,12 +269,15 @@ const AdminDashboard: React.FC = () => {
 
   const handleBulkApply = async () => {
       if (!syncResults) return;
-      const pendingItems = filteredSyncResults.filter(i => i.status !== 'success');
-      if (pendingItems.length === 0) return;
+      const itemsToApply = syncResults.filter(i => selectedSyncIds.has(i.id) && i.status !== 'success');
+      if (itemsToApply.length === 0) {
+          alert('반영할 항목을 선택해주세요.');
+          return;
+      }
 
-      if (window.confirm(`${pendingItems.length}건의 필터링된 데이터를 일괄 반영하시겠습니까?`)) {
+      if (window.confirm(`선택된 ${itemsToApply.length}건의 데이터를 마스터 DB에 일괄 반영하시겠습니까?`)) {
           setBatchProcessing(true);
-          for (const item of pendingItems) {
+          for (const item of itemsToApply) {
               await applySyncItem(item.id);
           }
           setBatchProcessing(false);
@@ -232,6 +286,11 @@ const AdminDashboard: React.FC = () => {
   };
 
   if (!user || !isSeniorOrAdmin) return null;
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+      if (sortConfig.field !== field) return <ArrowUpDown size={12} className="ml-1 opacity-20" />;
+      return <ArrowUpDown size={12} className={`ml-1 text-brand-600 ${sortConfig.dir === 'desc' ? 'rotate-180' : ''}`} />;
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 relative">
@@ -347,19 +406,22 @@ const AdminDashboard: React.FC = () => {
                   <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xl animate-in slide-in-from-top-4">
                       <div className="p-6 bg-slate-50 border-b border-slate-200 space-y-6">
                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                              <h3 className="font-bold text-slate-800 text-lg flex items-center">
-                                  <Activity size={20} className="mr-2 text-brand-600"/>
-                                  데이터 동기화 큐 ({filteredSyncResults.length} / {syncResults.length}건)
-                              </h3>
+                              <div className="flex items-center gap-4">
+                                  <h3 className="font-bold text-slate-800 text-lg flex items-center">
+                                      <Activity size={20} className="mr-2 text-brand-600"/>
+                                      데이터 동기화 큐 ({processedSyncResults.length} / {syncResults.length}건)
+                                  </h3>
+                                  <span className="bg-brand-100 text-brand-700 px-3 py-1 rounded-full text-xs font-black">{selectedSyncIds.size}건 선택됨</span>
+                              </div>
                               <div className="flex items-center gap-3">
-                                  <button onClick={() => { setSyncResults(null); setDocSummary(null); setDocDetail(null); }} className="px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-colors">Discard All</button>
+                                  <button onClick={() => { setSyncResults(null); setDocSummary(null); setDocDetail(null); setSelectedSyncIds(new Set()); }} className="px-4 py-2 text-slate-400 hover:text-red-500 font-bold text-xs uppercase tracking-widest transition-colors">Discard All</button>
                                   <button 
                                     onClick={handleBulkApply}
-                                    disabled={batchProcessing || filteredSyncResults.every(i => i.status === 'success')}
+                                    disabled={batchProcessing || selectedSyncIds.size === 0}
                                     className="bg-slate-900 text-white px-8 py-3 rounded-xl text-sm font-bold hover:bg-slate-800 shadow-md flex items-center transition-all disabled:opacity-50"
                                   >
                                       {batchProcessing ? <Loader2 size={18} className="animate-spin mr-2"/> : <Save size={18} className="mr-2"/>}
-                                      필터 항목 일괄 반영
+                                      선택 항목 일괄 반영
                                   </button>
                               </div>
                           </div>
@@ -408,16 +470,34 @@ const AdminDashboard: React.FC = () => {
                           <table className="w-full text-sm text-left border-collapse">
                               <thead className="bg-slate-100 text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-20">
                                   <tr>
-                                      <th className="px-6 py-4">상태 (Status)</th>
-                                      <th className="px-6 py-4">골프장 명칭</th>
-                                      <th className="px-6 py-4">지역/주소</th>
+                                      <th className="px-4 py-4 w-12 text-center">
+                                          <button onClick={toggleAllSelection} className="text-brand-600 hover:scale-110 transition-transform">
+                                              {selectedSyncIds.size === processedSyncResults.length && processedSyncResults.length > 0 ? <CheckSquare size={20}/> : <Square size={20} className="text-slate-300"/>}
+                                          </button>
+                                      </th>
+                                      <th className="px-6 py-4 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => toggleSort('status')}>
+                                          <div className="flex items-center">상태 <SortIcon field="status"/></div>
+                                      </th>
+                                      <th className="px-6 py-4 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => toggleSort('name')}>
+                                          <div className="flex items-center">골프장 명칭 <SortIcon field="name"/></div>
+                                      </th>
+                                      <th className="px-6 py-4 cursor-pointer hover:bg-slate-200 transition-colors" onClick={() => toggleSort('region')}>
+                                          <div className="flex items-center">지역/주소 <SortIcon field="region"/></div>
+                                      </th>
                                       <th className="px-6 py-4">추출된 특징 및 이슈</th>
                                       <th className="px-6 py-4 text-right">관리</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
-                                  {filteredSyncResults.map((item) => (
-                                      <tr key={item.id} className={`transition-all ${item.status === 'success' ? 'bg-green-50/30 opacity-70' : 'hover:bg-slate-50'}`}>
+                                  {processedSyncResults.map((item) => (
+                                      <tr key={item.id} className={`transition-all ${item.status === 'success' ? 'bg-green-50/30 opacity-70' : 'hover:bg-slate-50'} ${selectedSyncIds.has(item.id) ? 'bg-brand-50/20' : ''}`}>
+                                          <td className="px-4 py-4 text-center">
+                                              {item.status !== 'success' && (
+                                                  <button onClick={() => toggleSelection(item.id)} className="text-brand-600 hover:scale-110 transition-transform">
+                                                      {selectedSyncIds.has(item.id) ? <CheckSquare size={20}/> : <Square size={20} className="text-slate-300"/>}
+                                                  </button>
+                                              )}
+                                          </td>
                                           <td className="px-6 py-4">
                                               {item.status === 'success' ? (
                                                   <span className="text-green-600 font-black text-[10px] flex items-center uppercase"><CheckCircle size={14} className="mr-1.5"/> Completed</span>
@@ -462,9 +542,9 @@ const AdminDashboard: React.FC = () => {
                                           </td>
                                       </tr>
                                   ))}
-                                  {filteredSyncResults.length === 0 && (
+                                  {processedSyncResults.length === 0 && (
                                       <tr>
-                                          <td colSpan={5} className="py-24 text-center">
+                                          <td colSpan={6} className="py-24 text-center">
                                               <Search size={48} className="mx-auto text-slate-200 mb-4"/>
                                               <p className="text-slate-400 font-bold">검색 조건에 일치하는 추출 결과가 없습니다.</p>
                                           </td>

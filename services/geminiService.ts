@@ -6,7 +6,7 @@ import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 /**
- * Enhanced Multi-Entity Extraction with Granular Categorization
+ * Enhanced Multi-Entity Extraction with Confidence Scores
  */
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
@@ -22,21 +22,21 @@ export const analyzeDocument = async (
       }
   }
 
-  const courseListStr = existingCourseNames.slice(0, 300).join(', ');
-
   contentParts.push({
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다. 
       제공된 문서를 정밀 분석하여 전략적 데이터베이스 형태로 변환하고, 문서 전체에 대한 인사이트를 제공하세요.
-      모든 분석은 한국어로 작성하세요.
+      
+      [출력 언어 및 품질 가이드라인]
+      1. 모든 분석 결과(요약, 리포트, 상세 설명 등)는 반드시 한국어로 작성하세요.
+      2. 문체는 정중하고 전문적인 비즈니스 문체를 사용하세요 (예: ~함, ~임 대신 ~입니다, ~함이 바람직합니다 등).
+      3. 전문 용어는 업계에서 통용되는 정확한 표현을 사용하세요.
 
-      [핵심 분석 요구사항]
-      1. 골프장(Courses): 명칭, 지역, 주소, 규모(홀수), 상세 설명을 추출하고 '기존 목록([${courseListStr}])' 포함 여부를 판단하세요.
-      2. 업무 일지(Logs): 분류체계(summary, details, strategy, risk, priority)에 맞춰 기술하세요.
-      3. 인물(People): 성함, 직책, 소속, 우호도, 특이사항을 추출하세요.
-      4. 문서 총괄 분석 (반드시 포함): 
-         - documentSummary: 이 문서의 핵심 가치와 내용을 2-3문장으로 간결하게 요약.
-         - documentDetailedReport: 추출된 데이터 포인트들의 비즈니스적 시사점, 리스크, 향후 대응 전략을 포함한 전문적인 상세 보고서.
+      [핵심 분석 및 강화 요구사항]
+      1. 골프장(Courses): 명칭, 지역, 규모 외에 '추출 근거(reason)'와 기존 DB 존재 여부 예측을 수행하세요.
+      2. 업무 일지(Logs): 단순 요약이 아닌 '비즈니스 기회/리스크'를 명확히 구분하고, 중요도(priority)를 1~5로 산정하세요.
+      3. 인물(People): 성함, 직책 외에 문맥에서 파악된 '성향/특징'을 추출하세요.
+      4. 모든 추출 항목에는 'confidence(0.0~1.0)' 점수를 부여하여 사용자가 신뢰도를 판단하게 하세요.
 
       반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요.
     `
@@ -62,8 +62,8 @@ export const analyzeDocument = async (
                 address: { type: Type.STRING },
                 holes: { type: Type.NUMBER },
                 description: { type: Type.STRING },
-                isNew: { type: Type.BOOLEAN },
-                issues: { type: Type.ARRAY, items: { type: Type.STRING } }
+                confidence: { type: Type.NUMBER },
+                reason: { type: Type.STRING }
               }
             }
           },
@@ -81,7 +81,8 @@ export const analyzeDocument = async (
                 risk: { type: Type.STRING },
                 priority: { type: Type.NUMBER },
                 department: { type: Type.STRING },
-                tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+                tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                confidence: { type: Type.NUMBER }
               }
             }
           },
@@ -94,7 +95,8 @@ export const analyzeDocument = async (
                 role: { type: Type.STRING },
                 courseName: { type: Type.STRING },
                 affinity: { type: Type.NUMBER },
-                notes: { type: Type.STRING }
+                notes: { type: Type.STRING },
+                confidence: { type: Type.NUMBER }
               }
             }
           }
@@ -122,6 +124,7 @@ export const createChatSession = (
 
   const systemInstruction = `
     당신은 대한민국 골프장 업계의 최고 전략가 'GreenMaster AI'입니다.
+    모든 답변은 전문적이고 정중한 한국어로 작성하세요.
     데이터에 기반하여 요약, 상세 설명, 리스크 및 기회 요인을 구분하여 답변하세요.
     [컨텍스트 데이터]
     - 골프장: ${JSON.stringify(prunedCourses)}
@@ -141,7 +144,7 @@ export const createChatSession = (
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
   const prompt = `
-    다음 업무 일지를 정밀 분석하여 비즈니스 인텔리전스 보고서를 작성하세요.
+    다음 업무 일지를 정밀 분석하여 비즈니스 인텔리전스 보고서를 전문적인 한국어로 작성하세요.
     [일지 정보]
     골프장: ${log.courseName}
     제목: ${log.title}
@@ -171,7 +174,7 @@ export const generateCourseRelationshipIntelligence = async (
   const prunedLogs = logs.slice(0, 30).map(l => `[${l.date}] ${l.author}: ${l.title} - ${l.content.substring(0, 100)}...`).join('\n');
   
   const prompt = `
-    골프장 '${course.name}'의 인적 네트워크 및 관계 리스크 정밀 분석 리포트를 작성하세요.
+    골프장 '${course.name}'의 인적 네트워크 및 관계 리스크 정밀 분석 리포트를 비즈니스 한국어로 작성하세요.
     
     [입력 데이터]
     - 골프장 현황: ${course.description}
@@ -203,7 +206,7 @@ export const analyzeMaterialInventory = async (
     contents: {
       parts: [
         { inlineData: { mimeType: fileData.mimeType, data: fileData.base64Data } },
-        { text: "골프장 자재 목록 추출 (JSON ARRAY: year, category, name, quantity, unit, supplier, notes)" }
+        { text: "골프장 자재 목록 추출 (JSON ARRAY: year, category, name, quantity, unit, supplier, notes). 결과물의 문자열은 모두 한국어로 작성하세요." }
       ]
     },
     config: {
@@ -239,7 +242,7 @@ export const generatePersonReputationReport = async (
     [관련 기록 히스토리]
     ${prunedLogs}
     
-    위 데이터를 기반으로 다음을 분석하세요:
+    위 데이터를 기반으로 다음을 분석하여 전문적인 한국어로 출력하세요:
     - **전문성 평가**: 업무 스타일 및 전문 분야
     - **네트워크 가치**: 업계 내 영향력 및 연결 고리
     - **관계 리스크**: 우리 회사와의 우호도 변동성 및 주의사항
@@ -268,6 +271,7 @@ export const generateCourseSummary = async (
     - 히스토리 요약: ${prunedLogs}
 
     [작성 가이드]
+    모든 항목을 논리적이고 정제된 한국어로 작성하세요.
     1. **운영 현황 진단**: 현재 골프장의 상태 및 주요 이슈 요약
     2. **인적 네트워크 분석**: 키맨(Key-man) 파악 및 영향력 분석
     3. **비즈니스 기회 (Opportunities)**: 당사가 파고들 수 있는 틈새 전략
