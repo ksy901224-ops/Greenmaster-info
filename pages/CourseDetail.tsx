@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
-import { generateCourseSummary, analyzeMaterialInventory } from '../services/geminiService';
-import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown } from 'lucide-react';
-import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region } from '../types';
+import { generateCourseSummary, analyzeMaterialInventory, generateCourseRelationshipIntelligence } from '../services/geminiService';
+import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb } from 'lucide-react';
+import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region, Person, LogEntry } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 // Utility for smart Korean currency formatting
@@ -51,6 +51,10 @@ const CourseDetail: React.FC = () => {
   const [isUploadingMat, setIsUploadingMat] = useState(false);
   const [previewMaterials, setPreviewMaterials] = useState<Omit<MaterialRecord, 'id' | 'courseId' | 'lastUpdated'>[]>([]);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+  // --- Intelligence States ---
+  const [isAnalyzingIntelligence, setIsAnalyzingIntelligence] = useState(false);
+  const [intelReport, setIntelReport] = useState<string | null>(null);
 
   // Derived Values via useMemo
   const course = useMemo(() => courses.find(c => c.id === id), [courses, id]);
@@ -117,6 +121,20 @@ const CourseDetail: React.FC = () => {
   if (!course) return <div className="p-8 text-center">골프장을 찾을 수 없습니다.</div>;
 
   // --- Handlers ---
+  const handleAnalyzeIntelligence = async () => {
+    if (!course) return;
+    setIsAnalyzingIntelligence(true);
+    setIntelReport(null);
+    try {
+        const report = await generateCourseRelationshipIntelligence(course, currentStaff, relatedLogs);
+        setIntelReport(report);
+    } catch (error) {
+        alert('분석 중 오류가 발생했습니다.');
+    } finally {
+        setIsAnalyzingIntelligence(false);
+    }
+  };
+
   const handleDeleteCourse = () => {
     if (window.confirm(`정말로 '${course.name}' 골프장 정보를 영구적으로 삭제하시겠습니까? 관련 재무 및 자재 데이터도 함께 삭제되며, 업무 일지와의 연결이 해제됩니다.`)) {
         deleteCourse(course.id);
@@ -692,6 +710,70 @@ const CourseDetail: React.FC = () => {
 
         {activeTab === 'PEOPLE' && (
             <div className="space-y-10 animate-in fade-in duration-500">
+                {/* AI Intelligence Briefing Section */}
+                {canUseAI && (
+                    <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl relative overflow-hidden ring-1 ring-white/10">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-[100px] -mr-32 -mt-32"></div>
+                        <div className="relative z-10 flex flex-col lg:flex-row gap-8 items-start">
+                            <div className="lg:max-w-xs shrink-0">
+                                <div className="inline-flex items-center space-x-2 bg-brand-500/20 px-3 py-1.5 rounded-full text-brand-300 text-[10px] font-black uppercase tracking-widest mb-4 border border-brand-500/30">
+                                    <ShieldCheck size={12}/>
+                                    <span>Intelligence Briefing</span>
+                                </div>
+                                <h3 className="text-2xl font-black mb-4 tracking-tight leading-tight">Course Relationship <br/>Risk & Strategy Analysis</h3>
+                                <p className="text-slate-400 text-sm mb-6 leading-relaxed">AI가 인적 네트워크의 건전성을 진단하고 키맨(Key-Men) 대응 전략을 도출합니다.</p>
+                                <button 
+                                    onClick={handleAnalyzeIntelligence}
+                                    disabled={isAnalyzingIntelligence}
+                                    className="w-full bg-brand-600 hover:bg-brand-500 text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center shadow-lg transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                    {isAnalyzingIntelligence ? <Loader2 size={18} className="animate-spin mr-3"/> : <Sparkles size={18} className="mr-3 text-amber-300"/>}
+                                    전략 리포트 생성 시작
+                                </button>
+                            </div>
+
+                            <div className="flex-1 w-full bg-white/5 rounded-3xl border border-white/10 p-6 min-h-[250px] relative">
+                                {isAnalyzingIntelligence ? (
+                                    <div className="h-full flex flex-col items-center justify-center py-12">
+                                        <div className="relative mb-6">
+                                            <div className="absolute inset-0 bg-brand-500 rounded-full blur-xl opacity-20 animate-pulse"></div>
+                                            <Loader2 size={48} className="text-brand-400 animate-spin relative z-10"/>
+                                        </div>
+                                        <p className="text-brand-300 font-bold animate-pulse text-sm">인적 네트워크 시뮬레이션 및 데이터 정밀 분석 중...</p>
+                                    </div>
+                                ) : intelReport ? (
+                                    <div className="animate-in fade-in duration-700">
+                                        <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                                            <div className="flex items-center text-brand-400 text-xs font-black uppercase tracking-tighter">
+                                                <FileWarning size={14} className="mr-2"/> Generated Strategic Intelligence
+                                            </div>
+                                            <button onClick={() => setIntelReport(null)} className="text-slate-500 hover:text-white transition-colors"><X size={18}/></button>
+                                        </div>
+                                        <div className="text-slate-200 text-sm leading-loose whitespace-pre-line custom-scrollbar max-h-[400px] overflow-y-auto pr-4 font-medium italic">
+                                            {intelReport}
+                                        </div>
+                                        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="bg-brand-900/50 p-4 rounded-2xl border border-brand-500/20">
+                                                <div className="flex items-center text-brand-400 text-[10px] font-black mb-2 uppercase"><Target size={12} className="mr-1.5"/> Key Priority</div>
+                                                <p className="text-xs text-brand-100 font-bold">핵심 결정권자와의 유대 강화 및 리스크 인물 모니터링</p>
+                                            </div>
+                                            <div className="bg-indigo-900/50 p-4 rounded-2xl border border-indigo-500/20">
+                                                <div className="flex items-center text-indigo-400 text-[10px] font-black mb-2 uppercase"><Lightbulb size={12} className="mr-1.5"/> Action Guide</div>
+                                                <p className="text-xs text-indigo-100 font-bold">비우호적 인물에 대한 부서 간 교차 검증 및 관계 회복 시도</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center py-12 text-center">
+                                        <Activity size={48} className="text-slate-700 mb-4 opacity-40"/>
+                                        <p className="text-slate-500 text-sm font-bold">분석 데이터 준비 완료.<br/>왼쪽 버튼을 눌러 인텔리전스 분석을 시작하세요.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <section>
                     <div className="flex items-center justify-between mb-8 px-2">
                         <h3 className="text-xl font-black text-slate-900 flex items-center tracking-tight">

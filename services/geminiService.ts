@@ -162,6 +162,39 @@ export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
   return response.text || "분석 실패";
 };
 
+export const generateCourseRelationshipIntelligence = async (
+  course: GolfCourse,
+  people: Person[],
+  logs: LogEntry[]
+): Promise<string> => {
+  const staffInfo = people.map(p => `- ${p.name} (${p.currentRole}, 우호도: ${p.affinity}): ${p.notes}`).join('\n');
+  const prunedLogs = logs.slice(0, 30).map(l => `[${l.date}] ${l.author}: ${l.title} - ${l.content.substring(0, 100)}...`).join('\n');
+  
+  const prompt = `
+    골프장 '${course.name}'의 인적 네트워크 및 관계 리스크 정밀 분석 리포트를 작성하세요.
+    
+    [입력 데이터]
+    - 골프장 현황: ${course.description}
+    - 현재 소속 인원:\n${staffInfo}
+    - 관련 업무 이력 히스토리:\n${prunedLogs}
+
+    [분석 요청 사항]
+    1. **핵심 이해관계자 (Key-Men) 파악**: 의사결정에 결정적 영향을 미치는 인물 및 이들과의 연결 고리 분석.
+    2. **관계 건전성 진단**: 당사와의 전체적인 우호도 추이 및 협력 수준 평가.
+    3. **잠재적 인적 리스크**: 비우호적 인물, 최근의 소속 변경, 업무 일지에서 발견된 갈등 징후 포착.
+    4. **전략적 관계 강화 가이드**: 향후 비즈니스 확장을 위해 누구에게, 어떻게 접근해야 하는지 실질적인 행동 지침 제안.
+
+    전문적이고 통찰력 있는 '인텔리전스 보고서' 형식으로 한국어로 작성하세요.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-pro-preview',
+    contents: prompt,
+    config: { thinkingConfig: { thinkingBudget: 32768 } }
+  });
+  return response.text;
+};
+
 export const analyzeMaterialInventory = async (
   fileData: { base64Data: string, mimeType: string }
 ): Promise<any[]> => {
@@ -216,7 +249,7 @@ export const generatePersonReputationReport = async (
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 32768 } }
+    config: { thinkingBudget: 32768 }
   });
   return response.text;
 };
@@ -243,7 +276,7 @@ export const generateCourseSummary = async (
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 32768 } }
+    config: { thinkingBudget: 32768 }
   });
   return response.text;
 };
