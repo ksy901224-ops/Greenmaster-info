@@ -169,12 +169,14 @@ export enum MaterialCategory {
 export interface MaterialRecord {
   id: string;
   courseId: string;
-  year: number;
+  supplyDate: string; // 공급일 (YYYY-MM-DD)
   category: MaterialCategory;
-  name: string;
-  supplier?: string;
-  quantity: number;
-  unit: string;
+  name: string; // 제품명
+  standard: string; // 규격
+  quantity: number; // 수량
+  unit: string; // 단위 (kg, L, box)
+  unitPrice: number; // 단가
+  manager: string; // 담당자
   lastUpdated: string;
   notes?: string;
 }

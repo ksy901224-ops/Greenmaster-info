@@ -1,13 +1,19 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary, analyzeMaterialInventory, generateCourseRelationshipIntelligence } from '../services/geminiService';
-import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus, UserCheck, UserCog, UserMinus, Trees } from 'lucide-react';
+import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus, UserCheck, UserCog, UserMinus, Trees, ShoppingCart } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region, Person, LogEntry, GolfCoursePerson } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 // Utility for smart Korean currency formatting
 const formatKRW = (amount: number) => {
     if (amount === 0) return "0원";
+    
+    // For smaller amounts like unit price, show full number with comma
+    if (amount < 1000000) {
+        return amount.toLocaleString() + "원";
+    }
     
     const eok = Math.floor(amount / 100000000);
     const man = Math.floor((amount % 100000000) / 10000);
@@ -32,19 +38,23 @@ const CourseDetail: React.FC = () => {
   const [isFinModalOpen, setIsFinModalOpen] = useState(false);
   const [editingFin, setEditingFin] = useState<FinancialRecord | null>(null);
   const [finForm, setFinForm] = useState({ year: new Date().getFullYear(), revenue: 0, profit: 0 });
+  
+  // --- Material State Updates ---
   const [isMatModalOpen, setIsMatModalOpen] = useState(false);
   const [editingMat, setEditingMat] = useState<MaterialRecord | null>(null);
   const [matCategory, setMatCategory] = useState<MaterialCategory>(MaterialCategory.PESTICIDE);
   const currentYear = new Date().getFullYear();
   const [matYearFilter, setMatYearFilter] = useState<number>(currentYear);
   const [matForm, setMatForm] = useState({
+      supplyDate: new Date().toISOString().split('T')[0],
       category: MaterialCategory.PESTICIDE,
       name: '',
+      standard: '',
       quantity: 0,
-      unit: 'kg',
-      supplier: '',
-      notes: '',
-      year: currentYear
+      unit: '',
+      unitPrice: 0,
+      manager: '',
+      notes: ''
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingMat, setIsUploadingMat] = useState(false);
@@ -98,7 +108,7 @@ const CourseDetail: React.FC = () => {
     const previous = courseFinancials.length > 1 ? courseFinancials[courseFinancials.length - 2] : null;
     const growth = previous ? ((latest.revenue - previous.revenue) / previous.revenue) * 100 : 0;
     const margin = latest.profit ? (latest.profit / latest.revenue) * 100 : 0;
-    const prevMargin = previous?.profit ? (previous.profit / previous.revenue) * 100 : 0;
+    const prevMargin = (previous && previous.profit) ? (previous.profit / previous.revenue) * 100 : 0;
     const marginDiff = previous ? margin - prevMargin : 0;
     return { latest, previous, growth, margin, marginDiff };
   }, [courseFinancials]);
@@ -108,16 +118,17 @@ const CourseDetail: React.FC = () => {
   }, [materials, id]);
 
   const availableYears = useMemo(() => {
-      const years = new Set(courseMaterials.map(m => m.year || currentYear));
+      const years = new Set(courseMaterials.map(m => new Date(m.supplyDate).getFullYear()));
       years.add(currentYear);
-      return Array.from(years).sort((a, b) => Number(b) - Number(a));
+      return Array.from(years).sort((a: number, b: number) => b - a);
   }, [courseMaterials, currentYear]);
 
   const filteredMaterials = useMemo(() => {
     return courseMaterials
       .filter(m => m.category === matCategory)
-      .filter(m => (m.year || currentYear) === matYearFilter);
-  }, [courseMaterials, matCategory, matYearFilter, currentYear]);
+      .filter(m => new Date(m.supplyDate).getFullYear() === matYearFilter)
+      .sort((a, b) => new Date(b.supplyDate).getTime() - new Date(a.supplyDate).getTime());
+  }, [courseMaterials, matCategory, matYearFilter]);
 
   const currentStaff = useMemo(() => 
     course?.associatedPeople?.filter(p => p.isCurrent) || [], 
@@ -537,7 +548,7 @@ const CourseDetail: React.FC = () => {
                                       <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
                                   </button>
                               )}
-                              <button onClick={() => { setEditingMat(null); setMatForm({ ...matForm, name: '', quantity: 0, supplier: '', notes: '' }); setIsMatModalOpen(true); }} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-md flex items-center active:scale-95"><Plus size={14} className="mr-1.5"/> 자재 등록</button>
+                              <button onClick={() => { setEditingMat(null); setMatForm({ supplyDate: new Date().toISOString().split('T')[0], category: MaterialCategory.PESTICIDE, name: '', standard: '', quantity: 0, unit: 'ea', unitPrice: 0, manager: '', notes: '' }); setIsMatModalOpen(true); }} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-md flex items-center active:scale-95"><Plus size={14} className="mr-1.5"/> 자재 등록</button>
                           </div>
                       </div>
                       
@@ -569,35 +580,49 @@ const CourseDetail: React.FC = () => {
 
                   <div className="overflow-x-auto">
                       <table className="w-full text-sm text-left">
-                          <thead className="bg-white text-slate-400 font-bold border-b border-slate-100">
+                          <thead className="bg-white text-slate-400 font-bold border-b border-slate-100 text-xs">
                               <tr>
-                                  <th className="px-6 py-4">품명 (Product Name)</th>
-                                  <th className="px-6 py-4">공급사 (Supplier)</th>
-                                  <th className="px-6 py-4">수량 (Quantity)</th>
-                                  <th className="px-6 py-4">비고 (Notes)</th>
-                                  <th className="px-6 py-4 text-right">Last Update</th>
-                                  <th className="px-6 py-4 text-right">Actions</th>
+                                  <th className="px-6 py-4">공급일 (Date)</th>
+                                  <th className="px-6 py-4">제품명 (Item)</th>
+                                  <th className="px-6 py-4">규격 (Std)</th>
+                                  <th className="px-6 py-4 text-right">수량 (Qty)</th>
+                                  <th className="px-6 py-4 text-right">단가/총액 (Price)</th>
+                                  <th className="px-6 py-4">담당자 (Mgr)</th>
+                                  <th className="px-6 py-4 text-right">관리</th>
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
                               {filteredMaterials.length > 0 ? (
                                   filteredMaterials.map(mat => (
                                       <tr key={mat.id} className="group hover:bg-slate-50 transition-colors">
-                                          <td className="px-6 py-4 font-black text-slate-900">{mat.name}</td>
-                                          <td className="px-6 py-4 text-xs font-bold text-slate-500">{mat.supplier || '-'}</td>
-                                          <td className="px-6 py-4"><span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-black">{mat.quantity.toLocaleString()} {mat.unit}</span></td>
-                                          <td className="px-6 py-4 text-xs text-slate-400 max-w-[200px] truncate">{mat.notes}</td>
-                                          <td className="px-6 py-4 text-right text-[10px] font-mono text-slate-400">{mat.lastUpdated?.split('T')[0]}</td>
+                                          <td className="px-6 py-4 text-xs font-mono text-slate-500">{mat.supplyDate}</td>
+                                          <td className="px-6 py-4">
+                                              <div className="font-bold text-slate-900">{mat.name}</div>
+                                              <div className="text-[10px] text-slate-400">{mat.category}</div>
+                                          </td>
+                                          <td className="px-6 py-4 text-xs text-slate-600">{mat.standard || '-'}</td>
+                                          <td className="px-6 py-4 text-right">
+                                              <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-black whitespace-nowrap">
+                                                  {mat.quantity.toLocaleString()} {mat.unit}
+                                              </span>
+                                          </td>
+                                          <td className="px-6 py-4 text-right">
+                                              <div className="text-xs font-bold text-slate-700">{formatKRW(mat.quantity * mat.unitPrice)}</div>
+                                              <div className="text-[10px] text-slate-400">(@{formatKRW(mat.unitPrice)})</div>
+                                          </td>
+                                          <td className="px-6 py-4 text-xs font-bold text-slate-600 flex items-center">
+                                              <User size={10} className="mr-1 text-slate-400"/> {mat.manager || '-'}
+                                          </td>
                                           <td className="px-6 py-4 text-right">
                                               <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                  <button onClick={() => { setEditingMat(mat); setMatForm({ category: mat.category, name: mat.name, quantity: mat.quantity, unit: mat.unit, supplier: mat.supplier || '', notes: mat.notes || '', year: mat.year }); setIsMatModalOpen(true); }} className="p-2 bg-white border border-slate-200 rounded-lg hover:text-brand-600 shadow-sm"><Edit2 size={14}/></button>
+                                                  <button onClick={() => { setEditingMat(mat); setMatForm({ supplyDate: mat.supplyDate, category: mat.category, name: mat.name, standard: mat.standard || '', quantity: mat.quantity, unit: mat.unit, unitPrice: mat.unitPrice || 0, manager: mat.manager || '', notes: mat.notes || '' }); setIsMatModalOpen(true); }} className="p-2 bg-white border border-slate-200 rounded-lg hover:text-brand-600 shadow-sm"><Edit2 size={14}/></button>
                                                   <button onClick={() => { if(window.confirm('삭제하시겠습니까?')) deleteMaterial(mat.id); }} className="p-2 bg-white border border-slate-200 rounded-lg hover:text-red-600 shadow-sm"><Trash2 size={14}/></button>
                                               </div>
                                           </td>
                                       </tr>
                                   ))
                               ) : (
-                                  <tr><td colSpan={6} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">등록된 자재 내역이 없습니다.</td></tr>
+                                  <tr><td colSpan={7} className="py-12 text-center text-slate-400 font-medium bg-slate-50/50">등록된 자재 내역이 없습니다.</td></tr>
                               )}
                           </tbody>
                       </table>
@@ -781,39 +806,53 @@ const CourseDetail: React.FC = () => {
                   <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="block text-xs font-bold text-slate-500 mb-1">기준 연도</label>
-                              <input type="number" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.year} onChange={e => setMatForm({...matForm, year: parseInt(e.target.value)})} />
+                              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">공급일자</label>
+                              <input type="date" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm text-slate-900" value={matForm.supplyDate} onChange={e => setMatForm({...matForm, supplyDate: e.target.value})} />
                           </div>
                           <div>
-                              <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
+                              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">카테고리</label>
                               <select className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm bg-white" value={matForm.category} onChange={e => setMatForm({...matForm, category: e.target.value as MaterialCategory})}>
                                   {Object.values(MaterialCategory).map(c => <option key={c} value={c}>{c}</option>)}
                               </select>
                           </div>
                       </div>
                       <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">품명</label>
+                          <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">제품명 (Product Name)</label>
                           <input type="text" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.name} onChange={e => setMatForm({...matForm, name: e.target.value})} />
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">규격 (Standard)</label>
+                          <input type="text" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.standard} onChange={e => setMatForm({...matForm, standard: e.target.value})} placeholder="예: 500ml, 20kg..." />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                           <div>
-                              <label className="block text-xs font-bold text-slate-500 mb-1">수량</label>
+                              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">수량</label>
                               <input type="number" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.quantity} onChange={e => setMatForm({...matForm, quantity: parseInt(e.target.value)})} />
                           </div>
                           <div>
-                              <label className="block text-xs font-bold text-slate-500 mb-1">단위</label>
-                              <input type="text" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.unit} onChange={e => setMatForm({...matForm, unit: e.target.value})} placeholder="kg, L, box..." />
+                              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">단위</label>
+                              <input type="text" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.unit} onChange={e => setMatForm({...matForm, unit: e.target.value})} placeholder="box, ea..." />
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">단가 (Unit Price)</label>
+                              <input type="number" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.unitPrice} onChange={e => setMatForm({...matForm, unitPrice: parseInt(e.target.value)})} />
+                          </div>
+                          <div className="flex flex-col justify-end pb-3">
+                              <p className="text-xs text-slate-400 font-medium">총액 예상</p>
+                              <p className="text-sm font-black text-brand-700">{formatKRW(matForm.quantity * matForm.unitPrice)}</p>
                           </div>
                       </div>
                       <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">공급사</label>
-                          <input type="text" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.supplier} onChange={e => setMatForm({...matForm, supplier: e.target.value})} />
+                          <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">담당자 (Manager)</label>
+                          <input type="text" className="w-full border-slate-200 rounded-xl p-3 font-bold text-sm" value={matForm.manager} onChange={e => setMatForm({...matForm, manager: e.target.value})} placeholder="입고 담당자 성명" />
                       </div>
                       <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">비고</label>
+                          <label className="block text-[10px] font-black text-slate-400 mb-1 uppercase tracking-wider">비고</label>
                           <textarea className="w-full border-slate-200 rounded-xl p-3 font-medium text-sm" rows={2} value={matForm.notes} onChange={e => setMatForm({...matForm, notes: e.target.value})} />
                       </div>
-                      <button onClick={handleSaveMaterial} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-sm mt-2 hover:bg-slate-800 transition-colors">저장하기</button>
+                      <button onClick={handleSaveMaterial} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-sm mt-2 hover:bg-slate-800 transition-colors shadow-lg active:scale-95">저장하기</button>
                   </div>
               </div>
           </div>
@@ -822,32 +861,36 @@ const CourseDetail: React.FC = () => {
       {/* AI Preview Modal */}
       {isPreviewModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md animate-in fade-in duration-300">
-              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-                      <h4 className="font-black text-lg text-indigo-900 flex items-center"><Sparkles size={20} className="mr-2 text-indigo-600"/> AI 스캔 결과 확인</h4>
+                      <h4 className="font-black text-lg text-indigo-900 flex items-center"><Sparkles size={20} className="mr-2 text-indigo-600"/> AI 스캔 결과 확인 (Preview)</h4>
                       <button onClick={() => setIsPreviewModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24}/></button>
                   </div>
                   <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
-                      <p className="text-sm text-slate-500 mb-4 font-bold">문서에서 추출된 다음 항목들을 자재 목록에 추가합니다.</p>
-                      <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                      <p className="text-sm text-slate-500 mb-4 font-bold flex items-center"><Info size={14} className="mr-1.5"/> 문서에서 추출된 다음 항목들을 자재 목록에 추가합니다. 정보를 확인하세요.</p>
+                      <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
                           <table className="w-full text-sm text-left">
-                              <thead className="bg-slate-50 font-bold text-slate-500">
+                              <thead className="bg-slate-50 font-bold text-slate-500 text-xs uppercase tracking-wider">
                                   <tr>
+                                      <th className="px-4 py-3">공급일</th>
                                       <th className="px-4 py-3">품명</th>
-                                      <th className="px-4 py-3">카테고리</th>
-                                      <th className="px-4 py-3">수량</th>
-                                      <th className="px-4 py-3">단위</th>
-                                      <th className="px-4 py-3">공급사</th>
+                                      <th className="px-4 py-3">규격</th>
+                                      <th className="px-4 py-3 text-right">수량</th>
+                                      <th className="px-4 py-3 text-right">단가</th>
+                                      <th className="px-4 py-3 text-right">총액</th>
+                                      <th className="px-4 py-3">담당자</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                   {previewMaterials.map((m, i) => (
                                       <tr key={i} className="hover:bg-slate-50">
-                                          <td className="px-4 py-3 font-bold">{m.name}</td>
-                                          <td className="px-4 py-3 text-xs">{m.category}</td>
-                                          <td className="px-4 py-3 font-bold text-indigo-600">{m.quantity}</td>
-                                          <td className="px-4 py-3 text-xs">{m.unit}</td>
-                                          <td className="px-4 py-3 text-xs text-slate-500">{m.supplier}</td>
+                                          <td className="px-4 py-3 text-xs font-mono">{m.supplyDate}</td>
+                                          <td className="px-4 py-3 font-bold text-slate-900">{m.name}</td>
+                                          <td className="px-4 py-3 text-xs text-slate-600">{m.standard}</td>
+                                          <td className="px-4 py-3 text-right font-bold">{m.quantity.toLocaleString()} {m.unit}</td>
+                                          <td className="px-4 py-3 text-right text-xs">{m.unitPrice?.toLocaleString()}</td>
+                                          <td className="px-4 py-3 text-right font-bold text-brand-700">{formatKRW((m.quantity || 0) * (m.unitPrice || 0))}</td>
+                                          <td className="px-4 py-3 text-xs">{m.manager}</td>
                                       </tr>
                                   ))}
                               </tbody>
@@ -856,7 +899,9 @@ const CourseDetail: React.FC = () => {
                   </div>
                   <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50">
                       <button onClick={() => setIsPreviewModalOpen(false)} className="px-6 py-3 rounded-xl text-sm font-bold text-slate-500 hover:bg-slate-200 transition-colors">취소</button>
-                      <button onClick={applyPreviewMaterials} className="px-8 py-3 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg transition-all active:scale-95">모두 반영하기</button>
+                      <button onClick={applyPreviewMaterials} className="px-8 py-3 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg transition-all active:scale-95 flex items-center">
+                          <CheckCircle size={16} className="mr-2"/> 모두 반영하기
+                      </button>
                   </div>
               </div>
           </div>
@@ -870,6 +915,7 @@ const CourseDetail: React.FC = () => {
                     <button onClick={() => setIsEditModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-1.5 hover:bg-slate-200 rounded-xl"><X size={28} /></button>
                 </div>
                 <div className="p-10 space-y-10 overflow-y-auto custom-scrollbar">
+                    {/* ... (Existing Course Edit Form) ... */}
                     <div className="space-y-6">
                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center border-b border-slate-100 pb-3"><Info size={14} className="mr-2 text-brand-500"/> Core Infrastructure Data</h4>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

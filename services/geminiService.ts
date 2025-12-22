@@ -206,7 +206,7 @@ export const analyzeMaterialInventory = async (
     contents: {
       parts: [
         { inlineData: { mimeType: fileData.mimeType, data: fileData.base64Data } },
-        { text: "골프장 자재 목록 추출 (JSON ARRAY: year, category, name, quantity, unit, supplier, notes). 결과물의 문자열은 모두 한국어로 작성하세요." }
+        { text: "골프장 거래 명세서 또는 자재 목록 추출. [필수 항목] supplyDate(YYYY-MM-DD), category(농약/비료/잔디/기타), name(제품명), standard(규격), quantity(수량), unit(단위), unitPrice(단가), manager(담당자), notes(비고). 결과는 반드시 JSON Array 형태로 출력하세요." }
       ]
     },
     config: {
@@ -216,15 +216,17 @@ export const analyzeMaterialInventory = async (
         items: {
           type: Type.OBJECT,
           properties: {
-            year: { type: Type.NUMBER },
+            supplyDate: { type: Type.STRING },
             category: { type: Type.STRING },
             name: { type: Type.STRING },
+            standard: { type: Type.STRING },
             quantity: { type: Type.NUMBER },
             unit: { type: Type.STRING },
-            supplier: { type: Type.STRING },
+            unitPrice: { type: Type.NUMBER },
+            manager: { type: Type.STRING },
             notes: { type: Type.STRING }
           },
-          required: ["year", "category", "name", "quantity", "unit"]
+          required: ["supplyDate", "category", "name", "quantity", "unit"]
         }
       }
     }
