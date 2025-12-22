@@ -26,7 +26,6 @@ const CourseDetail: React.FC = () => {
   const { user, courses, logs, updateCourse, deleteCourse, people, canUseAI, canViewFullData, isAdmin, navigate, routeParams, locationState, financials, materials, addFinancial, updateFinancial, deleteFinancial, addMaterial, updateMaterial, deleteMaterial } = useApp();
   const id = routeParams.id;
   
-  // 1. Hooks (Must be called unconditionally at top level)
   const [activeTab, setActiveTab] = useState<'INFO' | 'LOGS' | 'PEOPLE' | 'MANAGEMENT'>('INFO');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<GolfCourse | null>(null);
@@ -115,10 +114,16 @@ const CourseDetail: React.FC = () => {
       }
   }, [locationState, canViewFullData]);
 
-  // 2. Early Return (After all Hooks)
   if (!course) return <div className="p-8 text-center">골프장을 찾을 수 없습니다.</div>;
 
   // --- Handlers ---
+  const handleDeleteCourse = () => {
+    if (window.confirm(`정말로 '${course.name}' 골프장 정보를 영구적으로 삭제하시겠습니까? 관련 재무 및 자재 데이터도 함께 삭제되며, 업무 일지와의 연결이 해제됩니다.`)) {
+        deleteCourse(course.id);
+        navigate('/courses');
+    }
+  };
+
   const handleSaveFinancial = () => {
     if (editingFin) {
         updateFinancial({ ...editingFin, ...finForm, updatedAt: Date.now() });
@@ -228,6 +233,9 @@ const CourseDetail: React.FC = () => {
             <h1 className="text-2xl font-bold text-slate-900">{course.name}</h1>
             <div className="flex space-x-2">
                 <button onClick={openEditModal} className="p-2 text-slate-400 hover:text-brand-600 hover:bg-slate-100 rounded-full transition-colors" title="정보 수정"><Edit2 size={18} /></button>
+                {isAdmin && (
+                  <button onClick={handleDeleteCourse} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors" title="골프장 삭제"><Trash2 size={18} /></button>
+                )}
             </div>
         </div>
         <p className="text-slate-500 text-sm flex items-center mb-4 relative z-10">
@@ -334,8 +342,6 @@ const CourseDetail: React.FC = () => {
 
         {canViewFullData && activeTab === 'MANAGEMENT' && (
           <div className="space-y-8 animate-in fade-in duration-300">
-              
-              {/* Financial Dashboard Header */}
               <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-soft overflow-hidden relative">
                   <div className="absolute top-0 right-0 w-80 h-80 bg-blue-50 rounded-full -mr-32 -mt-32 opacity-40 blur-3xl"></div>
                   
@@ -742,7 +748,7 @@ const CourseDetail: React.FC = () => {
                   <div className="p-10 space-y-8">
                       <div>
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block ml-1">연도 (Fiscal Year)</label>
-                          <input type="number" className="w-full border-slate-200 rounded-2xl p-4 font-black text-xl text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-sm" value={finForm.year} onChange={(e) => setLogSearchTerm(e.target.value)} />
+                          <input type="number" className="w-full border-slate-200 rounded-2xl p-4 font-black text-xl text-slate-900 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 shadow-sm" value={finForm.year} onChange={(e) => setFinForm({...finForm, year: Number(e.target.value)})} />
                       </div>
                       <div>
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block ml-1">연간 총 매출액 (Revenue)</label>

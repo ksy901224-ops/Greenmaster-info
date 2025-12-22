@@ -6,7 +6,6 @@ import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
 const WriteLog: React.FC = () => {
-  // Added user to destructuring
   const { user, addLog, updateLog, addCourse, updateCourse, addPerson, addExternalEvent, courses: globalCourses, people: globalPeople, navigate, locationState } = useApp();
   const editingLog = locationState?.log as LogEntry | undefined;
   
@@ -37,27 +36,33 @@ const WriteLog: React.FC = () => {
       });
   }, [aiResults, aiFilterPriority, aiFilterType]);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  // --- Quick Add Course State ---
   const [isCourseModalOpen, setIsCourseModalOpen] = useState(false);
-  const [newCourse, setNewCourse] = useState<any>({ name: '', region: '경기', address: '', holes: 18, type: CourseType.PUBLIC, grassType: GrassType.ZOYSIA, area: '', length: '', description: '' });
+  const [newCourseForm, setNewCourseForm] = useState({
+      name: '',
+      region: '경기' as Region,
+      holes: 18,
+      type: CourseType.PUBLIC
+  });
 
   // --- Manual Log State ---
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
-  const [dept, setDept] = useState<string>('영업');
+  const [dept, setDept] = useState<Department>(user?.department || Department.SALES);
   const [courseId, setCourseId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   
-  // --- Enhanced Person Registration State ---
-  const [personForm, setPersonForm] = useState<{
-    name: string; phone: string; currentRole: string; currentCourseName: string;
-    currentCourseId: string; currentRoleStartDate: string; affinity: AffinityLevel;
-    notes: string; careers: Partial<CareerRecord>[];
-  }>({
-    name: '', phone: '', currentRole: '', currentCourseName: '', currentCourseId: '',
-    currentRoleStartDate: new Date().toISOString().split('T')[0],
-    affinity: AffinityLevel.NEUTRAL, notes: '', careers: []
+  // --- Person Registration State ---
+  const [personForm, setPersonForm] = useState({
+    name: '',
+    phone: '',
+    currentRole: '',
+    currentCourseName: '',
+    affinity: AffinityLevel.NEUTRAL,
+    notes: ''
   });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (editingLog) {
@@ -70,7 +75,6 @@ const WriteLog: React.FC = () => {
     }
   }, [editingLog]);
 
-  // Added missing handleLogSubmit handler
   const handleLogSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!courseId || !title || !content) {
@@ -83,7 +87,7 @@ const WriteLog: React.FC = () => {
         id: editingLog?.id || `log-${Date.now()}`,
         date: logDate,
         author: user?.name || '익명',
-        department: dept as Department,
+        department: dept,
         courseId,
         courseName: globalCourses.find(c => c.id === courseId)?.name || '미지정',
         title,
@@ -104,12 +108,29 @@ const WriteLog: React.FC = () => {
     }
   };
 
-  // Added missing handlePersonFieldChange helper
-  const handlePersonFieldChange = (field: string, value: any) => {
-    setPersonForm(prev => ({ ...prev, [field]: value }));
+  const handleQuickCourseAdd = () => {
+      if (!newCourseForm.name.trim()) return;
+      const newId = `c-quick-${Date.now()}`;
+      const newCourse: GolfCourse = {
+          id: newId,
+          name: newCourseForm.name,
+          region: newCourseForm.region,
+          holes: newCourseForm.holes,
+          type: newCourseForm.type,
+          openYear: new Date().getFullYear().toString(),
+          address: `${newCourseForm.region} 신규 등록지`,
+          grassType: GrassType.ZOYSIA,
+          area: '정보없음',
+          description: '일지 작성 중 퀵 등록됨',
+          issues: []
+      };
+      addCourse(newCourse);
+      setCourseId(newId);
+      setIsCourseModalOpen(false);
+      setNewCourseForm({ name: '', region: '경기', holes: 18, type: CourseType.PUBLIC });
+      alert('신규 골프장이 마스터 DB에 추가되었습니다.');
   };
 
-  // Added missing handlePersonSubmit handler
   const handlePersonSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!personForm.name || !personForm.currentRole) {
@@ -125,14 +146,15 @@ const WriteLog: React.FC = () => {
         phone: personForm.phone,
         currentRole: personForm.currentRole,
         currentCourseId: course?.id || '',
-        currentRoleStartDate: personForm.currentRoleStartDate,
+        currentRoleStartDate: new Date().toISOString().split('T')[0],
         affinity: personForm.affinity,
         notes: personForm.notes,
         careers: []
       };
       await addPerson(newPerson);
-      alert('인물 정보가 등록되었습니다.');
-      navigate('/courses');
+      alert('인물 정보가 마스터 DB에 등록되었습니다.');
+      setPersonForm({ name: '', phone: '', currentRole: '', currentCourseName: '', affinity: AffinityLevel.NEUTRAL, notes: '' });
+      setActiveTab('LOG');
     } catch (error) {
       alert('저장 중 오류가 발생했습니다.');
     } finally {
@@ -354,23 +376,24 @@ const WriteLog: React.FC = () => {
                     )}
                 </div>
             )}
+
             {activeTab === 'LOG' && (
-                <form onSubmit={handleLogSubmit} className="space-y-6">
+                <form onSubmit={handleLogSubmit} className="space-y-6 animate-in fade-in duration-300">
                     <h3 className="text-xl font-black text-slate-900 flex items-center mb-6"><FileText className="mr-3 text-brand-600"/> 업무 기록 작성</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">작성 날짜</label><input type="date" required className={getInputClass()} value={logDate} onChange={(e) => setLogDate(e.target.value)} /></div>
-                        <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">담당 부서</label><select className={getSelectClass()} value={dept} onChange={(e) => setDept(e.target.value)}>{Object.values(Department).map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                        <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">담당 부서</label><select className={getSelectClass()} value={dept} onChange={(e) => setDept(e.target.value as Department)}>{Object.values(Department).map(d => <option key={d} value={d}>{d}</option>)}</select></div>
                     </div>
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 flex justify-between">대상 골프장 <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-brand-600 hover:underline">목록에 없나요?</button></label>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1 flex justify-between">대상 골프장 <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-brand-600 hover:underline flex items-center"><PlusCircle size={12} className="mr-1"/> 목록에 없나요? 신규 등록</button></label>
                         <div className="relative">
-                            <input list="courses-logs-all" className={getInputClass()} value={globalCourses.find(c => c.id === courseId)?.name || ''} onChange={(e) => { const found = globalCourses.find(c => c.name === e.target.value); setCourseId(found ? found.id : ''); }} placeholder="골프장 검색 또는 입력..." />
+                            <input list="courses-logs-all" className={getInputClass()} value={globalCourses.find(c => c.id === courseId)?.name || ''} onChange={(e) => { const found = globalCourses.find(c => c.name === e.target.value); setCourseId(found ? found.id : ''); }} placeholder="골프장 검색 또는 선택..." />
                             <datalist id="courses-logs-all">{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
                         </div>
                     </div>
-                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">업무 제목</label><input type="text" required className={getInputClass()} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="제목을 입력하세요" /></div>
-                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">상세 내용</label><textarea required rows={8} className={getInputClass()} value={content} onChange={(e) => setContent(e.target.value)} placeholder="상세 진행 내역..." /></div>
-                    <div className="pt-4"><button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.99] transition-all">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} 업무 기록 저장</button></div>
+                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">업무 제목</label><input type="text" required className={getInputClass()} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="핵심 제목을 입력하세요" /></div>
+                    <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">상세 내용</label><textarea required rows={8} className={getInputClass()} value={content} onChange={(e) => setContent(e.target.value)} placeholder="구체적인 업무 수행 내역 및 현장 특이사항..." /></div>
+                    <div className="pt-4"><button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.99] transition-all">{isSubmitting ? <Loader2 className="animate-spin mr-2" /> : <Save className="mr-2" />} 업무 기록 마스터 DB 저장</button></div>
                 </form>
             )}
 
@@ -384,11 +407,11 @@ const WriteLog: React.FC = () => {
                         <section className="space-y-6">
                             <h4 className="text-[11px] font-black text-brand-700 uppercase tracking-widest border-b border-brand-100 pb-2">기본 인적 사항</h4>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">성명 *</label><input type="text" className={getInputClass()} value={personForm.name} onChange={e => handlePersonFieldChange('name', e.target.value)} required placeholder="이름" /></div>
-                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">연락처</label><input type="text" className={getInputClass()} value={personForm.phone} onChange={e => handlePersonFieldChange('phone', e.target.value)} placeholder="010-0000-0000" /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">성명 *</label><input type="text" className={getInputClass()} value={personForm.name} onChange={e => setPersonForm({...personForm, name: e.target.value})} required placeholder="이름" /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">연락처</label><input type="text" className={getInputClass()} value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} placeholder="010-0000-0000" /></div>
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">우리와의 친밀도</label>
-                                    <select className={getSelectClass()} value={personForm.affinity} onChange={e => handlePersonFieldChange('affinity', parseInt(e.target.value))}>
+                                    <select className={getSelectClass()} value={personForm.affinity} onChange={e => setPersonForm({...personForm, affinity: parseInt(e.target.value)})}>
                                         <option value={AffinityLevel.ALLY}>강력한 아군 (Ally)</option>
                                         <option value={AffinityLevel.FRIENDLY}>우호적 (Friendly)</option>
                                         <option value={AffinityLevel.NEUTRAL}>중립 (Neutral)</option>
@@ -402,15 +425,15 @@ const WriteLog: React.FC = () => {
                             <div className="flex justify-between items-center">
                                 <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center"><Building2 size={16} className="mr-2 text-brand-600"/> 현재 소속 발령 정보</h4>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장</label>
-                                    <input list="courses-person-reg" className={getInputClass()} value={personForm.currentCourseName} onChange={e => handlePersonFieldChange('currentCourseName', e.target.value)} placeholder="골프장 검색..." />
+                                    <input list="courses-person-reg" className={getInputClass()} value={personForm.currentCourseName} onChange={e => setPersonForm({...personForm, currentCourseName: e.target.value})} placeholder="골프장 검색 또는 입력..." />
                                     <datalist id="courses-person-reg">{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
                                 </div>
-                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">현직 공식 직책</label><input type="text" className={getInputClass()} value={personForm.currentRole} onChange={e => handlePersonFieldChange('currentRole', e.target.value)} placeholder="코스팀장 등" /></div>
-                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">현직 발령일</label><input type="date" className={getInputClass()} value={personForm.currentRoleStartDate} onChange={e => handlePersonFieldChange('currentRoleStartDate', e.target.value)} /></div>
+                                <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">현직 공식 직책 *</label><input type="text" className={getInputClass()} required value={personForm.currentRole} onChange={e => setPersonForm({...personForm, currentRole: e.target.value})} placeholder="예: 코스관리팀장" /></div>
                             </div>
+                            <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">인물 특징 및 관계 메모</label><textarea className={getInputClass()} rows={4} value={personForm.notes} onChange={e => setPersonForm({...personForm, notes: e.target.value})} placeholder="성격, 주요 관심사, 공략 포인트 등..." /></div>
                         </section>
                         <div className="pt-6">
                             <button type="submit" disabled={isSubmitting} className="w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xl shadow-2xl hover:bg-slate-800 flex justify-center items-center active:scale-[0.98] transition-all">
@@ -421,6 +444,48 @@ const WriteLog: React.FC = () => {
                 </div>
             )}
       </div>
+
+      {/* Quick Add Course Modal */}
+      {isCourseModalOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md animate-in zoom-in-95 duration-200">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-brand-50">
+                      <h4 className="font-black text-lg text-brand-900 flex items-center tracking-tight"><Building2 size={24} className="mr-3 text-brand-600"/> 신규 골프장 마스터 등록</h4>
+                      <button onClick={() => setIsCourseModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-white rounded-full"><X size={28}/></button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">골프장 공식 명칭 *</label>
+                          <input type="text" required className="w-full rounded-2xl border-slate-200 p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.name} onChange={e => setNewCourseForm({...newCourseForm, name: e.target.value})} placeholder="골프장 이름 입력" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">행정 구역</label>
+                              <select className="w-full rounded-2xl border-slate-200 p-4 text-sm font-black shadow-sm bg-white focus:ring-4 focus:ring-brand-500/5" value={newCourseForm.region} onChange={e => setNewCourseForm({...newCourseForm, region: e.target.value as Region})}>
+                                  {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">홀 규모</label>
+                              <input type="number" className="w-full rounded-2xl border-slate-200 p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-brand-500/5" value={newCourseForm.holes} onChange={e => setNewCourseForm({...newCourseForm, holes: parseInt(e.target.value)})} />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">운영 형태</label>
+                          <select className="w-full rounded-2xl border-slate-200 p-4 text-sm font-black shadow-sm bg-white focus:ring-4 focus:ring-brand-500/5" value={newCourseForm.type} onChange={e => setNewCourseForm({...newCourseForm, type: e.target.value as CourseType})}>
+                              <option value={CourseType.PUBLIC}>대중제</option>
+                              <option value={CourseType.MEMBER}>회원제</option>
+                          </select>
+                      </div>
+                      <div className="pt-4">
+                          <button onClick={handleQuickCourseAdd} className="w-full bg-slate-900 text-white py-5 rounded-[1.5rem] font-black text-sm shadow-xl hover:bg-slate-800 transition-all flex justify-center items-center active:scale-95">
+                              <CheckCircle size={20} className="mr-2 text-brand-400" /> MASTER DB 즉시 등록
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };
