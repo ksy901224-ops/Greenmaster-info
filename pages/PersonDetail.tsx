@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History as HistoryIcon, UserX, ExternalLink, Database, Info, Map, FileText, Search, PlusCircle, UserCheck } from 'lucide-react';
+import { User, Phone, Briefcase, MapPin, HeartHandshake, ChevronDown, Edit2, X, CheckCircle, Trash2, Plus, ArrowRight, Archive, Sparkles, Cloud, Loader2, ShieldAlert, FileWarning, Eye, Building2, Calendar, History as HistoryIcon, UserX, ExternalLink, Database, Info, Map, FileText, Search, PlusCircle, UserCheck, Link2Off } from 'lucide-react';
 import { AffinityLevel, Person, CareerRecord, CourseType, GrassType, Region } from '../types';
 import { useApp } from '../contexts/AppContext';
 import { generatePersonReputationReport } from '../services/geminiService';
@@ -187,6 +187,19 @@ const PersonDetail: React.FC = () => {
       }
   };
 
+  const handleUnlinkCurrentCourse = () => {
+      if (!currentCourse) return;
+      if (window.confirm(`'${person.name}' 님을 '${currentCourse.name}' 소속에서 해제하시겠습니까?\n(직책 정보도 초기화됩니다)`)) {
+          updatePerson({
+              ...person,
+              currentCourseId: '',
+              currentRole: '',
+              notes: (person.notes || '') + `\n[소속 해제] ${new Date().toISOString().split('T')[0]} - ${currentCourse.name}에서 해제됨`
+          });
+          alert('소속 정보가 해제되었습니다.');
+      }
+  };
+
   const handleAnalyzeReputation = async () => {
       setIsAnalyzingReputation(true);
       setReputationReport(null);
@@ -227,6 +240,12 @@ const PersonDetail: React.FC = () => {
                             {isAnalyzingReputation ? "분석 중..." : "AI 평판/리스크 분석"}
                         </button>
                     )}
+                    <button 
+                        onClick={() => navigate('/write', { personId: person.id })}
+                        className="flex items-center px-6 py-3 rounded-2xl bg-white border border-slate-200 text-slate-700 text-sm font-black shadow-md hover:bg-slate-50 transition-all active:scale-95"
+                    >
+                        <FileText size={16} className="mr-2 text-indigo-500"/> 관련 리포트 작성
+                    </button>
                     <div className={`px-6 py-3 rounded-2xl border text-sm font-black flex items-center shadow-sm uppercase tracking-wider ${getAffinityColor(person.affinity)}`}>
                         {getAffinityText(person.affinity)}
                     </div>
@@ -237,15 +256,20 @@ const PersonDetail: React.FC = () => {
                 <h1 className="text-4xl font-black text-slate-900 tracking-tight">{person.name}</h1>
                 <div className="flex flex-wrap items-center mt-2 gap-y-2">
                     {currentCourse ? (
-                      <button 
-                        onClick={() => navigate(`/courses/${currentCourse.id}`)}
-                        className="text-brand-700 font-black text-xl flex items-center hover:bg-brand-50 px-2 py-1 rounded-lg transition-all border border-transparent hover:border-brand-200 group/course"
-                      >
-                        <Building2 size={20} className="mr-2 opacity-70 text-brand-500"/> 
-                        {currentCourse.name}
-                        <ArrowRight size={14} className="ml-2 opacity-0 group-hover/course:opacity-100 transform translate-x-0 group-hover/course:translate-x-1 transition-all"/>
-                        <span className="ml-3 text-[10px] bg-brand-600 text-white px-2 py-0.5 rounded uppercase tracking-tighter shadow-sm font-black">MASTER SYNCED</span>
-                      </button>
+                      <div className="flex items-center">
+                          <button 
+                            onClick={() => navigate(`/courses/${currentCourse.id}`)}
+                            className="text-brand-700 font-black text-xl flex items-center hover:bg-brand-50 px-2 py-1 rounded-lg transition-all border border-transparent hover:border-brand-200 group/course"
+                          >
+                            <Building2 size={20} className="mr-2 opacity-70 text-brand-500"/> 
+                            {currentCourse.name}
+                            <ArrowRight size={14} className="ml-2 opacity-0 group-hover/course:opacity-100 transform translate-x-0 group-hover/course:translate-x-1 transition-all"/>
+                            <span className="ml-3 text-[10px] bg-brand-600 text-white px-2 py-0.5 rounded uppercase tracking-tighter shadow-sm font-black">MASTER SYNCED</span>
+                          </button>
+                          <button onClick={handleUnlinkCurrentCourse} className="ml-2 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="소속 해제 (Unlink)">
+                              <Link2Off size={16}/>
+                          </button>
+                      </div>
                     ) : (
                       <p className="text-slate-400 font-bold text-xl flex items-center px-2 py-1 italic">
                         <Building2 size={20} className="mr-2 opacity-50"/> 소속 정보 미지정

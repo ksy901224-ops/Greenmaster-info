@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord, GolfCoursePerson } from '../types';
-import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS } from '../constants';
+import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS, DATA_VERSION } from '../constants';
 import { subscribeToCollection, saveDocument, updateDocument, deleteDocument, seedCollection } from '../services/firestoreService';
 
 interface AppContextType {
@@ -28,8 +28,9 @@ interface AppContextType {
   updateLog: (log: LogEntry) => void;
   deleteLog: (id: string) => void;
   addCourse: (course: GolfCourse) => void;
-  updateCourse: (course: GolfCourse) => void;
-  deleteCourse: (id: string) => void; 
+  updateCourse: (course: GolfCourse) => Promise<void>;
+  deleteCourse: (id: string) => Promise<void>;
+  mergeCourses: (targetId: string, sourceIds: string[]) => Promise<void>;
   addPerson: (person: Person) => void;
   updatePerson: (person: Person) => void;
   deletePerson: (id: string) => void;
@@ -90,6 +91,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const isAdmin = user?.role === UserRole.ADMIN;
   const isSeniorOrAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
+  const isSimulatedLive = true; // Use this variable to determine mock mode in context logic
 
   const parsePath = (path: string) => {
     const courseMatch = path.match(/^\/courses\/([^/]+)$/);
@@ -137,6 +139,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       };
       saveDocument('system_logs', newLog);
   };
+
+  // --- DATA MIGRATION CHECK ---
+  // Ensure that if the code version changes (new Mock Data), the local storage is updated.
+  useEffect(() => {
+      const performMigration = async () => {
+          // Check if we are running in a mode that uses local storage (mock mode)
+          // We rely on the `isSimulatedLive` flag or a safe check on `localStorage`.
+          // Here we assume if 'gm_mock_courses' exists, we are in mock mode.
+          const isMockStorage = localStorage.getItem('gm_mock_courses') !== null || true; // Force check for safety
+          
+          if (isMockStorage) {
+              const currentVersion = localStorage.getItem('gm_data_version');
+              if (currentVersion !== DATA_VERSION) {
+                  console.log(`[Migration] Detected version change from ${currentVersion} to ${DATA_VERSION}. Updating mock data...`);
+                  
+                  // Force re-seed courses because the user specifically requested 569 new items replacing the old ones.
+                  await seedCollection('courses', MOCK_COURSES, true);
+                  
+                  // Update version
+                  localStorage.setItem('gm_data_version', DATA_VERSION);
+                  
+                  // Reload to ensure all components have fresh data
+                  window.location.reload();
+              }
+          }
+      };
+      performMigration();
+  }, []);
 
   useEffect(() => {
     const unsubLogs = subscribeToCollection('logs', (data) => {
@@ -303,8 +333,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       saveDocument('logs', log);
       logActivity('CREATE', 'LOG', log.title, `${log.courseName} - ${log.department}`);
   };
-  const updateLog = (log: LogEntry) => {
-      updateDocument('logs', log.id, log);
+  const updateLog = async (log: LogEntry) => {
+      await updateDocument('logs', log.id, log);
       logActivity('UPDATE', 'LOG', log.title);
   };
   const deleteLog = (id: string) => {
@@ -317,14 +347,78 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       saveDocument('courses', course);
       logActivity('CREATE', 'COURSE', course.name);
   };
-  const updateCourse = (course: GolfCourse) => {
-      updateDocument('courses', course.id, course);
+  const updateCourse = async (course: GolfCourse) => {
+      await updateDocument('courses', course.id, course);
       logActivity('UPDATE', 'COURSE', course.name);
   };
-  const deleteCourse = (id: string) => {
-      const target = courses.find(c => c.id === id);
-      deleteDocument('courses', id);
+  const deleteCourse = async (id: string) => {
+      const target = rawCourses.find(c => c.id === id);
+      await deleteDocument('courses', id);
       logActivity('DELETE', 'COURSE', target?.name || 'Unknown Course');
+  };
+
+  const mergeCourses = async (targetId: string, sourceIds: string[]) => {
+      if (!isAdmin) return;
+      
+      const targetCourse = rawCourses.find(c => c.id === targetId);
+      if (!targetCourse) return;
+
+      const sources = rawCourses.filter(c => sourceIds.includes(c.id));
+      
+      // 1. Merge Issues & Description
+      let combinedIssues = [...(targetCourse.issues || [])];
+      let combinedDesc = targetCourse.description;
+      
+      sources.forEach(s => {
+          if (s.issues) combinedIssues = [...combinedIssues, ...s.issues];
+          if (s.description && !combinedDesc.includes(s.description)) {
+              combinedDesc += `\n\n[Merged Info from ${s.name}]: ${s.description}`;
+          }
+      });
+      // Unique issues
+      combinedIssues = Array.from(new Set(combinedIssues));
+      
+      await updateCourse({ ...targetCourse, issues: combinedIssues, description: combinedDesc });
+
+      // 2. Re-link Logs
+      const logsToMove = logs.filter(l => sourceIds.includes(l.courseId));
+      for (const l of logsToMove) {
+          await updateLog({ ...l, courseId: targetId, courseName: targetCourse.name });
+      }
+
+      // 3. Re-link People (Current)
+      const peopleCurrent = people.filter(p => p.currentCourseId && sourceIds.includes(p.currentCourseId));
+      for (const p of peopleCurrent) {
+          await updatePerson({ ...p, currentCourseId: targetId });
+      }
+
+      // 4. Re-link People (Careers)
+      for (const p of people) {
+          let modified = false;
+          const newCareers = p.careers.map(c => {
+              if (sourceIds.includes(c.courseId)) {
+                  modified = true;
+                  return { ...c, courseId: targetId, courseName: targetCourse.name };
+              }
+              return c;
+          });
+          if (modified) await updatePerson({ ...p, careers: newCareers });
+      }
+
+      // 5. Financials & Materials
+      const fins = financials.filter(f => sourceIds.includes(f.courseId));
+      for (const f of fins) await updateFinancial({ ...f, courseId: targetId });
+      
+      const mats = materials.filter(m => sourceIds.includes(m.courseId));
+      for (const m of mats) await updateMaterial({ ...m, courseId: targetId });
+
+      // 6. Delete Sources
+      for (const id of sourceIds) {
+          await deleteCourse(id);
+      }
+      
+      logActivity('UPDATE', 'COURSE', targetCourse.name, `Merged ${sourceIds.length} duplicates.`);
+      alert(`병합 완료: ${sources.length}건의 데이터를 '${targetCourse.name}'으로 통합했습니다.`);
   };
 
   const addPerson = async (newPerson: Person) => {
@@ -339,8 +433,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const updatePerson = (person: Person) => {
-      updateDocument('people', person.id, person);
+  const updatePerson = async (person: Person) => {
+      await updateDocument('people', person.id, person);
       logActivity('UPDATE', 'PERSON', person.name);
   };
   const deletePerson = (id: string) => {
@@ -355,8 +449,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveDocument('financials', record);
     logActivity('CREATE', 'FINANCE', `${record.year} 매출`, `Course ID: ${record.courseId}`);
   };
-  const updateFinancial = (record: FinancialRecord) => {
-    updateDocument('financials', record.id, record);
+  const updateFinancial = async (record: FinancialRecord) => {
+    await updateDocument('financials', record.id, record);
     logActivity('UPDATE', 'FINANCE', `${record.year} 매출`);
   };
   const deleteFinancial = (id: string) => {
@@ -368,8 +462,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     saveDocument('materials', record);
     logActivity('CREATE', 'MATERIAL', record.name, `${record.category} - ${record.quantity}${record.unit}`);
   };
-  const updateMaterial = (record: MaterialRecord) => {
-    updateDocument('materials', record.id, record);
+  const updateMaterial = async (record: MaterialRecord) => {
+    await updateDocument('materials', record.id, record);
     logActivity('UPDATE', 'MATERIAL', record.name);
   };
   const deleteMaterial = (id: string) => {
@@ -420,13 +514,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const canUseAI = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
   const canViewFullData = user?.role === UserRole.SENIOR || user?.role === UserRole.INTERMEDIATE || user?.role === UserRole.ADMIN;
-  const isSimulatedLive = true;
 
   const value = {
     user, allUsers, login, register, logout, updateUserStatus, updateUserRole, updateUserDepartment, updateUser, createUserManually,
     logs, courses, people, externalEvents, systemLogs, financials, materials,
     addLog, updateLog, deleteLog,
-    addCourse, updateCourse, deleteCourse,
+    addCourse, updateCourse, deleteCourse, mergeCourses,
     addPerson, updatePerson, deletePerson,
     addExternalEvent,
     addFinancial, updateFinancial, deleteFinancial,

@@ -25,18 +25,16 @@ export const analyzeDocument = async (
   contentParts.push({
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다. 
-      제공된 문서를 정밀 분석하여 전략적 데이터베이스 형태로 변환하고, 문서 전체에 대한 인사이트를 제공하세요.
+      제공된 문서를 정밀 분석하여 전략적 데이터베이스 형태로 변환하세요.
       
-      [출력 언어 및 품질 가이드라인]
-      1. 모든 분석 결과(요약, 리포트, 상세 설명 등)는 반드시 한국어로 작성하세요.
-      2. 문체는 정중하고 전문적인 비즈니스 문체를 사용하세요 (예: ~함, ~임 대신 ~입니다, ~함이 바람직합니다 등).
-      3. 전문 용어는 업계에서 통용되는 정확한 표현을 사용하세요.
-
-      [핵심 분석 및 강화 요구사항]
-      1. 골프장(Courses): 명칭, 지역, 규모 외에 '추출 근거(reason)'와 기존 DB 존재 여부 예측을 수행하세요.
-      2. 업무 일지(Logs): 단순 요약이 아닌 '비즈니스 기회/리스크'를 명확히 구분하고, 중요도(priority)를 1~5로 산정하세요.
-      3. 인물(People): 성함, 직책 외에 문맥에서 파악된 '성향/특징'을 추출하세요.
-      4. 모든 추출 항목에는 'confidence(0.0~1.0)' 점수를 부여하여 사용자가 신뢰도를 판단하게 하세요.
+      [분석 가이드라인]
+      1. **골프장(Courses)**: 명칭, 지역, 홀수, 운영 형태(회원제/대중제), 개장년도를 정확히 추출하세요. 
+         - 기존 DB 목록(${JSON.stringify(existingCourseNames.slice(0, 50))}...)을 참고하여 가능한 공식 명칭을 사용하세요.
+      2. **업무 일지(Logs)**: 
+         - **summary**: 전체 내용을 1~2문장으로 요약한 핵심 거버닝 메시지.
+         - **details**: 육하원칙에 의거한 상세 내용, 수치, 구체적 이슈 사항.
+         - **risk**: 발견된 잠재적 위험 요소.
+      3. **인물(People)**: 성함, 직책, 성향/특징을 추출하세요.
 
       반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요.
     `
@@ -61,6 +59,8 @@ export const analyzeDocument = async (
                 region: { type: Type.STRING },
                 address: { type: Type.STRING },
                 holes: { type: Type.NUMBER },
+                type: { type: Type.STRING, enum: ['회원제', '대중제', '기타'] },
+                openYear: { type: Type.STRING },
                 description: { type: Type.STRING },
                 confidence: { type: Type.NUMBER },
                 reason: { type: Type.STRING }
@@ -75,8 +75,8 @@ export const analyzeDocument = async (
                 date: { type: Type.STRING },
                 courseName: { type: Type.STRING },
                 title: { type: Type.STRING },
-                summary: { type: Type.STRING },
-                details: { type: Type.STRING },
+                summary: { type: Type.STRING, description: "Key takeaway summary" },
+                details: { type: Type.STRING, description: "Full detailed content" },
                 strategy: { type: Type.STRING },
                 risk: { type: Type.STRING },
                 priority: { type: Type.NUMBER },
@@ -238,21 +238,28 @@ export const generatePersonReputationReport = async (
 ): Promise<string> => {
   const prunedLogs = logs.slice(0, 15).map(l => `${l.date}: ${l.title}`).join('\n');
   const prompt = `
-    인물 프로파일링: ${person.name} (${person.currentRole}). 
-    [관련 기록 히스토리]
+    인물 프로파일링 및 전략 분석: ${person.name} (${person.currentRole}). 
+    [관련 업무 기록 히스토리]
     ${prunedLogs}
+    [인물 특징 메모]
+    ${person.notes}
     
-    위 데이터를 기반으로 다음을 분석하여 전문적인 한국어로 출력하세요:
-    - **전문성 평가**: 업무 스타일 및 전문 분야
-    - **네트워크 가치**: 업계 내 영향력 및 연결 고리
-    - **관계 리스크**: 우리 회사와의 우호도 변동성 및 주의사항
-    - **접근 전략**: 이 인물과의 관계를 강화하기 위한 실질적인 행동 지침
+    위 데이터를 기반으로 심층 분석 리포트를 작성하세요.
+    
+    [출력 양식]
+    1. **전문성 및 성향 평가**: 업무 스타일, 강점, 전문 분야 상세 분석.
+    2. **핵심 리스크 요인 (Potential Risks)**: (중요) 우리 회사와의 관계에서 발생할 수 있는 부정적 요소, 갈등 가능성, 또는 해당 인물의 약점.
+    3. **비즈니스 기회 (Strategic Opportunities)**: (중요) 이 인물을 통해 얻을 수 있는 전략적 이점, 키맨으로서의 가치, 네트워크 확장 가능성.
+    4. **네트워크 영향력**: 업계 내 평판 및 영향력 수준.
+    5. **접근 및 설득 전략**: 관계를 강화하기 위한 구체적인 행동 가이드 (Action Plan).
+
+    정중하고 통찰력 있는 비즈니스 한국어로 작성해 주세요.
   `;
   
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    config: { thinkingBudget: 32768 }
+    config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;
 };
@@ -280,7 +287,7 @@ export const generateCourseSummary = async (
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: prompt,
-    config: { thinkingBudget: 32768 }
+    config: { thinkingConfig: { thinkingBudget: 32768 } }
   });
   return response.text;
 };

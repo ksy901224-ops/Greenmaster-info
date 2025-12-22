@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useRef } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole, UserStatus, Department, UserProfile, SystemLog, GolfCourse, CourseType, GrassType, Region } from '../types';
-import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2, Key, Mail, User as UserIcon, Filter, Info, ChevronRight, FileSearch, ArrowUpDown, CheckSquare, Square } from 'lucide-react';
+import { Users, UserPlus, CheckCircle, XCircle, Shield, AlertTriangle, Search, Activity, Ban, RotateCcw, Lock, Unlock, FileText, Siren, X, ChevronDown, Briefcase, List, Calendar, BarChart2, TrendingUp, Clock, Database, Sparkles, Loader2, Upload, BookOpen, MapPin, Zap, Lightbulb, Save, Edit2, Check, AlertCircle, FileUp, Building2, Key, Mail, User as UserIcon, Filter, Info, ChevronRight, FileSearch, ArrowUpDown, CheckSquare, Square, Layers, Merge, Trash2 } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 
 interface EnhancedSyncItem {
@@ -24,12 +24,18 @@ interface EnhancedSyncItem {
     error?: string;
 }
 
+interface DuplicateGroup {
+    key: string;
+    courses: GolfCourse[];
+    selectedMasterId?: string;
+}
+
 type SortField = 'name' | 'region' | 'holes' | 'conflict' | 'status';
 type SortDir = 'asc' | 'desc';
 
 const AdminDashboard: React.FC = () => {
-  const { user, allUsers, isAdmin, isSeniorOrAdmin, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse, createUserManually } = useApp();
-  const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'MASTER'>('MASTER');
+  const { user, allUsers, isAdmin, isSeniorOrAdmin, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse, deleteCourse, createUserManually, mergeCourses } = useApp();
+  const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'MASTER' | 'DEDUPLICATION'>('MASTER');
 
   // Master Catalog Sync State
   const [catalogText, setCatalogText] = useState('');
@@ -40,6 +46,11 @@ const AdminDashboard: React.FC = () => {
   const [docDetail, setDocDetail] = useState<string | null>(null);
   const [aiReportTab, setAiReportTab] = useState<'SUMMARY' | 'DETAIL'>('SUMMARY');
   
+  // Deduplication State
+  const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
+  const [isScanningDuplicates, setIsScanningDuplicates] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<GolfCourse | null>(null);
+
   // Filtering & Sorting States
   const [filterConflict, setFilterConflict] = useState<'ALL' | 'new' | 'update'>('ALL');
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'pending' | 'success' | 'error'>('ALL');
@@ -285,6 +296,65 @@ const AdminDashboard: React.FC = () => {
       }
   };
 
+  // --- DEDUPLICATION LOGIC ---
+  const scanForDuplicates = () => {
+      setIsScanningDuplicates(true);
+      
+      const groups: {[key: string]: GolfCourse[]} = {};
+      
+      courses.forEach(c => {
+          // Normalize name: remove spaces, lowercase, remove common suffixes
+          const normalized = c.name.replace(/\s+/g, '')
+                                   .replace(/\(주\)|주식회사|cc|gc|countryclub|golfclub|golf|resort|골프장|컨트리클럽|클럽|리조트|&/gi, '')
+                                   .toLowerCase();
+          
+          if (!groups[normalized]) groups[normalized] = [];
+          groups[normalized].push(c);
+      });
+
+      const duplicates = Object.entries(groups)
+          .filter(([_, group]) => group.length > 1)
+          .map(([key, group]) => ({
+              key,
+              courses: group,
+              selectedMasterId: group[0].id // Default to first
+          }));
+      
+      setDuplicateGroups(duplicates);
+      setIsScanningDuplicates(false);
+  };
+
+  const handleMergeGroup = async (group: DuplicateGroup) => {
+      if (!group.selectedMasterId) return;
+      const sources = group.courses.filter(c => c.id !== group.selectedMasterId).map(c => c.id);
+      
+      if (window.confirm(`'${group.courses.find(c => c.id === group.selectedMasterId)?.name}'을(를) 기준으로 나머지 ${sources.length}건을 병합하시겠습니까? \n병합 후 나머지 항목은 삭제됩니다.`)) {
+          await mergeCourses(group.selectedMasterId, sources);
+          // Wait slightly for context update then rescan
+          setTimeout(scanForDuplicates, 1000);
+      }
+  };
+
+  const handleDeleteFromGroup = async (id: string) => {
+      if (window.confirm('정말 이 골프장 데이터를 영구 삭제하시겠습니까?')) {
+          await deleteCourse(id);
+          // Update local state immediately for UI responsiveness
+          setDuplicateGroups(prev => prev.map(group => ({
+              ...group,
+              courses: group.courses.filter(c => c.id !== id)
+          })).filter(group => group.courses.length > 1));
+      }
+  };
+
+  const handleSaveEditedCourse = async () => {
+      if (!editingCourse) return;
+      await updateCourse(editingCourse);
+      setEditingCourse(null);
+      setTimeout(scanForDuplicates, 500);
+  };
+
+  const regions: Region[] = ['서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '인천', '부산', '대구', '울산', '대전', '광주', '세종', '기타'];
+
   if (!user || !isSeniorOrAdmin) return null;
 
   const SortIcon = ({ field }: { field: SortField }) => {
@@ -304,9 +374,12 @@ const AdminDashboard: React.FC = () => {
             <p className="text-slate-500 text-sm mt-1 ml-10">데이터 정합성 관리 및 {isAdmin ? '사용자 권한 통제' : '업무 로그 감사'}를 수행합니다.</p>
         </div>
         
-        <div className="flex bg-slate-100 p-1 rounded-xl mt-4 md:mt-0 shadow-inner">
+        <div className="flex bg-slate-100 p-1 rounded-xl mt-4 md:mt-0 shadow-inner overflow-x-auto no-scrollbar">
              <button onClick={() => setActiveTab('MASTER')} className={`px-5 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${activeTab === 'MASTER' ? 'bg-white shadow-sm text-brand-800' : 'text-slate-500 hover:text-slate-700'}`}>
                  <Database size={16} className="mr-2"/> 데이터 동기화
+             </button>
+             <button onClick={() => setActiveTab('DEDUPLICATION')} className={`px-5 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${activeTab === 'DEDUPLICATION' ? 'bg-white shadow-sm text-brand-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                 <Layers size={16} className="mr-2"/> 중복 통합 관리
              </button>
              {isAdmin && (
                 <button onClick={() => setActiveTab('USERS')} className={`px-5 py-2 rounded-lg text-sm font-bold flex items-center transition-all ${activeTab === 'USERS' ? 'bg-white shadow-sm text-brand-800' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -558,6 +631,105 @@ const AdminDashboard: React.FC = () => {
           </div>
       )}
 
+      {/* Deduplication Tab */}
+      {activeTab === 'DEDUPLICATION' && (
+          <div className="space-y-6">
+              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                      <div>
+                          <h2 className="text-xl font-bold text-slate-900 flex items-center mb-2">
+                              <Layers size={24} className="mr-2 text-brand-600"/> 중복 골프장 자동 탐지 및 통합
+                          </h2>
+                          <p className="text-slate-500 text-sm">유사한 이름을 가진 골프장을 그룹핑하여 하나로 병합합니다. (예: '태광CC'와 '태광 컨트리클럽')</p>
+                      </div>
+                      <button 
+                          onClick={scanForDuplicates} 
+                          disabled={isScanningDuplicates}
+                          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center disabled:opacity-70 active:scale-95"
+                      >
+                          {isScanningDuplicates ? <Loader2 size={18} className="animate-spin mr-2"/> : <Search size={18} className="mr-2"/>}
+                          중복 데이터 전체 스캔
+                      </button>
+                  </div>
+              </div>
+
+              {duplicateGroups.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-6">
+                      {duplicateGroups.map((group) => (
+                          <div key={group.key} className="bg-white border border-brand-100 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                              <div className="absolute top-0 left-0 w-1.5 h-full bg-brand-500"></div>
+                              <div className="flex justify-between items-center mb-6 pl-4">
+                                  <h3 className="font-black text-lg text-slate-800 flex items-center">
+                                      <AlertCircle size={18} className="mr-2 text-brand-500"/>
+                                      중복 의심 그룹: "{group.key}" ({group.courses.length}건)
+                                  </h3>
+                                  <button 
+                                      onClick={() => handleMergeGroup(group)}
+                                      className="bg-slate-900 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all flex items-center shadow-md active:scale-95"
+                                  >
+                                      <Merge size={14} className="mr-2"/> 선택한 항목으로 병합 (Merge)
+                                  </button>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pl-4">
+                                  {group.courses.map(course => (
+                                      <div 
+                                          key={course.id} 
+                                          onClick={() => {
+                                              const newGroups = [...duplicateGroups];
+                                              const gIndex = newGroups.findIndex(g => g.key === group.key);
+                                              if (gIndex >= 0) {
+                                                  newGroups[gIndex].selectedMasterId = course.id;
+                                                  setDuplicateGroups(newGroups);
+                                              }
+                                          }}
+                                          className={`border-2 rounded-2xl p-4 cursor-pointer transition-all relative group/card ${group.selectedMasterId === course.id ? 'border-brand-500 bg-brand-50/50 ring-2 ring-brand-200' : 'border-slate-100 bg-slate-50 hover:border-slate-300'}`}
+                                      >
+                                          {group.selectedMasterId === course.id && (
+                                              <div className="absolute top-3 right-3 text-brand-600 bg-white rounded-full p-1 shadow-sm"><CheckCircle size={16}/></div>
+                                          )}
+                                          <div className="absolute top-3 right-3 flex space-x-1 opacity-0 group-hover/card:opacity-100 transition-opacity">
+                                              {group.selectedMasterId !== course.id && (
+                                                  <>
+                                                    <button onClick={(e) => { e.stopPropagation(); setEditingCourse(course); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 hover:text-blue-600 hover:border-blue-200 rounded-lg shadow-sm"><Edit2 size={14}/></button>
+                                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteFromGroup(course.id); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 hover:text-red-600 hover:border-red-200 rounded-lg shadow-sm"><Trash2 size={14}/></button>
+                                                  </>
+                                              )}
+                                          </div>
+
+                                          <h4 className="font-black text-slate-900 text-sm mb-1">{course.name}</h4>
+                                          <p className="text-xs text-slate-500 mb-2">{course.address}</p>
+                                          <div className="flex flex-wrap gap-2 mt-3">
+                                              <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">{course.type}</span>
+                                              <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">{course.holes}H</span>
+                                              <span className="text-[10px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-600">{course.region}</span>
+                                          </div>
+                                          {course.issues && course.issues.length > 0 && (
+                                              <div className="mt-3 pt-3 border-t border-slate-200/50">
+                                                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Issues ({course.issues.length})</span>
+                                                  <div className="flex gap-1 flex-wrap">
+                                                      {course.issues.slice(0,2).map((is, i) => <span key={i} className="text-[9px] bg-red-50 text-red-600 px-1.5 py-0.5 rounded truncate max-w-full">{is}</span>)}
+                                                  </div>
+                                              </div>
+                                          )}
+                                          <div className="mt-2 text-[9px] text-slate-400 font-mono text-right">{course.id}</div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                  !isScanningDuplicates && (
+                      <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                          <CheckCircle size={48} className="mx-auto text-slate-300 mb-4"/>
+                          <p className="text-slate-500 font-bold">중복된 골프장 데이터가 발견되지 않았습니다.</p>
+                      </div>
+                  )
+              )}
+          </div>
+      )}
+
       {activeTab === 'USERS' && isAdmin && (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-right-4">
               <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
@@ -639,6 +811,7 @@ const AdminDashboard: React.FC = () => {
                       <button onClick={() => setIsCreateModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors"><X size={20}/></button>
                   </div>
                   <form onSubmit={handleCreateUser} className="p-8 space-y-5">
+                      {/* ... existing form fields ... */}
                       <div>
                           <label className="block text-xs font-bold text-slate-500 mb-1.5 ml-1 uppercase tracking-wider">이름</label>
                           <input 
@@ -695,6 +868,52 @@ const AdminDashboard: React.FC = () => {
                           </button>
                       </div>
                   </form>
+              </div>
+          </div>
+      )}
+
+      {/* Edit Course Modal for Duplicates */}
+      {editingCourse && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-200">
+              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-bold text-lg text-slate-800 flex items-center">
+                          <Edit2 className="mr-2 text-brand-600" size={20}/> 골프장 정보 수정
+                      </h3>
+                      <button onClick={() => setEditingCourse(null)} className="p-2 text-slate-400 hover:text-slate-600 rounded-full transition-colors"><X size={20}/></button>
+                  </div>
+                  <div className="p-8 space-y-5">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">골프장 명칭</label>
+                          <input type="text" className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none" value={editingCourse.name} onChange={(e) => setEditingCourse({ ...editingCourse, name: e.target.value })} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 mb-1">지역</label>
+                              <select className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold bg-white" value={editingCourse.region} onChange={(e) => setEditingCourse({ ...editingCourse, region: e.target.value as Region })}>
+                                  {regions.map(r => <option key={r} value={r}>{r}</option>)}
+                              </select>
+                          </div>
+                          <div>
+                              <label className="block text-xs font-bold text-slate-500 mb-1">홀 수</label>
+                              <input type="number" className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold" value={editingCourse.holes} onChange={(e) => setEditingCourse({ ...editingCourse, holes: parseInt(e.target.value) })} />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">주소</label>
+                          <input type="text" className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold" value={editingCourse.address} onChange={(e) => setEditingCourse({ ...editingCourse, address: e.target.value })} />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1">유형</label>
+                          <select className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold bg-white" value={editingCourse.type} onChange={(e) => setEditingCourse({ ...editingCourse, type: e.target.value as CourseType })}>
+                              <option value={CourseType.MEMBER}>회원제</option>
+                              <option value={CourseType.PUBLIC}>대중제</option>
+                          </select>
+                      </div>
+                      <button onClick={handleSaveEditedCourse} className="w-full bg-brand-600 text-white py-3.5 rounded-xl font-bold text-sm hover:bg-brand-700 transition-all shadow-md active:scale-95 flex items-center justify-center mt-4">
+                          <Check size={18} className="mr-2"/> 변경 사항 저장
+                      </button>
+                  </div>
               </div>
           </div>
       )}

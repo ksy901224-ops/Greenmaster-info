@@ -128,21 +128,24 @@ export const deleteDocument = async (collectionName: string, id: string) => {
   }
 };
 
-// ENHANCED SEEDING: Chunk size set to 250 to ensure compliance with Firestore write limits (500)
-export const seedCollection = async (collectionName: string, dataArray: any[]) => {
+// ENHANCED SEEDING: Added 'force' parameter to overwrite local cache when code constants update
+export const seedCollection = async (collectionName: string, dataArray: any[], force: boolean = false) => {
   if (seedingLocks[collectionName]) return;
   seedingLocks[collectionName] = true;
 
   if (isMockMode || !db) {
     const current = getLocalData(collectionName);
-    if (current.length === 0) {
+    if (current.length === 0 || force) {
         setLocalData(collectionName, dataArray);
+        if (force) console.log(`[MockDB] Forced reset of ${collectionName} with ${dataArray.length} items.`);
     }
     seedingLocks[collectionName] = false;
     return;
   }
 
   try {
+    // In Firebase mode, we don't easily 'force replace' entire collections due to cost/complexity.
+    // We stick to 'add if empty' logic or explicit batch updates if needed.
     const CHUNK_SIZE = 250;
     for (let i = 0; i < dataArray.length; i += CHUNK_SIZE) {
       const chunk = dataArray.slice(i, i + CHUNK_SIZE);

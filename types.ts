@@ -76,6 +76,7 @@ export interface GolfCourse {
   issues?: string[];
   staffCount?: number;
   associatedPeople?: GolfCoursePerson[];
+  managerId?: string; // Designated Key Contact / Manager ID
 }
 
 export interface CareerRecord {
@@ -112,8 +113,9 @@ export interface LogEntry {
   date: string;
   author: string;
   department: Department;
-  courseId: string;
-  courseName: string;
+  courseId: string; // Primary Course ID
+  courseName: string; // Primary Course Name
+  relatedCourses?: { id: string; name: string }[]; // New: Support for multiple courses
   title: string;
   content: string;
   imageUrls?: string[];

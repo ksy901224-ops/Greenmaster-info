@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard';
 import CourseList from './pages/CourseList';
 import CourseDetail from './pages/CourseDetail';
 import PersonDetail from './pages/PersonDetail';
-import RelationshipMap from './pages/RelationshipMap';
+import WorkLogList from './pages/WorkLogList';
 import WriteLog from './pages/WriteLog';
 import Settings from './pages/Settings';
 import AdminTodo from './pages/AdminTodo';
@@ -29,8 +29,8 @@ const App: React.FC = () => {
     content = <CourseDetail />;
   } else if (currentPath.startsWith('/people/')) {
     content = <PersonDetail />;
-  } else if (currentPath === '/relationship-map') {
-    content = <RelationshipMap />;
+  } else if (currentPath === '/work-logs') {
+    content = <WorkLogList />;
   } else if (currentPath === '/write') {
     content = <WriteLog />;
   } else if (currentPath === '/settings') {

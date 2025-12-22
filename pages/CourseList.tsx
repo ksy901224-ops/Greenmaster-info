@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, ArrowRight, Filter, Grid, List as ListIcon, X, SlidersHorizontal, ChevronDown, Check } from 'lucide-react';
+import { Search, MapPin, ArrowRight, Filter, Grid, List as ListIcon, X, SlidersHorizontal, ChevronDown, Check, UserCog } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Region, CourseType, GrassType } from '../types';
 
 const CourseList: React.FC = () => {
-  const { courses, navigate } = useApp();
+  const { courses, people, navigate } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
+  const [managerSearch, setManagerSearch] = useState('');
   const [selectedRegion, setSelectedRegion] = useState<Region | '전체'>('전체');
   const [selectedType, setSelectedType] = useState<CourseType | '전체'>('전체');
   const [selectedHoles, setSelectedHoles] = useState<string | '전체'>('전체');
@@ -30,10 +31,16 @@ const CourseList: React.FC = () => {
         else if (selectedHoles === '18H') matchHoles = c.holes === 18;
         else if (selectedHoles === '27H+') matchHoles = c.holes >= 27;
       }
+
+      let matchManager = true;
+      if (managerSearch.trim()) {
+          const managerName = c.managerId ? people.find(p => p.id === c.managerId)?.name : '';
+          matchManager = !!managerName && managerName.includes(managerSearch);
+      }
       
-      return matchSearch && matchRegion && matchType && matchHoles && matchGrass;
+      return matchSearch && matchRegion && matchType && matchHoles && matchGrass && matchManager;
     });
-  }, [courses, searchTerm, selectedRegion, selectedType, selectedHoles, selectedGrass]);
+  }, [courses, people, searchTerm, managerSearch, selectedRegion, selectedType, selectedHoles, selectedGrass]);
 
   const resetFilters = () => {
       setSelectedRegion('전체');
@@ -41,9 +48,10 @@ const CourseList: React.FC = () => {
       setSelectedHoles('전체');
       setSelectedGrass('전체');
       setSearchTerm('');
+      setManagerSearch('');
   };
 
-  const activeFilterCount = [selectedRegion, selectedType, selectedHoles, selectedGrass].filter(f => f !== '전체').length;
+  const activeFilterCount = [selectedRegion, selectedType, selectedHoles, selectedGrass].filter(f => f !== '전체').length + (managerSearch ? 1 : 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -72,7 +80,14 @@ const CourseList: React.FC = () => {
                   <h3 className="font-bold text-slate-800 flex items-center"><Filter size={16} className="mr-2 text-brand-600"/> 상세 검색 필터</h3>
                   <button onClick={resetFilters} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center"><X size={14} className="mr-1"/> 초기화</button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">담당자(Manager)</label>
+                      <div className="relative">
+                        <input type="text" value={managerSearch} onChange={(e) => setManagerSearch(e.target.value)} placeholder="담당자 성명 검색" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2.5 text-sm font-bold focus:ring-2 focus:ring-brand-500 outline-none" />
+                        <UserCog size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      </div>
+                  </div>
                   <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">지역</label>
                       <select value={selectedRegion} onChange={(e) => setSelectedRegion(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold">{regions.map(r => <option key={r} value={r}>{r}</option>)}</select>
@@ -103,34 +118,50 @@ const CourseList: React.FC = () => {
 
       {viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCourses.map(course => (
-                <div key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1">
+            {filteredCourses.map(course => {
+                const manager = course.managerId ? people.find(p => p.id === course.managerId) : null;
+                return (
+                <div key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1 relative group">
                     <div className={`h-24 bg-gradient-to-br from-brand-500 to-brand-700 p-6 flex flex-col justify-end`}>
                         <h3 className="text-xl font-black text-white">{course.name}</h3>
                     </div>
+                    {manager && (
+                        <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-bold px-2 py-1 rounded-lg flex items-center">
+                            <UserCog size={12} className="mr-1"/> {manager.name}
+                        </div>
+                    )}
                     <div className="p-6">
                         <div className="flex items-center text-slate-400 text-[11px] font-bold mb-4"><MapPin size={12} className="mr-1.5 text-brand-500" /> <span className="truncate">{course.address}</span></div>
                         <div className="flex justify-between text-xs font-bold text-slate-700 border-t pt-4"><span>{course.holes} Holes</span><span>{course.type}</span></div>
                     </div>
                 </div>
-            ))}
+            )})}
         </div>
       ) : (
           <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
               <table className="w-full text-sm text-left">
                   <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest border-b border-slate-100">
-                      <tr><th className="px-6 py-4">골프장 명칭</th><th className="px-6 py-4">지역</th><th className="px-6 py-4">규모</th><th className="px-6 py-4">구분</th><th className="px-6 py-4 text-right">관리</th></tr>
+                      <tr><th className="px-6 py-4">골프장 명칭</th><th className="px-6 py-4">지역</th><th className="px-6 py-4">담당자</th><th className="px-6 py-4">규모</th><th className="px-6 py-4">구분</th><th className="px-6 py-4 text-right">관리</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                      {filteredCourses.map(course => (
+                      {filteredCourses.map(course => {
+                          const manager = course.managerId ? people.find(p => p.id === course.managerId) : null;
+                          return (
                           <tr key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="hover:bg-brand-50/30 transition-colors cursor-pointer group">
                               <td className="px-6 py-4 font-black text-slate-900">{course.name}</td>
                               <td className="px-6 py-4 text-slate-700 font-medium">{course.region}</td>
+                              <td className="px-6 py-4">
+                                  {manager ? (
+                                      <span className="text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md flex items-center w-fit"><UserCog size={12} className="mr-1"/> {manager.name}</span>
+                                  ) : (
+                                      <span className="text-[11px] text-slate-400">-</span>
+                                  )}
+                              </td>
                               <td className="px-6 py-4 font-bold text-slate-600">{course.holes}H</td>
                               <td className="px-6 py-4"><span className={`text-[10px] font-black px-2 py-0.5 rounded ${course.type === CourseType.MEMBER ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}`}>{course.type}</span></td>
                               <td className="px-6 py-4 text-right"><ArrowRight size={18} className="text-slate-300 group-hover:text-brand-600 ml-auto"/></td>
                           </tr>
-                      ))}
+                      )})}
                   </tbody>
               </table>
           </div>

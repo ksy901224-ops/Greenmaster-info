@@ -1,8 +1,7 @@
 
 import React, { useState } from 'react';
 import { LogEntry, Department, UserRole } from '../types';
-// Added FileText to imports
-import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, ShieldAlert, Zap, FileText } from 'lucide-react';
+import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, ShieldAlert, Zap, FileText, MapPin, Layers } from 'lucide-react';
 import { analyzeLogEntry } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -44,6 +43,13 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
     navigate('/write', { log: { ...log, tags: [...(log.tags || [])] } });
   };
 
+  const handleDelete = (e: React.MouseEvent) => {
+      e.preventDefault(); e.stopPropagation();
+      if(window.confirm('정말 이 업무 기록을 삭제하시겠습니까?')) {
+          deleteLog(log.id);
+      }
+  };
+
   const renderStructuredInsight = (text: string) => {
     const parts = text.split(/(?=\d+\.\s\*\*)/);
     return parts.map((part, index) => {
@@ -82,20 +88,34 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
 
   const isAdmin = user?.role === UserRole.ADMIN || user?.role === UserRole.SENIOR;
   const shouldTruncate = log.content.length > 100;
+  
+  // Calculate extra courses
+  const extraCoursesCount = log.relatedCourses ? log.relatedCourses.length - 1 : 0;
 
   return (
     <>
       <div className="bg-white rounded-2xl border border-slate-200 p-5 hover:border-brand-300 hover:shadow-lg transition-all duration-300 group relative flex flex-col h-full transform hover:-translate-y-1">
         <div className="flex justify-between items-start mb-3">
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ring-1 inset-0 ${getDeptBadgeStyle(log.department)}`}>{log.department}</span>
-            <span className="text-xs text-slate-400 font-medium flex items-center"><span className="mx-1.5">•</span> {log.courseName}</span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ring-1 inset-0 ${getDeptBadgeStyle(log.department)}`}>{log.department}</span>
+                <div className="flex items-center text-xs text-slate-500 font-bold bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">
+                    <MapPin size={10} className="mr-1 text-brand-600"/> 
+                    {log.courseName}
+                    {extraCoursesCount > 0 && (
+                        <span className="ml-1.5 bg-brand-600 text-white text-[9px] px-1.5 py-0.5 rounded-full flex items-center">
+                            <Layers size={8} className="mr-0.5"/> +{extraCoursesCount}
+                        </span>
+                    )}
+                </div>
+            </div>
           </div>
           <div className="flex items-center">
             <div className="flex items-center text-xs text-slate-400 font-mono">{log.date}</div>
-            {isAdmin && (
+            {(isAdmin || log.author === user?.name) && (
               <div className="flex items-center space-x-1 ml-3 bg-white rounded-lg p-1 border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
                 <button onClick={handleEdit} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"><Edit2 size={14} /></button>
+                <button onClick={handleDelete} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"><Trash2 size={14} /></button>
               </div>
             )}
           </div>

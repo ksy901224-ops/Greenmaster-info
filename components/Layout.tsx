@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, ListChecks, LayoutDashboard, Share2, Database, Wifi, WifiOff } from 'lucide-react';
+import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, ListChecks, LayoutDashboard, Share2, Database, Wifi, WifiOff, FileText } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole } from '../types';
 import { isMockMode } from '../firebaseConfig';
@@ -20,7 +20,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   // Only show these to Senior and Intermediate users
   if (canViewFullData) {
-    navItems.push({ label: '관계도', path: '/relationship-map', icon: <Share2 size={18} /> });
+    // Replaced Relationship Map with Work Logs
+    navItems.push({ label: '업무일지', path: '/work-logs', icon: <FileText size={18} /> });
     navItems.push({ label: '등록', path: '/write', icon: <PlusSquare size={18} /> });
   }
 
