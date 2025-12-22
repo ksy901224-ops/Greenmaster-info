@@ -125,10 +125,16 @@ const WriteLog: React.FC = () => {
           issues: []
       };
       addCourse(newCourse);
-      setCourseId(newId);
+      
+      if (activeTab === 'PERSON') {
+          setPersonForm({...personForm, currentCourseName: newCourseForm.name});
+      } else {
+          setCourseId(newId);
+      }
+      
       setIsCourseModalOpen(false);
       setNewCourseForm({ name: '', region: '경기', holes: 18, type: CourseType.PUBLIC });
-      alert('신규 골프장이 마스터 DB에 추가되었습니다.');
+      alert(`'${newCourse.name}' 골프장이 마스터 DB에 추가되었습니다.`);
   };
 
   const handlePersonSubmit = async (e: React.FormEvent) => {
@@ -424,10 +430,11 @@ const WriteLog: React.FC = () => {
                         <section className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 shadow-inner space-y-6">
                             <div className="flex justify-between items-center">
                                 <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center"><Building2 size={16} className="mr-2 text-brand-600"/> 현재 소속 발령 정보</h4>
+                                <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] font-black text-brand-600 hover:underline flex items-center"><PlusCircle size={12} className="mr-1"/> 신규 골프장 퀵 등록</button>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장</label>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">소속 골프장 (마스터 DB 검색)</label>
                                     <input list="courses-person-reg" className={getInputClass()} value={personForm.currentCourseName} onChange={e => setPersonForm({...personForm, currentCourseName: e.target.value})} placeholder="골프장 검색 또는 입력..." />
                                     <datalist id="courses-person-reg">{globalCourses.map(c => <option key={c.id} value={c.name} />)}</datalist>
                                 </div>

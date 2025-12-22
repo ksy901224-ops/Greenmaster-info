@@ -20,8 +20,9 @@ const PersonDetail: React.FC = () => {
   const [isAnalyzingReputation, setIsAnalyzingReputation] = useState(false);
   const [reputationReport, setReputationReport] = useState<string | null>(null);
 
-  // Temporary state to track the display name of the current course in the edit form
+  // --- Temporary State for Form Context ---
   const [currentCourseSearch, setCurrentCourseSearch] = useState('');
+  const [activeCareerIndexForQuickAdd, setActiveCareerIndexForQuickAdd] = useState<number | null>(null);
 
   // Derived Values via useMemo
   const person = useMemo(() => people.find(p => p.id === id), [people, id]);
@@ -123,7 +124,7 @@ const PersonDetail: React.FC = () => {
   const handleQuickAddCourse = () => {
       if (!newCourseForm.name.trim()) return;
       const newId = `c-quick-${Date.now()}`;
-      addCourse({
+      const newCourse: any = {
           id: newId,
           name: newCourseForm.name,
           region: newCourseForm.region,
@@ -133,17 +134,31 @@ const PersonDetail: React.FC = () => {
           address: `${newCourseForm.region} 신규 등록 골프장`,
           grassType: GrassType.ZOYSIA,
           area: '정보없음',
-          description: '인물 정보 등록 중 즉시 추가됨',
+          description: '인물 정보 관리 중 즉시 추가됨',
           issues: []
-      });
-      setIsCourseModalOpen(false);
+      };
+      addCourse(newCourse);
       
-      // If we're in the middle of editing the person, we might want to auto-assign this new course
-      if (editForm && isEditModalOpen) {
-          // Check which field triggered the modal - for now we just show a success alert
-          alert(`'${newCourseForm.name}' 골프장이 마스터 DB에 등록되었습니다. 이제 검색하여 선택할 수 있습니다.`);
+      // Auto-populate based on context
+      if (editForm) {
+          if (activeCareerIndexForQuickAdd !== null) {
+              const newCareers = [...editForm.careers];
+              newCareers[activeCareerIndexForQuickAdd] = {
+                  ...newCareers[activeCareerIndexForQuickAdd],
+                  courseName: newCourse.name,
+                  courseId: newId
+              };
+              setEditForm({...editForm, careers: newCareers});
+          } else {
+              setCurrentCourseSearch(newCourse.name);
+              setEditForm({...editForm, currentCourseId: newId});
+          }
       }
+
+      setIsCourseModalOpen(false);
+      setActiveCareerIndexForQuickAdd(null);
       setNewCourseForm({ name: '', region: '경기', holes: 18 });
+      alert(`'${newCourse.name}' 골프장이 등록 및 자동 매핑되었습니다.`);
   };
 
   const saveEdit = () => {
@@ -167,7 +182,7 @@ const PersonDetail: React.FC = () => {
 
       updatePerson(finalPerson);
       setIsEditModalOpen(false);
-      alert('인물 정보가 업데이트되었습니다.');
+      alert('인물 정보가 마스터 DB에 성공적으로 반영되었습니다.');
   };
 
   const handleDelete = () => {
@@ -370,11 +385,11 @@ const PersonDetail: React.FC = () => {
                     <div className="bg-slate-50 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner">
                         <div className="flex justify-between items-center mb-6">
                             <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center"><Building2 size={16} className="mr-3 text-brand-600"/> 현재 소속 발령 정보</h4>
-                            <button type="button" onClick={() => setIsCourseModalOpen(true)} className="text-[10px] font-black text-brand-600 hover:underline flex items-center"><PlusCircle size={12} className="mr-1"/> 신규 골프장 퀵 등록</button>
+                            <button type="button" onClick={() => { setActiveCareerIndexForQuickAdd(null); setIsCourseModalOpen(true); }} className="text-[10px] font-black text-brand-600 hover:underline flex items-center"><PlusCircle size={12} className="mr-1"/> 신규 골프장 퀵 등록</button>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
-                                <label className="block text-[10px] font-black text-slate-500 mb-2 ml-1">소속 골프장 (검색 및 선택)</label>
+                                <label className="block text-[10px] font-black text-slate-500 mb-2 ml-1">소속 골프장 (검색 및 자동 매핑)</label>
                                 <div className="relative group">
                                     <input 
                                         list="master-courses-datalist"
@@ -440,7 +455,7 @@ const PersonDetail: React.FC = () => {
                                                         <Search size={14}/>
                                                     </div>
                                                 </div>
-                                                <button type="button" onClick={() => { setNewCourseForm({ ...newCourseForm, name: career.courseName }); setIsCourseModalOpen(true); }} className="p-3 bg-white border border-slate-200 rounded-xl text-brand-600 hover:bg-brand-50 shadow-sm" title="신규 골프장 등록"><Plus size={18}/></button>
+                                                <button type="button" onClick={() => { setActiveCareerIndexForQuickAdd(idx); setNewCourseForm({ ...newCourseForm, name: career.courseName }); setIsCourseModalOpen(true); }} className="p-3 bg-white border border-slate-200 rounded-xl text-brand-600 hover:bg-brand-50 shadow-sm" title="신규 골프장 등록"><Plus size={18}/></button>
                                             </div>
                                             {career.courseId && <p className="text-[8px] text-brand-600 font-black flex items-center px-1"><CheckCircle size={10} className="mr-1"/> Master Link Verified (ID: {career.courseId})</p>}
                                         </div>
@@ -489,7 +504,7 @@ const PersonDetail: React.FC = () => {
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
                   <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-brand-50">
                       <h4 className="font-black text-lg text-brand-900 flex items-center tracking-tight"><Building2 size={24} className="mr-3 text-brand-600"/> 신규 골프장 마스터 등록</h4>
-                      <button onClick={() => setIsCourseModalOpen(false)} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-white rounded-full"><X size={28}/></button>
+                      <button onClick={() => { setIsCourseModalOpen(false); setActiveCareerIndexForQuickAdd(null); }} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-white rounded-full"><X size={28}/></button>
                   </div>
                   <div className="p-8 space-y-6">
                       <div>

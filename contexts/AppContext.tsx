@@ -1,6 +1,6 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord } from '../types';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord, GolfCoursePerson } from '../types';
 import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS } from '../constants';
 import { subscribeToCollection, saveDocument, updateDocument, deleteDocument, seedCollection } from '../services/firestoreService';
 
@@ -48,8 +48,8 @@ interface AppContextType {
   isSimulatedLive: boolean;
   canUseAI: boolean;
   canViewFullData: boolean;
-  isAdmin: boolean; // Strictly UserRole.ADMIN
-  isSeniorOrAdmin: boolean; // Features for both Senior and Admin
+  isAdmin: boolean; 
+  isSeniorOrAdmin: boolean; 
   // Routing
   currentPath: string;
   navigate: (path: string, state?: any) => void;
@@ -71,7 +71,7 @@ const DEFAULT_ADMIN: UserProfile = {
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [courses, setCourses] = useState<GolfCourse[]>([]);
+  const [rawCourses, setRawCourses] = useState<GolfCourse[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [externalEvents, setExternalEvents] = useState<ExternalEvent[]>([]);
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
@@ -146,7 +146,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const unsubCourses = subscribeToCollection('courses', (data) => {
       if (data.length === 0) { seedCollection('courses', MOCK_COURSES); return; } 
-      setCourses(data as GolfCourse[]);
+      setRawCourses(data as GolfCourse[]);
     });
 
     const unsubPeople = subscribeToCollection('people', (data) => {
@@ -191,6 +191,41 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       unsubLogs(); unsubCourses(); unsubPeople(); unsubEvents(); unsubUsers(); unsubSystem(); unsubFin(); unsubMat();
     };
   }, [user?.id]); 
+
+  // Enrich courses with associated people
+  const courses = useMemo(() => {
+    return rawCourses.map(course => {
+      const associatedPeople: GolfCoursePerson[] = [];
+      
+      people.forEach(p => {
+        // Current relationship
+        if (p.currentCourseId === course.id) {
+          associatedPeople.push({
+            personId: p.id,
+            name: p.name,
+            role: p.currentRole,
+            affinity: p.affinity,
+            isCurrent: true
+          });
+        }
+        
+        // Past relationships (careers)
+        p.careers.forEach(career => {
+          if (career.courseId === course.id && p.currentCourseId !== course.id) {
+            associatedPeople.push({
+              personId: p.id,
+              name: p.name,
+              role: career.role,
+              affinity: p.affinity,
+              isCurrent: false
+            });
+          }
+        });
+      });
+      
+      return { ...course, associatedPeople };
+    });
+  }, [rawCourses, people]);
 
   const login = async (email: string): Promise<string | void> => {
     const foundUser = allUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());

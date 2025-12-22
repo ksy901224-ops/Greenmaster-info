@@ -40,6 +40,14 @@ export enum GrassType {
 
 export type Region = '서울' | '경기' | '강원' | '충북' | '충남' | '전북' | '전남' | '경북' | '경남' | '제주' | '인천' | '부산' | '대구' | '울산' | '대전' | '광주' | '세종' | '기타';
 
+export interface GolfCoursePerson {
+  personId: string;
+  name: string;
+  role: string;
+  affinity: AffinityLevel;
+  isCurrent: boolean;
+}
+
 export interface GolfCourse {
   id: string;
   name: string;
@@ -48,13 +56,13 @@ export interface GolfCourse {
   type: CourseType;
   openYear: string;
   address: string;
-  grassType: GrassType; // Default/Primary
+  grassType: GrassType; 
   grassInfo?: {
     green: string;
     tee: string;
     fairway: string;
   };
-  area: string; // Display string
+  area: string; 
   areaInfo?: {
     total: string;
     green: string;
@@ -67,6 +75,7 @@ export interface GolfCourse {
   lng?: number;
   issues?: string[];
   staffCount?: number;
+  associatedPeople?: GolfCoursePerson[];
 }
 
 export interface CareerRecord {

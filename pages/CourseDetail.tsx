@@ -2,8 +2,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary, analyzeMaterialInventory, generateCourseRelationshipIntelligence } from '../services/geminiService';
-import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb } from 'lucide-react';
-import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region, Person, LogEntry } from '../types';
+import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus } from 'lucide-react';
+import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region, Person, LogEntry, GolfCoursePerson } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 // Utility for smart Korean currency formatting
@@ -108,8 +108,16 @@ const CourseDetail: React.FC = () => {
       .filter(m => (m.year || currentYear) === matYearFilter);
   }, [courseMaterials, matCategory, matYearFilter, currentYear]);
 
-  const currentStaff = useMemo(() => people.filter(p => p.currentCourseId === id), [people, id]);
-  const formerStaff = useMemo(() => people.filter(p => p.careers.some(c => c.courseId === id) && p.currentCourseId !== id), [people, id]);
+  // Use the formalized associatedPeople from the GolfCourse interface
+  const currentStaff = useMemo(() => 
+    course?.associatedPeople?.filter(p => p.isCurrent) || [], 
+    [course]
+  );
+  
+  const formerStaff = useMemo(() => 
+    course?.associatedPeople?.filter(p => !p.isCurrent) || [], 
+    [course]
+  );
 
   useEffect(() => {
       if (locationState?.filterIssue && canViewFullData) {
@@ -125,8 +133,11 @@ const CourseDetail: React.FC = () => {
     if (!course) return;
     setIsAnalyzingIntelligence(true);
     setIntelReport(null);
+    // Convert GolfCoursePerson back to full Person for analysis if needed, 
+    // or pass the basic info to the AI service
+    const fullCurrentStaff = people.filter(p => p.currentCourseId === id);
     try {
-        const report = await generateCourseRelationshipIntelligence(course, currentStaff, relatedLogs);
+        const report = await generateCourseRelationshipIntelligence(course, fullCurrentStaff, relatedLogs);
         setIntelReport(report);
     } catch (error) {
         alert('분석 중 오류가 발생했습니다.');
@@ -240,6 +251,12 @@ const CourseDetail: React.FC = () => {
     }
   };
 
+  const getAffinityColor = (level: AffinityLevel) => {
+      if(level >= 1) return "text-emerald-600 bg-emerald-50 border-emerald-100";
+      if(level <= -1) return "text-red-600 bg-red-50 border-red-100";
+      return "text-slate-500 bg-slate-50 border-slate-200";
+  };
+
   const regions: Region[] = ['서울', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주', '인천', '부산', '대구', '울산', '대전', '광주', '세종', '기타'];
 
   return (
@@ -275,7 +292,7 @@ const CourseDetail: React.FC = () => {
             { id: 'INFO', label: '기본 정보', icon: <Info size={16}/> },
             { id: 'MANAGEMENT', label: '재무/운영', icon: <BarChart3 size={16}/> },
             { id: 'LOGS', label: '업무 일지', icon: <FileText size={16}/> },
-            { id: 'PEOPLE', label: '인맥 정보', icon: <Users size={16}/> }
+            { id: 'PEOPLE', label: '인맥 네트워크', icon: <Users size={16}/> }
         ].map(tab => (
             <button 
                 key={tab.id}
@@ -777,16 +794,25 @@ const CourseDetail: React.FC = () => {
                 <section>
                     <div className="flex items-center justify-between mb-8 px-2">
                         <h3 className="text-xl font-black text-slate-900 flex items-center tracking-tight">
-                            <Users size={24} className="mr-3 text-brand-600 bg-brand-50 p-1 rounded-lg"/> 현재 재직 중인 주요 인맥 <span className="ml-3 text-xs font-black text-brand-600 bg-brand-100 px-3 py-1 rounded-full shadow-sm">{currentStaff.length}</span>
+                            <Users size={24} className="mr-3 text-brand-600 bg-brand-50 p-1 rounded-lg"/> 현재 소속 주요 인맥 <span className="ml-3 text-xs font-black text-brand-600 bg-brand-100 px-3 py-1 rounded-full shadow-sm">{currentStaff.length}</span>
                         </h3>
+                        <button 
+                            onClick={() => navigate('/write', { activeTab: 'PERSON', currentCourseId: course.id })}
+                            className="bg-brand-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-brand-700 transition-all shadow-md flex items-center"
+                        >
+                            <UserPlus size={18} className="mr-2"/> 인물 등록
+                        </button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {currentStaff.map(person => (
-                            <div key={person.id} onClick={() => navigate(`/people/${person.id}`)} className="bg-white p-6 rounded-[1.5rem] border border-slate-200 shadow-sm hover:border-brand-500 hover:shadow-xl transition-all cursor-pointer flex items-center group active:scale-[0.98]">
-                                <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mr-5 text-slate-400 group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors shadow-inner shrink-0 font-black text-xl">{person.name[0]}</div>
+                        {currentStaff.map(assoc => (
+                            <div key={assoc.personId} onClick={() => navigate(`/people/${assoc.personId}`)} className="bg-white p-6 rounded-[1.5rem] border border-slate-200 shadow-sm hover:border-brand-500 hover:shadow-xl transition-all cursor-pointer flex items-center group active:scale-[0.98]">
+                                <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mr-5 text-slate-400 group-hover:bg-brand-50 group-hover:text-brand-600 transition-colors shadow-inner shrink-0 font-black text-xl">{assoc.name[0]}</div>
                                 <div className="flex-1 overflow-hidden">
-                                    <div className="font-black text-slate-900 text-lg group-hover:text-brand-700 transition-colors truncate">{person.name}</div>
-                                    <div className="text-[10px] font-black text-brand-600 tracking-widest uppercase mt-0.5 truncate">{person.currentRole}</div>
+                                    <div className="font-black text-slate-900 text-lg group-hover:text-brand-700 transition-colors truncate">{assoc.name}</div>
+                                    <div className="text-[10px] font-black text-brand-600 tracking-widest uppercase mt-0.5 truncate">{assoc.role}</div>
+                                    <div className={`mt-2 inline-flex px-2 py-0.5 rounded text-[8px] font-black border uppercase tracking-tighter ${getAffinityColor(assoc.affinity)}`}>
+                                        {assoc.affinity > 0 ? '우호적' : assoc.affinity < 0 ? '리스크' : '중립'}
+                                    </div>
                                 </div>
                                 <div className="ml-2 text-slate-200 group-hover:text-brand-500 transition-all group-hover:translate-x-1 shrink-0"><ArrowRight size={20}/></div>
                             </div>
@@ -797,15 +823,15 @@ const CourseDetail: React.FC = () => {
                 {formerStaff.length > 0 && (
                     <section className="pt-10 border-t border-slate-100">
                         <h3 className="text-xl font-black text-slate-500 mb-8 px-2 flex items-center tracking-tight">
-                            <History size={24} className="mr-3 text-slate-400 bg-slate-50 p-1 rounded-lg"/> 과거 이력 관계 <span className="ml-3 text-xs font-black text-slate-400 bg-slate-100 px-3 py-1 rounded-full shadow-sm">{formerStaff.length}</span>
+                            <History size={24} className="mr-3 text-slate-400 bg-slate-50 p-1 rounded-lg"/> 과거 근무 이력 <span className="ml-3 text-xs font-black text-slate-400 bg-slate-100 px-3 py-1 rounded-full shadow-sm">{formerStaff.length}</span>
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {formerStaff.map(person => (
-                                <div key={person.id} onClick={() => navigate(`/people/${person.id}`)} className="bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-200 shadow-sm hover:border-slate-400 hover:bg-white transition-all cursor-pointer flex items-center grayscale-[0.5] hover:grayscale-0 group active:scale-[0.98]">
-                                    <div className="w-14 h-14 bg-slate-200 rounded-2xl flex items-center justify-center mr-5 text-slate-400 shrink-0 font-black text-xl">{person.name[0]}</div>
+                            {formerStaff.map(assoc => (
+                                <div key={`${assoc.personId}-past`} onClick={() => navigate(`/people/${assoc.personId}`)} className="bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-200 shadow-sm hover:border-slate-400 hover:bg-white transition-all cursor-pointer flex items-center grayscale-[0.5] hover:grayscale-0 group active:scale-[0.98]">
+                                    <div className="w-14 h-14 bg-slate-200 rounded-2xl flex items-center justify-center mr-5 text-slate-400 shrink-0 font-black text-xl">{assoc.name[0]}</div>
                                     <div className="flex-1 overflow-hidden">
-                                        <div className="font-black text-slate-700 text-lg truncate">{person.name}</div>
-                                        <div className="text-[10px] font-bold text-slate-400 italic tracking-wide mt-0.5 truncate">이전 소속원</div>
+                                        <div className="font-black text-slate-700 text-lg truncate">{assoc.name}</div>
+                                        <div className="text-[10px] font-bold text-slate-400 italic tracking-wide mt-0.5 truncate">{assoc.role} (과거)</div>
                                     </div>
                                     <div className="ml-2 text-slate-200 transition-all shrink-0"><ArrowRight size={20}/></div>
                                 </div>
