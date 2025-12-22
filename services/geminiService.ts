@@ -28,14 +28,15 @@ export const analyzeDocument = async (
     text: `
       당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다. 
       제공된 문서를 정밀 분석하여 전략적 데이터베이스 형태로 변환하고, 문서 전체에 대한 인사이트를 제공하세요.
+      모든 분석은 한국어로 작성하세요.
 
       [핵심 분석 요구사항]
-      1. 골프장(Courses): 명칭, 지역, 주소, 규모(홀수)를 추출하고 '기존 목록([${courseListStr}])' 포함 여부를 판단하세요.
+      1. 골프장(Courses): 명칭, 지역, 주소, 규모(홀수), 상세 설명을 추출하고 '기존 목록([${courseListStr}])' 포함 여부를 판단하세요.
       2. 업무 일지(Logs): 분류체계(summary, details, strategy, risk, priority)에 맞춰 기술하세요.
       3. 인물(People): 성함, 직책, 소속, 우호도, 특이사항을 추출하세요.
-      4. 문서 총괄 분석: 
-         - documentSummary: 문서의 핵심 내용을 2-3문장으로 간결하게 요약.
-         - documentDetailedReport: 추출된 데이터 포인트들의 연관성, 비즈니스적 시사점, 향후 대응 전략을 포함한 상세 보고서.
+      4. 문서 총괄 분석 (반드시 포함): 
+         - documentSummary: 이 문서의 핵심 가치와 내용을 2-3문장으로 간결하게 요약.
+         - documentDetailedReport: 추출된 데이터 포인트들의 비즈니스적 시사점, 리스크, 향후 대응 전략을 포함한 전문적인 상세 보고서.
 
       반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요.
     `
@@ -61,7 +62,8 @@ export const analyzeDocument = async (
                 address: { type: Type.STRING },
                 holes: { type: Type.NUMBER },
                 description: { type: Type.STRING },
-                isNew: { type: Type.BOOLEAN }
+                isNew: { type: Type.BOOLEAN },
+                issues: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
             }
           },

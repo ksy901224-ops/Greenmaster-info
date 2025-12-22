@@ -26,7 +26,6 @@ interface EnhancedSyncItem {
 
 const AdminDashboard: React.FC = () => {
   const { user, allUsers, isAdmin, isSeniorOrAdmin, systemLogs, updateUserStatus, updateUserRole, updateUserDepartment, logs, courses, navigate, addCourse, updateCourse, createUserManually } = useApp();
-  const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'USERS' | 'LOGS' | 'MASTER'>('MASTER');
 
   // Master Catalog Sync State
@@ -120,7 +119,7 @@ const AdminDashboard: React.FC = () => {
                               type: '대중제',
                               openYear: new Date().getFullYear().toString(),
                               description: item.description || '',
-                              issues: []
+                              issues: item.issues || []
                           },
                           status: 'pending',
                           conflictType: existing ? 'update' : 'new',
@@ -144,9 +143,14 @@ const AdminDashboard: React.FC = () => {
       return syncResults.filter(item => {
           const matchConflict = filterConflict === 'ALL' || item.conflictType === filterConflict;
           const matchStatus = filterStatus === 'ALL' || item.status === filterStatus;
+          
+          const searchLower = masterSearch.toLowerCase();
           const matchSearch = masterSearch === '' || 
-                             item.editable.courseName.toLowerCase().includes(masterSearch.toLowerCase()) ||
-                             item.editable.address.toLowerCase().includes(masterSearch.toLowerCase());
+                             item.editable.courseName.toLowerCase().includes(searchLower) ||
+                             item.editable.address.toLowerCase().includes(searchLower) ||
+                             item.editable.description.toLowerCase().includes(searchLower) ||
+                             item.editable.issues.some(issue => issue.toLowerCase().includes(searchLower));
+          
           return matchConflict && matchStatus && matchSearch;
       });
   }, [syncResults, filterConflict, filterStatus, masterSearch]);
@@ -315,7 +319,7 @@ const AdminDashboard: React.FC = () => {
                             onClick={() => setAiReportTab('DETAIL')}
                             className={`flex-1 py-4 text-sm font-bold flex items-center justify-center transition-all ${aiReportTab === 'DETAIL' ? 'bg-brand-50 text-brand-700 border-b-2 border-brand-500' : 'text-slate-400 hover:bg-slate-50'}`}
                           >
-                            <FileSearch size={16} className="mr-2"/> 상세 분석 보고서 (Detailed Report)
+                            <FileSearch size={16} className="mr-2"/> 상세 전략 보고서 (Detailed Report)
                           </button>
                       </div>
                       <div className="p-8">
@@ -365,25 +369,34 @@ const AdminDashboard: React.FC = () => {
                               <div className="flex items-center gap-3">
                                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center"><Filter size={14} className="mr-1.5"/> Conflict Type</span>
                                   <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200">
-                                      {['ALL', 'new', 'update'].map(t => (
-                                          <button key={t} onClick={() => setFilterConflict(t as any)} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all uppercase ${filterConflict === t ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{t}</button>
+                                      {[
+                                          {id: 'ALL', label: '전체'},
+                                          {id: 'new', label: '신규'},
+                                          {id: 'update', label: '기존'}
+                                      ].map(t => (
+                                          <button key={t.id} onClick={() => setFilterConflict(t.id as any)} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all uppercase ${filterConflict === t.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{t.label}</button>
                                       ))}
                                   </div>
                               </div>
                               <div className="flex items-center gap-3">
                                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center"><CheckCircle size={14} className="mr-1.5"/> Sync Status</span>
                                   <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-200">
-                                      {['ALL', 'pending', 'success', 'error'].map(s => (
-                                          <button key={s} onClick={() => setFilterStatus(s as any)} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all uppercase ${filterStatus === s ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{s}</button>
+                                      {[
+                                          {id: 'ALL', label: '전체'},
+                                          {id: 'pending', label: '대기'},
+                                          {id: 'success', label: '성공'},
+                                          {id: 'error', label: '오류'}
+                                      ].map(s => (
+                                          <button key={s.id} onClick={() => setFilterStatus(s.id as any)} className={`px-4 py-1.5 text-[11px] font-black rounded-lg transition-all uppercase ${filterStatus === s.id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>{s.label}</button>
                                       ))}
                                   </div>
                               </div>
-                              <div className="flex-1 min-w-[200px] relative">
-                                  <Search className="absolute left-3 top-2 text-slate-400" size={14}/>
+                              <div className="flex-1 min-w-[250px] relative">
+                                  <Search className="absolute left-3 top-2.5 text-slate-400" size={14}/>
                                   <input 
                                     type="text" 
-                                    placeholder="결과 내 검색..." 
-                                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-brand-500/20"
+                                    placeholder="명칭, 설명, 이슈 키워드 통합 검색..." 
+                                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-4 focus:ring-brand-500/5 transition-all"
                                     value={masterSearch}
                                     onChange={(e) => setMasterSearch(e.target.value)}
                                   />
@@ -395,12 +408,11 @@ const AdminDashboard: React.FC = () => {
                           <table className="w-full text-sm text-left border-collapse">
                               <thead className="bg-slate-100 text-slate-500 font-bold border-b border-slate-200 sticky top-0 z-20">
                                   <tr>
-                                      <th className="px-6 py-4">Status</th>
-                                      <th className="px-6 py-4">Name</th>
-                                      <th className="px-6 py-4">Region</th>
-                                      <th className="px-6 py-4">Address</th>
-                                      <th className="px-6 py-4">Holes</th>
-                                      <th className="px-6 py-4 text-right">Actions</th>
+                                      <th className="px-6 py-4">상태 (Status)</th>
+                                      <th className="px-6 py-4">골프장 명칭</th>
+                                      <th className="px-6 py-4">지역/주소</th>
+                                      <th className="px-6 py-4">추출된 특징 및 이슈</th>
+                                      <th className="px-6 py-4 text-right">관리</th>
                                   </tr>
                               </thead>
                               <tbody className="divide-y divide-slate-100">
@@ -417,10 +429,27 @@ const AdminDashboard: React.FC = () => {
                                                   </span>
                                               )}
                                           </td>
-                                          <td className="px-6 py-4 font-black text-slate-900">{item.editable.courseName}</td>
-                                          <td className="px-6 py-4 font-bold text-slate-600">{item.editable.region}</td>
-                                          <td className="px-6 py-4 text-xs text-slate-500 max-w-[250px] truncate" title={item.editable.address}>{item.editable.address}</td>
-                                          <td className="px-6 py-4 font-black">{item.editable.holes}H</td>
+                                          <td className="px-6 py-4">
+                                              <div className="font-black text-slate-900">{item.editable.courseName}</div>
+                                              <div className="text-[10px] text-slate-400 font-bold">{item.editable.holes}H / {item.editable.type}</div>
+                                          </td>
+                                          <td className="px-6 py-4">
+                                              <div className="font-bold text-slate-600 text-xs">{item.editable.region}</div>
+                                              <div className="text-[10px] text-slate-400 max-w-[200px] truncate" title={item.editable.address}>{item.editable.address}</div>
+                                          </td>
+                                          <td className="px-6 py-4">
+                                              <div className="flex flex-wrap gap-1.5">
+                                                  {item.editable.issues.slice(0, 2).map((issue, idx) => (
+                                                      <span key={idx} className="bg-slate-100 text-slate-600 text-[9px] px-2 py-0.5 rounded border border-slate-200 font-medium">{issue}</span>
+                                                  ))}
+                                                  {item.editable.issues.length > 2 && <span className="text-[9px] text-slate-400 font-bold">+{item.editable.issues.length - 2}</span>}
+                                                  {item.editable.description && (
+                                                      <div className="w-full mt-1 text-[10px] text-slate-500 italic truncate max-w-[300px]">
+                                                          {item.editable.description}
+                                                      </div>
+                                                  )}
+                                              </div>
+                                          </td>
                                           <td className="px-6 py-4 text-right">
                                               {item.status !== 'success' && (
                                                   <button 
@@ -435,9 +464,9 @@ const AdminDashboard: React.FC = () => {
                                   ))}
                                   {filteredSyncResults.length === 0 && (
                                       <tr>
-                                          <td colSpan={6} className="py-20 text-center">
+                                          <td colSpan={5} className="py-24 text-center">
                                               <Search size={48} className="mx-auto text-slate-200 mb-4"/>
-                                              <p className="text-slate-400 font-bold">조건에 맞는 결과가 없습니다.</p>
+                                              <p className="text-slate-400 font-bold">검색 조건에 일치하는 추출 결과가 없습니다.</p>
                                           </td>
                                       </tr>
                                   )}
