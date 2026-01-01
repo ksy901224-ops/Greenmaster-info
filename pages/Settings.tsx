@@ -1,17 +1,18 @@
 
-import React, { useState, useEffect } from 'react';
-import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson, LockIcon } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson, LockIcon, Upload } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Department, UserRole, UserStatus } from '../types';
 
 const Settings: React.FC = () => {
-  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData, exportAllData, isAdmin } = useApp();
+  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData, exportAllData, importAllData, isAdmin } = useApp();
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(true);
   const [marketingNotif, setMarketingNotif] = useState(false);
   const [defaultView, setDefaultView] = useState('list');
   const [theme, setTheme] = useState('light');
   const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({
@@ -19,6 +20,8 @@ const Settings: React.FC = () => {
       department: Department.SALES,
       role: UserRole.INTERMEDIATE
   });
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
       if (user) {
@@ -48,6 +51,38 @@ const Settings: React.FC = () => {
         exportAllData();
         setIsExporting(false);
     }, 800);
+  };
+
+  const handleImportClick = () => {
+      fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      
+      if (!confirm(`'${file.name}' 파일의 데이터로 시스템을 복원하시겠습니까?\n주의: 기존 데이터와 병합되거나 ID가 같은 경우 덮어씌워집니다.`)) {
+          if(fileInputRef.current) fileInputRef.current.value = '';
+          return;
+      }
+
+      setIsImporting(true);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+          try {
+              const json = JSON.parse(event.target?.result as string);
+              await importAllData(json);
+              alert('데이터 복구가 완료되었습니다. 최신 상태 반영을 위해 새로고침합니다.');
+              window.location.reload();
+          } catch (error) {
+              console.error(error);
+              alert('데이터 복구 실패: 올바르지 않은 백업 파일이거나 시스템 오류입니다.');
+          } finally {
+              setIsImporting(false);
+              if(fileInputRef.current) fileInputRef.current.value = '';
+          }
+      };
+      reader.readAsText(file);
   };
 
   const cancelEditProfile = () => {
@@ -87,19 +122,36 @@ const Settings: React.FC = () => {
             <div className="relative z-10">
                 <h2 className="text-lg font-bold mb-2 flex items-center">
                     <ShieldCheck className="mr-2 text-indigo-300" size={24} /> 
-                    인텔리전스 데이터 백업
+                    인텔리전스 데이터 백업 및 복원
                 </h2>
                 <p className="text-indigo-100 text-sm mb-6 max-w-md leading-relaxed">
-                    전국 골프장 정보, 인맥 네트워크, 매출 및 자재 현황을 포함한 전체 데이터베이스를 JSON 파일로 내보냅니다. 로컬 백업 및 데이터 분석에 활용하세요.
+                    전국 골프장 정보, 인맥 네트워크, 매출 및 자재 현황을 JSON 파일로 내보내거나 외부 파일을 통해 복원할 수 있습니다.
                 </p>
-                <button 
-                    onClick={handleExport}
-                    disabled={isExporting}
-                    className="bg-white text-indigo-900 px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-all flex items-center shadow-lg active:scale-95 disabled:opacity-50"
-                >
-                    {isExporting ? <RotateCcw size={18} className="mr-2 animate-spin"/> : <Download size={18} className="mr-2"/>}
-                    {isExporting ? '백업 생성 중...' : '데이터 전체 다운로드 (JSON)'}
-                </button>
+                <div className="flex flex-wrap gap-3">
+                    <button 
+                        onClick={handleExport}
+                        disabled={isExporting || isImporting}
+                        className="bg-white text-indigo-900 px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 transition-all flex items-center shadow-lg active:scale-95 disabled:opacity-50 text-sm"
+                    >
+                        {isExporting ? <RotateCcw size={16} className="mr-2 animate-spin"/> : <Download size={16} className="mr-2"/>}
+                        {isExporting ? '백업 중...' : '데이터 내보내기 (Export)'}
+                    </button>
+                    <button 
+                        onClick={handleImportClick}
+                        disabled={isExporting || isImporting}
+                        className="bg-indigo-800 text-white border border-indigo-600 px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all flex items-center shadow-lg active:scale-95 disabled:opacity-50 text-sm"
+                    >
+                        {isImporting ? <RotateCcw size={16} className="mr-2 animate-spin"/> : <Upload size={16} className="mr-2"/>}
+                        {isImporting ? '복원 중...' : '데이터 가져오기 (Import)'}
+                    </button>
+                    <input 
+                        type="file" 
+                        ref={fileInputRef} 
+                        onChange={handleFileChange} 
+                        className="hidden" 
+                        accept="application/json"
+                    />
+                </div>
             </div>
         </div>
 

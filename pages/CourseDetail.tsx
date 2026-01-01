@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseSummary, analyzeMaterialInventory, generateCourseRelationshipIntelligence } from '../services/geminiService';
-import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus, UserCheck, UserCog, UserMinus, Trees, ShoppingCart } from 'lucide-react';
+import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus, UserCheck, UserCog, UserMinus, Trees, ShoppingCart, ChevronUp } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region, Person, LogEntry, GolfCoursePerson } from '../types';
 import { useApp } from '../contexts/AppContext';
 
@@ -72,6 +72,9 @@ const CourseDetail: React.FC = () => {
   // --- Manager Assignment Modal ---
   const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
   const [managerSearch, setManagerSearch] = useState('');
+
+  // --- Accordion State ---
+  const [isSpecExpanded, setIsSpecExpanded] = useState(false);
 
   // Derived Values via useMemo
   const course = useMemo(() => courses.find(c => c.id === id), [courses, id]);
@@ -389,45 +392,58 @@ const CourseDetail: React.FC = () => {
       <div className="min-h-[400px]">
         {activeTab === 'INFO' && (
           <div className="space-y-6 animate-in fade-in duration-300">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h3 className="font-bold text-lg mb-6 flex items-center"><Database size={18} className="mr-2 text-brand-600"/> 상세 코스 스펙 (Specification)</h3>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    {/* Grass Section */}
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center"><Sprout size={14} className="mr-2"/> 잔디 식재 정보</h4>
-                        <div className="grid grid-cols-1 gap-3">
-                            {[
-                                { label: '그린 (Green)', value: course.grassInfo?.green || '벤트그라스' },
-                                { label: '티 (Tee)', value: course.grassInfo?.tee || '켄터키 블루그라스' },
-                                { label: '페어웨이 (Fairway)', value: course.grassInfo?.fairway || '중지 (한국잔디)' }
-                            ].map((item, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <span className="text-xs font-bold text-slate-500">{item.label}</span>
-                                    <span className="text-sm font-bold text-slate-800">{item.value}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Area Section */}
-                    <div className="space-y-4">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center"><Map size={14} className="mr-2"/> 구역별 면적 정보</h4>
-                        <div className="grid grid-cols-1 gap-3">
-                            {[
-                                { label: '총 면적', value: course.areaInfo?.total || course.area },
-                                { label: '그린 면적', value: course.areaInfo?.green || '정보없음' },
-                                { label: '티 면적', value: course.areaInfo?.tee || '정보없음' },
-                                { label: '페어웨이 면적', value: course.areaInfo?.fairway || '정보없음' }
-                            ].map((item, i) => (
-                                <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                    <span className="text-xs font-bold text-slate-500">{item.label}</span>
-                                    <span className="text-sm font-bold text-slate-800">{item.value}</span>
-                                </div>
-                            ))}
-                        </div>
+            <div 
+                className={`bg-white p-6 rounded-2xl shadow-sm border border-slate-200 transition-all cursor-pointer hover:border-brand-300`} 
+                onClick={() => setIsSpecExpanded(!isSpecExpanded)}
+            >
+                <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-lg flex items-center text-slate-800"><Database size={18} className="mr-2 text-brand-600"/> 상세 코스 스펙 (Specification)</h3>
+                    <div className="text-slate-400 p-1 rounded-full hover:bg-slate-100 transition-colors">
+                        {isSpecExpanded ? <ChevronUp size={20}/> : <ChevronDown size={20}/>}
                     </div>
                 </div>
+                
+                {isSpecExpanded && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6 animate-in fade-in slide-in-from-top-2 border-t border-slate-100 pt-6">
+                        {/* Grass Section */}
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center"><Sprout size={14} className="mr-2"/> 잔디 식재 정보</h4>
+                            <div className="grid grid-cols-1 gap-3">
+                                {[
+                                    { label: '그린 (Green)', value: course.grassInfo?.green || '벤트그라스' },
+                                    { label: '티 (Tee)', value: course.grassInfo?.tee || '켄터키 블루그라스' },
+                                    { label: '페어웨이 (Fairway)', value: course.grassInfo?.fairway || '중지 (한국잔디)' }
+                                ].map((item, i) => (
+                                    <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <span className="text-xs font-bold text-slate-500">{item.label}</span>
+                                        <span className="text-sm font-bold text-slate-800">{item.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Area Section */}
+                        <div className="space-y-4">
+                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center"><Map size={14} className="mr-2"/> 구역별 면적 정보</h4>
+                            <div className="grid grid-cols-1 gap-3">
+                                {[
+                                    { label: '총 면적', value: course.areaInfo?.total || course.area },
+                                    { label: '그린 면적', value: course.areaInfo?.green || '정보없음' },
+                                    { label: '티 면적', value: course.areaInfo?.tee || '정보없음' },
+                                    { label: '페어웨이 면적', value: course.areaInfo?.fairway || '정보없음' }
+                                ].map((item, i) => (
+                                    <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                        <span className="text-xs font-bold text-slate-500">{item.label}</span>
+                                        <span className="text-sm font-bold text-slate-800">{item.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {!isSpecExpanded && (
+                    <div className="mt-2 text-xs text-slate-400 text-center font-medium">클릭하여 상세 정보를 확인하세요</div>
+                )}
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -544,8 +560,8 @@ const CourseDetail: React.FC = () => {
                           <div className="flex gap-2">
                               {canUseAI && (
                                   <button onClick={() => fileInputRef.current?.click()} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-all shadow-md flex items-center active:scale-95">
-                                      {isUploadingMat ? <Loader2 size={14} className="animate-spin mr-1.5"/> : <Upload size={14} className="mr-1.5"/>} AI 명세서 스캔
-                                      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileUpload} />
+                                      {isUploadingMat ? <Loader2 size={14} className="animate-spin mr-1.5"/> : <Upload size={14} className="mr-1.5"/>} AI 명세서/엑셀 스캔
+                                      <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv" onChange={handleFileUpload} />
                                   </button>
                               )}
                               <button onClick={() => { setEditingMat(null); setMatForm({ supplyDate: new Date().toISOString().split('T')[0], category: MaterialCategory.PESTICIDE, name: '', standard: '', quantity: 0, unit: 'ea', unitPrice: 0, manager: '', notes: '' }); setIsMatModalOpen(true); }} className="bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-md flex items-center active:scale-95"><Plus size={14} className="mr-1.5"/> 자재 등록</button>

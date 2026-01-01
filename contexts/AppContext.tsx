@@ -46,6 +46,7 @@ interface AppContextType {
   refreshLogs: () => void;
   resetData: () => void;
   exportAllData: () => void;
+  importAllData: (jsonData: any) => Promise<void>;
   isSimulatedLive: boolean;
   canUseAI: boolean;
   canViewFullData: boolean;
@@ -512,6 +513,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('UPDATE', 'USER', 'Data Export', 'User exported local data backup');
   };
 
+  const importAllData = async (jsonData: any) => {
+      if (!jsonData || !jsonData.collections) {
+          throw new Error('유효하지 않은 백업 파일 형식입니다.');
+      }
+      
+      const collections = jsonData.collections;
+      const tasks = [];
+
+      // Map JSON keys to Firestore collection names
+      if (collections.logs) tasks.push(seedCollection('logs', collections.logs, true));
+      if (collections.courses) tasks.push(seedCollection('courses', collections.courses, true));
+      if (collections.people) tasks.push(seedCollection('people', collections.people, true));
+      if (collections.financials) tasks.push(seedCollection('financials', collections.financials, true));
+      if (collections.materials) tasks.push(seedCollection('materials', collections.materials, true));
+      if (collections.externalEvents) tasks.push(seedCollection('external_events', collections.externalEvents, true));
+      if (collections.systemLogs) tasks.push(seedCollection('system_logs', collections.systemLogs, true));
+
+      await Promise.all(tasks);
+      logActivity('UPDATE', 'USER', 'Data Import', 'User manually restored data from JSON backup');
+  };
+
   const canUseAI = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
   const canViewFullData = user?.role === UserRole.SENIOR || user?.role === UserRole.INTERMEDIATE || user?.role === UserRole.ADMIN;
 
@@ -524,7 +546,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addExternalEvent,
     addFinancial, updateFinancial, deleteFinancial,
     addMaterial, updateMaterial, deleteMaterial,
-    refreshLogs, resetData, exportAllData, isSimulatedLive,
+    refreshLogs, resetData, exportAllData, importAllData, isSimulatedLive,
     canUseAI, canViewFullData, isAdmin, isSeniorOrAdmin,
     currentPath, navigate, routeParams, locationState
   };
