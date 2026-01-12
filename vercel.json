@@ -1,11 +1,9 @@
+
 {
   "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
     }
-  ],
-  "env": {
-    "API_KEY": "YOUR_GEMINI_API_KEY"
-  }
+  ]
 }

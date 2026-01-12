@@ -4,7 +4,7 @@ import { getFirestore } from "firebase/firestore";
 
 // Helper to safely access environment variables in various environments (Vite/Browser/Node)
 const getEnv = (key: string): string => {
-  // 1. Try Vite's import.meta.env
+  // 1. Try Vite's import.meta.env (Primary for Vite Apps)
   try {
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
@@ -15,9 +15,8 @@ const getEnv = (key: string): string => {
     // Ignore error
   }
 
-  // 2. Try process.env (Fallback)
+  // 2. Try process.env (Fallback for Node/Vercel Serverless)
   try {
-    // Check if process exists and has env
     if (typeof process !== 'undefined' && process.env && process.env[key]) {
       return process.env[key];
     }
@@ -32,12 +31,7 @@ const getEnv = (key: string): string => {
 const apiKey = getEnv('VITE_FIREBASE_API_KEY');
 
 // Check if configured: requires at least an API Key to attempt connection
-export const isMockMode = !apiKey;
-
-if (isMockMode) {
-    console.warn("⚠️ [Firebase] Running in Mock Mode. Environment variable VITE_FIREBASE_API_KEY is missing.");
-    console.warn("   If you are in production (Vercel), please check 'Settings > Environment Variables'.");
-}
+export const isMockMode = !apiKey || apiKey === 'undefined';
 
 const firebaseConfig = {
   apiKey: apiKey,
@@ -57,11 +51,12 @@ if (!isMockMode) {
     db = getFirestore(app);
     console.log("🔥 [Firebase] Initialized successfully in Live Mode");
   } catch (e) {
-    console.error("❌ [Firebase] Initialization failed:", e);
-    console.error("   Falling back to Mock Mode.");
+    console.warn("⚠️ [Firebase] Initialization failed. Falling back to Mock Mode safely.");
+    console.error(e);
     db = null;
   }
 } else {
+  console.log("⚠️ [System] Running in Mock Mode (No Firebase Keys found). Data will be local only.");
   db = null;
 }
 

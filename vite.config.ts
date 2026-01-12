@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
       // Define process.env.API_KEY specifically for Gemini SDK
       'process.env.API_KEY': JSON.stringify(env.API_KEY || ''),
       // Safe polyfill for other libraries relying on process.env
-      'process.env': {}
+      'process.env': JSON.stringify(process.env || {})
     }
   };
 });

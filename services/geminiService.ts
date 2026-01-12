@@ -1,9 +1,26 @@
 
 // @google/genai service for intelligence processing
-import { GoogleGenAI, Type, GenerateContentResponse, Chat } from "@google/genai";
-import { LogEntry, GolfCourse, Person, MaterialRecord } from '../types';
+import { GoogleGenAI, Type, Chat } from "@google/genai";
+import { LogEntry, GolfCourse, Person } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Safely retrieve key, default to empty string if missing to prevent constructor crash
+const API_KEY = process.env.API_KEY || '';
+const hasKey = !!API_KEY && API_KEY !== 'undefined';
+
+// Initialize only if key exists, otherwise we handle it inside functions
+const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+const getMockResponse = (message: string) => {
+  console.warn("Gemini API Key missing. Returning mock response.");
+  return {
+    text: `[System Warning] AI API Key가 설정되지 않았습니다. \n(.env 파일 또는 Vercel 환경 변수 'API_KEY'를 확인하세요.)\n\n요청하신 내용에 대한 시뮬레이션 응답입니다: ${message.substring(0, 50)}...`,
+    extractedCourses: [],
+    extractedLogs: [],
+    extractedPeople: [],
+    documentSummary: "API 키 미설정으로 인한 시뮬레이션 결과입니다.",
+    documentDetailedReport: "환경 변수를 확인해주세요."
+  };
+};
 
 /**
  * Enhanced Multi-Entity Extraction with Confidence Scores
@@ -12,6 +29,8 @@ export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
   existingCourseNames: string[] = []
 ): Promise<any | null> => {
+  if (!hasKey) return getMockResponse("Document Analysis");
+
   const contentParts: any[] = [];
   
   for (const item of inputData) {
@@ -40,73 +59,77 @@ export const analyzeDocument = async (
     `
   });
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: { parts: contentParts },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          documentSummary: { type: Type.STRING },
-          documentDetailedReport: { type: Type.STRING },
-          extractedCourses: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                region: { type: Type.STRING },
-                address: { type: Type.STRING },
-                holes: { type: Type.NUMBER },
-                type: { type: Type.STRING, enum: ['회원제', '대중제', '기타'] },
-                openYear: { type: Type.STRING },
-                description: { type: Type.STRING },
-                confidence: { type: Type.NUMBER },
-                reason: { type: Type.STRING }
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: { parts: contentParts },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            documentSummary: { type: Type.STRING },
+            documentDetailedReport: { type: Type.STRING },
+            extractedCourses: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  region: { type: Type.STRING },
+                  address: { type: Type.STRING },
+                  holes: { type: Type.NUMBER },
+                  type: { type: Type.STRING, enum: ['회원제', '대중제', '기타'] },
+                  openYear: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  confidence: { type: Type.NUMBER },
+                  reason: { type: Type.STRING }
+                }
+              }
+            },
+            extractedLogs: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  date: { type: Type.STRING },
+                  courseName: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  summary: { type: Type.STRING, description: "Key takeaway summary" },
+                  details: { type: Type.STRING, description: "Full detailed content" },
+                  strategy: { type: Type.STRING },
+                  risk: { type: Type.STRING },
+                  priority: { type: Type.NUMBER },
+                  department: { type: Type.STRING },
+                  tags: { type: Type.ARRAY, items: { type: Type.STRING } },
+                  confidence: { type: Type.NUMBER }
+                }
+              }
+            },
+            extractedPeople: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  role: { type: Type.STRING },
+                  courseName: { type: Type.STRING },
+                  affinity: { type: Type.NUMBER },
+                  notes: { type: Type.STRING },
+                  confidence: { type: Type.NUMBER }
+                }
               }
             }
           },
-          extractedLogs: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                date: { type: Type.STRING },
-                courseName: { type: Type.STRING },
-                title: { type: Type.STRING },
-                summary: { type: Type.STRING, description: "Key takeaway summary" },
-                details: { type: Type.STRING, description: "Full detailed content" },
-                strategy: { type: Type.STRING },
-                risk: { type: Type.STRING },
-                priority: { type: Type.NUMBER },
-                department: { type: Type.STRING },
-                tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                confidence: { type: Type.NUMBER }
-              }
-            }
-          },
-          extractedPeople: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                role: { type: Type.STRING },
-                courseName: { type: Type.STRING },
-                affinity: { type: Type.NUMBER },
-                notes: { type: Type.STRING },
-                confidence: { type: Type.NUMBER }
-              }
-            }
-          }
-        },
-        required: ["extractedCourses", "extractedLogs", "extractedPeople", "documentSummary", "documentDetailedReport"]
+          required: ["extractedCourses", "extractedLogs", "extractedPeople", "documentSummary", "documentDetailedReport"]
+        }
       }
-    }
-  });
-
-  return JSON.parse(response.text);
+    });
+    return JSON.parse(response.text);
+  } catch (error) {
+    console.error("Gemini API Error:", error);
+    return null;
+  }
 };
 
 export const createChatSession = (
@@ -132,6 +155,14 @@ export const createChatSession = (
     - 히스토리: ${JSON.stringify(prunedLogs)}
   `;
 
+  if (!hasKey) {
+      // Return a dummy object that mimics a Chat session with error message
+      return {
+          sendMessage: async () => ({ text: "시스템 오류: API 키가 설정되지 않았습니다." }),
+          sendMessageStream: async function* () { yield { text: "시스템 오류: API 키가 설정되지 않았습니다. 관리자에게 문의하세요." } as any; }
+      } as unknown as Chat;
+  }
+
   return ai.chats.create({
     model: 'gemini-3-pro-preview',
     config: {
@@ -143,6 +174,8 @@ export const createChatSession = (
 };
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
+  if (!hasKey) return "AI 분석 기능을 사용할 수 없습니다. (API Key Missing)";
+
   const prompt = `
     다음 업무 일지를 정밀 분석하여 비즈니스 인텔리전스 보고서를 전문적인 한국어로 작성하세요.
     [일지 정보]
@@ -157,12 +190,16 @@ export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
     4. **리스크 및 대응 (Risks & Actions)**: 주의해야 할 리스크와 즉각적인 후속 조치 제안.
   `;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 16384 } }
-  });
-  return response.text || "분석 실패";
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: { thinkingConfig: { thinkingBudget: 16384 } }
+    });
+    return response.text || "분석 실패";
+  } catch (e) {
+    return "분석 서비스 일시적 오류";
+  }
 };
 
 export const generateCourseRelationshipIntelligence = async (
@@ -170,6 +207,8 @@ export const generateCourseRelationshipIntelligence = async (
   people: Person[],
   logs: LogEntry[]
 ): Promise<string> => {
+  if (!hasKey) return "인텔리전스 기능을 사용할 수 없습니다. (API Key Missing)";
+
   const staffInfo = people.map(p => `- ${p.name} (${p.currentRole}, 우호도: ${p.affinity}): ${p.notes}`).join('\n');
   const prunedLogs = logs.slice(0, 30).map(l => `[${l.date}] ${l.author}: ${l.title} - ${l.content.substring(0, 100)}...`).join('\n');
   
@@ -190,54 +229,62 @@ export const generateCourseRelationshipIntelligence = async (
     전문적이고 통찰력 있는 '인텔리전스 보고서' 형식으로 한국어로 작성하세요.
   `;
 
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 32768 } }
-  });
-  return response.text;
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: { thinkingConfig: { thinkingBudget: 32768 } }
+    });
+    return response.text;
+  } catch (e) { return "분석 중 오류 발생"; }
 };
 
 export const analyzeMaterialInventory = async (
   fileData: { base64Data: string, mimeType: string }
 ): Promise<any[]> => {
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-flash-preview',
-    contents: {
-      parts: [
-        { inlineData: { mimeType: fileData.mimeType, data: fileData.base64Data } },
-        { text: "골프장 거래 명세서 또는 자재 목록 추출. [필수 항목] supplyDate(YYYY-MM-DD), category(농약/비료/잔디/기타), name(제품명), standard(규격), quantity(수량), unit(단위), unitPrice(단가), manager(담당자), notes(비고). 결과는 반드시 JSON Array 형태로 출력하세요." }
-      ]
-    },
-    config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            supplyDate: { type: Type.STRING },
-            category: { type: Type.STRING },
-            name: { type: Type.STRING },
-            standard: { type: Type.STRING },
-            quantity: { type: Type.NUMBER },
-            unit: { type: Type.STRING },
-            unitPrice: { type: Type.NUMBER },
-            manager: { type: Type.STRING },
-            notes: { type: Type.STRING }
-          },
-          required: ["supplyDate", "category", "name", "quantity", "unit"]
+  if (!hasKey) return [];
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: {
+        parts: [
+          { inlineData: { mimeType: fileData.mimeType, data: fileData.base64Data } },
+          { text: "골프장 거래 명세서 또는 자재 목록 추출. [필수 항목] supplyDate(YYYY-MM-DD), category(농약/비료/잔디/기타), name(제품명), standard(규격), quantity(수량), unit(단위), unitPrice(단가), manager(담당자), notes(비고). 결과는 반드시 JSON Array 형태로 출력하세요." }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              supplyDate: { type: Type.STRING },
+              category: { type: Type.STRING },
+              name: { type: Type.STRING },
+              standard: { type: Type.STRING },
+              quantity: { type: Type.NUMBER },
+              unit: { type: Type.STRING },
+              unitPrice: { type: Type.NUMBER },
+              manager: { type: Type.STRING },
+              notes: { type: Type.STRING }
+            },
+            required: ["supplyDate", "category", "name", "quantity", "unit"]
+          }
         }
       }
-    }
-  });
-  return JSON.parse(response.text);
+    });
+    return JSON.parse(response.text);
+  } catch (e) { return []; }
 };
 
 export const generatePersonReputationReport = async (
   person: Person,
   logs: LogEntry[]
 ): Promise<string> => {
+  if (!hasKey) return "서비스 연결 불가: API Key를 확인하세요.";
+
   const prunedLogs = logs.slice(0, 15).map(l => `${l.date}: ${l.title}`).join('\n');
   const prompt = `
     인물 프로파일링 및 전략 분석: ${person.name} (${person.currentRole}). 
@@ -258,12 +305,14 @@ export const generatePersonReputationReport = async (
     정중하고 통찰력 있는 비즈니스 한국어로 작성해 주세요.
   `;
   
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 32768 } }
-  });
-  return response.text;
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: { thinkingConfig: { thinkingBudget: 32768 } }
+    });
+    return response.text;
+  } catch (e) { return "분석 중 오류 발생"; }
 };
 
 export const generateCourseSummary = async (
@@ -271,6 +320,8 @@ export const generateCourseSummary = async (
   logs: LogEntry[],
   people: Person[]
 ): Promise<string> => {
+  if (!hasKey) return "API Key 누락으로 분석 불가";
+
   const prunedLogs = logs.slice(0, 20).map(l => `[${l.date}] ${l.title}`).join(', ');
   const prunedPeople = people.slice(0, 15).map(p => `${p.name}(${p.currentRole}, 우호도:${p.affinity})`).join(' | ');
   const prompt = `
@@ -286,10 +337,12 @@ export const generateCourseSummary = async (
     3. **비즈니스 기회 (Opportunities)**: 당사가 파고들 수 있는 틈새 전략
     4. **향후 전망**: 업계 트렌드 대비 이 골프장의 포지셔닝
   `;
-  const response = await ai.models.generateContent({
-    model: 'gemini-3-pro-preview',
-    contents: prompt,
-    config: { thinkingConfig: { thinkingBudget: 32768 } }
-  });
-  return response.text;
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: prompt,
+      config: { thinkingConfig: { thinkingBudget: 32768 } }
+    });
+    return response.text;
+  } catch (e) { return "분석 중 오류 발생"; }
 };
