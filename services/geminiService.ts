@@ -5,13 +5,21 @@ import { LogEntry, GolfCourse, Person } from '../types';
 
 // Safely retrieve key, default to empty string if missing to prevent constructor crash
 const API_KEY = process.env.API_KEY || '';
-const hasKey = !!API_KEY && API_KEY !== 'undefined';
+const hasKey = !!API_KEY && API_KEY !== 'undefined' && API_KEY !== '';
 
 // Initialize only if key exists, otherwise we handle it inside functions
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+let ai: GoogleGenAI | null = null;
+try {
+    if (hasKey) {
+        ai = new GoogleGenAI({ apiKey: API_KEY });
+    } else {
+        console.warn("Gemini API Key is missing. AI features will be simulated.");
+    }
+} catch (e) {
+    console.warn("Failed to initialize GoogleGenAI client:", e);
+}
 
 const getMockResponse = (message: string) => {
-  console.warn("Gemini API Key missing. Returning mock response.");
   return {
     text: `[System Warning] AI API Key가 설정되지 않았습니다. \n(.env 파일 또는 Vercel 환경 변수 'API_KEY'를 확인하세요.)\n\n요청하신 내용에 대한 시뮬레이션 응답입니다: ${message.substring(0, 50)}...`,
     extractedCourses: [],
@@ -29,7 +37,7 @@ export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
   existingCourseNames: string[] = []
 ): Promise<any | null> => {
-  if (!hasKey) return getMockResponse("Document Analysis");
+  if (!hasKey || !ai) return getMockResponse("Document Analysis");
 
   const contentParts: any[] = [];
   
@@ -61,7 +69,7 @@ export const analyzeDocument = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-2.0-flash',
       contents: { parts: contentParts },
       config: {
         responseMimeType: "application/json",
@@ -125,7 +133,7 @@ export const analyzeDocument = async (
         }
       }
     });
-    return JSON.parse(response.text);
+    return JSON.parse(response.text || '{}');
   } catch (error) {
     console.error("Gemini API Error:", error);
     return null;
@@ -155,7 +163,7 @@ export const createChatSession = (
     - 히스토리: ${JSON.stringify(prunedLogs)}
   `;
 
-  if (!hasKey) {
+  if (!hasKey || !ai) {
       // Return a dummy object that mimics a Chat session with error message
       return {
           sendMessage: async () => ({ text: "시스템 오류: API 키가 설정되지 않았습니다." }),
@@ -164,17 +172,16 @@ export const createChatSession = (
   }
 
   return ai.chats.create({
-    model: 'gemini-3-pro-preview',
+    model: 'gemini-2.0-flash',
     config: {
       systemInstruction: systemInstruction,
-      temperature: 0.4,
-      thinkingConfig: { thinkingBudget: 32768 }
+      temperature: 0.4
     },
   });
 };
 
 export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
-  if (!hasKey) return "AI 분석 기능을 사용할 수 없습니다. (API Key Missing)";
+  if (!hasKey || !ai) return "AI 분석 기능을 사용할 수 없습니다. (API Key Missing)";
 
   const prompt = `
     다음 업무 일지를 정밀 분석하여 비즈니스 인텔리전스 보고서를 전문적인 한국어로 작성하세요.
@@ -192,9 +199,8 @@ export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
-      config: { thinkingConfig: { thinkingBudget: 16384 } }
+      model: 'gemini-2.0-flash',
+      contents: prompt
     });
     return response.text || "분석 실패";
   } catch (e) {
@@ -207,7 +213,7 @@ export const generateCourseRelationshipIntelligence = async (
   people: Person[],
   logs: LogEntry[]
 ): Promise<string> => {
-  if (!hasKey) return "인텔리전스 기능을 사용할 수 없습니다. (API Key Missing)";
+  if (!hasKey || !ai) return "인텔리전스 기능을 사용할 수 없습니다. (API Key Missing)";
 
   const staffInfo = people.map(p => `- ${p.name} (${p.currentRole}, 우호도: ${p.affinity}): ${p.notes}`).join('\n');
   const prunedLogs = logs.slice(0, 30).map(l => `[${l.date}] ${l.author}: ${l.title} - ${l.content.substring(0, 100)}...`).join('\n');
@@ -231,22 +237,21 @@ export const generateCourseRelationshipIntelligence = async (
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
-      config: { thinkingConfig: { thinkingBudget: 32768 } }
+      model: 'gemini-2.0-flash',
+      contents: prompt
     });
-    return response.text;
+    return response.text || "분석 실패";
   } catch (e) { return "분석 중 오류 발생"; }
 };
 
 export const analyzeMaterialInventory = async (
   fileData: { base64Data: string, mimeType: string }
 ): Promise<any[]> => {
-  if (!hasKey) return [];
+  if (!hasKey || !ai) return [];
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-2.0-flash',
       contents: {
         parts: [
           { inlineData: { mimeType: fileData.mimeType, data: fileData.base64Data } },
@@ -275,7 +280,7 @@ export const analyzeMaterialInventory = async (
         }
       }
     });
-    return JSON.parse(response.text);
+    return JSON.parse(response.text || '[]');
   } catch (e) { return []; }
 };
 
@@ -283,7 +288,7 @@ export const generatePersonReputationReport = async (
   person: Person,
   logs: LogEntry[]
 ): Promise<string> => {
-  if (!hasKey) return "서비스 연결 불가: API Key를 확인하세요.";
+  if (!hasKey || !ai) return "서비스 연결 불가: API Key를 확인하세요.";
 
   const prunedLogs = logs.slice(0, 15).map(l => `${l.date}: ${l.title}`).join('\n');
   const prompt = `
@@ -307,11 +312,10 @@ export const generatePersonReputationReport = async (
   
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
-      config: { thinkingConfig: { thinkingBudget: 32768 } }
+      model: 'gemini-2.0-flash',
+      contents: prompt
     });
-    return response.text;
+    return response.text || "분석 실패";
   } catch (e) { return "분석 중 오류 발생"; }
 };
 
@@ -320,7 +324,7 @@ export const generateCourseSummary = async (
   logs: LogEntry[],
   people: Person[]
 ): Promise<string> => {
-  if (!hasKey) return "API Key 누락으로 분석 불가";
+  if (!hasKey || !ai) return "API Key 누락으로 분석 불가";
 
   const prunedLogs = logs.slice(0, 20).map(l => `[${l.date}] ${l.title}`).join(', ');
   const prunedPeople = people.slice(0, 15).map(p => `${p.name}(${p.currentRole}, 우호도:${p.affinity})`).join(' | ');
@@ -339,10 +343,9 @@ export const generateCourseSummary = async (
   `;
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
-      config: { thinkingConfig: { thinkingBudget: 32768 } }
+      model: 'gemini-2.0-flash',
+      contents: prompt
     });
-    return response.text;
+    return response.text || "분석 실패";
   } catch (e) { return "분석 중 오류 발생"; }
 };
