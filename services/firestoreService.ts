@@ -73,8 +73,12 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
     callback(data);
   }, (error) => {
-    console.error(`Error subscribing to ${collectionName}:`, error);
-    // Optional: Could trigger fallback here if we wanted to be very aggressive
+    // Gracefully handle permission errors
+    if (error.code === 'permission-denied' || error.message.includes('permission')) {
+        console.warn(`[Firestore] Permission denied for ${collectionName}. Subscription skipped.`);
+    } else {
+        console.error(`Error subscribing to ${collectionName}:`, error);
+    }
   });
 };
 

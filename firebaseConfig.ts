@@ -2,8 +2,11 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getAnalytics } from "firebase/analytics";
 
-// User provided configuration (Hardcoded for stability to resolve Vercel env issues)
+// -------------------------------------------------------------------------
+// [설정 완료] 사용자가 제공한 Firebase 설정값입니다.
+// -------------------------------------------------------------------------
 const firebaseConfig = {
   apiKey: "AIzaSyD7SFyIl_vM_Xy4PlPavHfla0C7JwMhZ4s",
   authDomain: "gen-lang-client-0655618246.firebaseapp.com",
@@ -15,29 +18,40 @@ const firebaseConfig = {
   measurementId: "G-C4GDY5BFFN"
 };
 
-// Check if configured: requires at least an API Key to attempt connection
-export const isMockMode = !firebaseConfig.apiKey || firebaseConfig.apiKey === '';
+// API Key가 설정되었는지, 그리고 올바른지 확인
+const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "본인의_API_KEY_를_여기에_붙여넣으세요";
+
+export let isMockMode = !isConfigured;
 
 let app;
 let db: any;
 let auth: any;
+let analytics: any;
 
-if (!isMockMode) {
+if (isConfigured) {
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     auth = getAuth(app);
-    console.log("🔥 [Firebase] Initialized successfully in Live Mode using provided keys.");
+    
+    // Analytics는 브라우저 환경에서만 초기화 (SSR 등 고려)
+    if (typeof window !== 'undefined') {
+      analytics = getAnalytics(app);
+    }
+
+    console.log("%c🔥 [Firebase] 연결 성공! (Live Mode)", "color: #10B981; font-weight: bold; font-size: 14px;");
+    console.log("Connect to Project ID:", firebaseConfig.projectId);
   } catch (e) {
-    console.warn("⚠️ [Firebase] Initialization failed. Falling back to Mock Mode safely.");
+    console.error("%c⚠️ [Firebase] 초기화 실패 (Mock 모드로 전환됨)", "color: #EF4444; font-weight: bold;");
     console.error(e);
+    isMockMode = true;
     db = null;
     auth = null;
   }
 } else {
-  console.log("⚠️ [System] Running in Mock Mode (No Firebase Keys found). Data will be local only.");
+  console.warn("%c⚠️ [System] Firebase 설정이 발견되지 않았습니다. (Mock Data Mode)", "color: #F59E0B; font-weight: bold;");
   db = null;
   auth = null;
 }
 
-export { db, auth };
+export { db, auth, analytics };

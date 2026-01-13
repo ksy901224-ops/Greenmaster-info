@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Department } from '../types';
-import { Shield, Lock, ArrowRight, UserPlus, Mail, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Shield, Lock, ArrowRight, UserPlus, Mail, AlertTriangle, CheckCircle, Loader2, Copy } from 'lucide-react';
 
 const Login: React.FC = () => {
   const { login, register } = useApp();
@@ -21,11 +21,13 @@ const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [registeredUid, setRegisteredUid] = useState<string | null>(null);
 
   // Clear messages when switching modes
   useEffect(() => {
     setErrorMsg(null);
     setSuccessMsg(null);
+    setRegisteredUid(null);
   }, [mode]);
 
   const isValidEmail = (email: string) => {
@@ -78,11 +80,12 @@ const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await register(regName, regEmail, regPassword, regDept);
+      const uid = await register(regName, regEmail, regPassword, regDept);
       
-      // Auto switch to login with success message
+      // Auto switch to login with success message including UID
       setMode('LOGIN');
       setLoginEmail(regEmail);
+      setRegisteredUid(uid);
       setSuccessMsg("가입 요청이 성공적으로 전송되었습니다! 관리자 승인 후 로그인 가능합니다.");
       
       // Reset form
@@ -96,6 +99,13 @@ const Login: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const copyUid = () => {
+      if(registeredUid) {
+          navigator.clipboard.writeText(registeredUid);
+          alert('UID가 클립보드에 복사되었습니다.');
+      }
   };
 
   return (
@@ -134,9 +144,17 @@ const Login: React.FC = () => {
           </div>
 
           {successMsg && (
-            <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-800 rounded-xl text-sm flex items-start animate-in fade-in slide-in-from-top-2 shadow-sm">
-                <CheckCircle size={18} className="mr-2 mt-0.5 shrink-0 text-green-600"/>
-                <span className="font-medium">{successMsg}</span>
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-800 rounded-xl text-sm animate-in fade-in slide-in-from-top-2 shadow-sm">
+                <div className="flex items-start">
+                    <CheckCircle size={18} className="mr-2 mt-0.5 shrink-0 text-green-600"/>
+                    <span className="font-medium">{successMsg}</span>
+                </div>
+                {registeredUid && (
+                    <div className="mt-3 pt-3 border-t border-green-200 flex items-center justify-between">
+                        <code className="text-xs bg-white px-2 py-1 rounded border border-green-100 font-mono text-slate-500 truncate max-w-[200px]">{registeredUid}</code>
+                        <button onClick={copyUid} className="text-xs flex items-center font-bold text-green-700 hover:underline"><Copy size={12} className="mr-1"/> UID 복사</button>
+                    </div>
+                )}
             </div>
           )}
 

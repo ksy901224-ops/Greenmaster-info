@@ -17,7 +17,7 @@ interface AppContextType {
   user: UserProfile | null;
   allUsers: UserProfile[];
   login: (email: string, password?: string) => Promise<string | void>;
-  register: (name: string, email: string, password: string, department: Department) => Promise<void>;
+  register: (name: string, email: string, password: string, department: Department) => Promise<string>;
   logout: () => void;
   updateUserStatus: (userId: string, status: UserStatus) => void;
   updateUserRole: (userId: string, role: UserRole) => void;
@@ -82,6 +82,7 @@ const DEFAULT_ADMIN: UserProfile = {
 
 const parseAuthError = (code: string) => {
     switch (code) {
+        case 'auth/invalid-credential': return '이메일 또는 비밀번호가 올바르지 않습니다.';
         case 'auth/invalid-email': return '유효하지 않은 이메일 형식입니다.';
         case 'auth/user-disabled': return '비활성화된 사용자입니다.';
         case 'auth/user-not-found': return '등록되지 않은 사용자입니다.';
@@ -89,6 +90,8 @@ const parseAuthError = (code: string) => {
         case 'auth/email-already-in-use': return '이미 사용 중인 이메일입니다.';
         case 'auth/weak-password': return '비밀번호는 6자 이상이어야 합니다.';
         case 'auth/operation-not-allowed': return '이메일/비밀번호 로그인이 설정되지 않았습니다. 관리자에게 문의하세요.';
+        case 'auth/too-many-requests': return '로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+        case 'auth/network-request-failed': return '네트워크 연결이 불안정합니다. 오프라인 모드로 전환을 시도합니다.';
         default: return '인증 오류가 발생했습니다. (' + code + ')';
     }
 };
@@ -167,6 +170,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       saveDocument('system_logs', newLog);
   };
 
+  const executeMockLogin = (email: string) => {
+      let currentUsers = allUsers;
+      if (currentUsers.length === 0) {
+          // Attempt to load from local storage if state is empty
+          try {
+              const localUsersStr = localStorage.getItem('gm_mock_users');
+              if (localUsersStr) {
+                  currentUsers = JSON.parse(localUsersStr);
+                  setAllUsers(currentUsers);
+              }
+          } catch(e) { console.warn("Failed to load local users", e); }
+
+          if (currentUsers.length === 0) {
+              currentUsers = [DEFAULT_ADMIN];
+              setAllUsers(currentUsers);
+          }
+      }
+
+      const foundUser = currentUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      
+      if (!foundUser && email.toLowerCase() === DEFAULT_ADMIN.email.toLowerCase()) {
+           setUser(DEFAULT_ADMIN);
+           localStorage.setItem('greenmaster_user', JSON.stringify(DEFAULT_ADMIN));
+           logActivity('LOGIN', 'USER', 'System Login (Offline Admin)');
+           return;
+      }
+
+      if (!foundUser) return '등록된 이메일이 아닙니다. (Mock Mode)';
+      if (foundUser.status === 'PENDING') return '현재 관리자 승인 대기 중입니다.';
+      if (foundUser.status === 'REJECTED') return '가입 요청이 거절되었거나 계정이 차단되었습니다.';
+      setUser(foundUser);
+      localStorage.setItem('greenmaster_user', JSON.stringify(foundUser));
+      logActivity('LOGIN', 'USER', 'System Login');
+      return;
+  };
+
   // --- AUTH INITIALIZATION ---
   useEffect(() => {
     if (!isMockMode && auth) {
@@ -192,10 +231,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             localStorage.removeItem('greenmaster_user');
                         }
                     } else {
-                        console.warn("[Firebase] User authenticated but no profile found in Firestore.");
+                        console.warn("[Firebase] User authenticated but no profile found in Firestore. Likely pending creation.");
+                        setUser(null);
                     }
-                } catch (e) {
-                    console.error("[Firebase] Error fetching user profile:", e);
+                } catch (e: any) {
+                    const errCode = e.code;
+                    const errMsg = e.message?.toLowerCase() || '';
+                    const isOfflineError = errCode === 'unavailable' || errMsg.includes('offline') || errMsg.includes('network');
+
+                    if (e.code === 'permission-denied' || e.message?.includes('permission') || e.message?.includes('insufficient')) {
+                        console.warn("[Firebase] Permission denied reading user profile. Likely pending approval or restricted rules.");
+                        setUser(null);
+                    } else if (e.message?.includes('does not exist') || isOfflineError) {
+                        // DATABASE MISSING ERROR OR OFFLINE -> SWITCH TO OFFLINE
+                        console.warn("[Firebase] Database unavailable or Client Offline. Switching to Offline Mode.");
+                        setForceMock(true);
+                        setIsOfflineMode(true);
+                        // Try to recover session from local storage if possible
+                        const savedUser = localStorage.getItem('greenmaster_user');
+                        if (savedUser) setUser(JSON.parse(savedUser));
+                    } else {
+                        console.error("[Firebase] Error fetching user profile:", e.message);
+                    }
                 }
             } else {
                 console.log("[Firebase] Auth State Changed: Logged Out");
@@ -227,15 +284,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // --- SUBSCRIPTIONS ---
   useEffect(() => {
-    // Only subscribe if:
-    // 1. We are in Mock Mode or Offline Mode (using local data)
-    // 2. OR We are in Live Mode (Firebase Ready) AND the user is authenticated.
-    // This strict check prevents "Missing or insufficient permissions" errors.
-    
     const canSubscribe = isMockMode || isOfflineMode || (isFirebaseReady && !!auth?.currentUser);
 
     if (!canSubscribe) {
-        // Clear data when logged out or initializing to avoid stale UI
         setLogs([]);
         setRawCourses([]);
         setPeople([]);
@@ -247,60 +298,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return;
     }
 
-    const unsubLogs = subscribeToCollection('logs', (data) => {
-      if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection('logs', MOCK_LOGS); return; } 
-      setLogs(data as LogEntry[]);
-    });
+    // Wrap subscriptions to handle permission errors silently for regular users who might not have list access
+    const safeSubscribe = (col: string, setter: (d: any) => void, mockData: any[]) => {
+        try {
+            return subscribeToCollection(col, (data) => {
+                if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection(col, mockData); return; }
+                setter(data);
+            });
+        } catch (e) {
+            console.warn(`Failed to subscribe to ${col}`, e);
+            return () => {};
+        }
+    };
 
-    const unsubCourses = subscribeToCollection('courses', (data) => {
-      if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection('courses', MOCK_COURSES); return; } 
-      setRawCourses(data as GolfCourse[]);
-    });
-
-    const unsubPeople = subscribeToCollection('people', (data) => {
-      if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection('people', MOCK_PEOPLE); return; } 
-      setPeople(data as Person[]);
-    });
-
-    const unsubEvents = subscribeToCollection('external_events', (data) => {
-      if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection('external_events', MOCK_EXTERNAL_EVENTS); return; } 
-      setExternalEvents(data as ExternalEvent[]);
-    });
-
-    const unsubUsers = subscribeToCollection('users', (data) => {
-      if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection('users', [DEFAULT_ADMIN]); return; } 
-      const fetchedUsers = data as UserProfile[];
-      setAllUsers(fetchedUsers);
-      
-      // Update self if role changed
-      if (user) {
-          const updatedSelf = fetchedUsers.find(u => u.id === user.id);
-          if (updatedSelf && JSON.stringify(updatedSelf) !== JSON.stringify(user)) {
-              setUser(updatedSelf);
-              localStorage.setItem('greenmaster_user', JSON.stringify(updatedSelf));
-          }
-      }
-    });
-
-    const unsubSystem = subscribeToCollection('system_logs', (data) => {
+    const unsubLogs = safeSubscribe('logs', (data) => setLogs(data as LogEntry[]), MOCK_LOGS);
+    const unsubCourses = safeSubscribe('courses', (data) => setRawCourses(data as GolfCourse[]), MOCK_COURSES);
+    const unsubPeople = safeSubscribe('people', (data) => setPeople(data as Person[]), MOCK_PEOPLE);
+    const unsubEvents = safeSubscribe('external_events', (data) => setExternalEvents(data as ExternalEvent[]), MOCK_EXTERNAL_EVENTS);
+    
+    // RESTRICT SENSITIVE SUBSCRIPTIONS TO ADMINS ONLY
+    const unsubUsers = isAdmin ? safeSubscribe('users', (data) => {
+        setAllUsers(data as UserProfile[]);
+        // Update self if role changed
+        if (user) {
+            const updatedSelf = (data as UserProfile[]).find(u => u.id === user.id);
+            if (updatedSelf && JSON.stringify(updatedSelf) !== JSON.stringify(user)) {
+                setUser(updatedSelf);
+                localStorage.setItem('greenmaster_user', JSON.stringify(updatedSelf));
+            }
+        }
+    }, [DEFAULT_ADMIN]) : () => {};
+    
+    const unsubSystem = isAdmin ? safeSubscribe('system_logs', (data) => {
         const sorted = (data as SystemLog[]).sort((a, b) => b.timestamp - a.timestamp);
         setSystemLogs(sorted);
-    });
+    }, []) : () => {};
 
-    const unsubFin = subscribeToCollection('financials', (data) => {
-      if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection('financials', MOCK_FINANCIALS); return; }
-      setFinancials(data as FinancialRecord[]);
-    });
-
-    const unsubMat = subscribeToCollection('materials', (data) => {
-      if (data.length === 0 && (isMockMode || isOfflineMode)) { seedCollection('materials', MOCK_MATERIALS); return; }
-      setMaterials(data as MaterialRecord[]);
-    });
+    const unsubFin = safeSubscribe('financials', (data) => setFinancials(data as FinancialRecord[]), MOCK_FINANCIALS);
+    const unsubMat = safeSubscribe('materials', (data) => setMaterials(data as MaterialRecord[]), MOCK_MATERIALS);
 
     return () => {
       unsubLogs(); unsubCourses(); unsubPeople(); unsubEvents(); unsubUsers(); unsubSystem(); unsubFin(); unsubMat();
     };
-  }, [isFirebaseReady, isOfflineMode, user?.id]); // Re-run when user logs in/out
+  }, [isFirebaseReady, isOfflineMode, user?.id, isAdmin]);
 
   // Enrich courses with associated people
   const courses = useMemo(() => {
@@ -334,34 +374,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
   }, [rawCourses, people]);
 
-  // LOGIN FUNCTION - Updated for Real Firebase Auth with Robust Fallback
+  // LOGIN FUNCTION
   const login = async (email: string, password?: string): Promise<string | void> => {
     if (isMockMode || isOfflineMode) {
-        // Fallback Mock Login
-        // Ensure we have at least the default admin if allUsers is empty
-        let currentUsers = allUsers;
-        if (currentUsers.length === 0) {
-            currentUsers = [DEFAULT_ADMIN];
-            setAllUsers(currentUsers); // seed state
-        }
-
-        const foundUser = currentUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-        
-        // Special case for default admin in forced mock mode if not found in array yet
-        if (!foundUser && email.toLowerCase() === DEFAULT_ADMIN.email.toLowerCase()) {
-             setUser(DEFAULT_ADMIN);
-             localStorage.setItem('greenmaster_user', JSON.stringify(DEFAULT_ADMIN));
-             logActivity('LOGIN', 'USER', 'System Login (Offline Admin)');
-             return;
-        }
-
-        if (!foundUser) return '등록된 이메일이 아닙니다. (Mock Mode)';
-        if (foundUser.status === 'PENDING') return '현재 관리자 승인 대기 중입니다.';
-        if (foundUser.status === 'REJECTED') return '가입 요청이 거절되었거나 계정이 차단되었습니다.';
-        setUser(foundUser);
-        localStorage.setItem('greenmaster_user', JSON.stringify(foundUser));
-        logActivity('LOGIN', 'USER', 'System Login');
-        return;
+        return executeMockLogin(email);
     }
 
     if (!auth || !password) return '비밀번호를 입력해주세요.';
@@ -369,55 +385,80 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const docRef = doc(db, 'users', userCredential.user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-            const profile = docSnap.data() as UserProfile;
-            if (profile.status === 'PENDING') {
-                await signOut(auth);
-                return '현재 관리자 승인 대기 중입니다.';
+        
+        // Handle Profile Fetch with specific permission error catch
+        try {
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                const profile = docSnap.data() as UserProfile;
+                if (profile.status === 'PENDING') {
+                    await signOut(auth);
+                    return '현재 관리자 승인 대기 중입니다.';
+                }
+                if (profile.status === 'REJECTED') {
+                    await signOut(auth);
+                    return '계정이 거절되었거나 차단되었습니다.';
+                }
+                logActivity('LOGIN', 'USER', profile.name, 'Firebase Auth Login');
+                setUser(profile);
+            } else {
+                return '사용자 프로필을 찾을 수 없습니다. (Firestore Document Missing)';
             }
-            if (profile.status === 'REJECTED') {
-                await signOut(auth);
-                return '계정이 거절되었거나 차단되었습니다.';
+        } catch (docError: any) {
+            // SPECIFIC HANDLER FOR OFFLINE ERRORS
+            const errCode = docError.code;
+            const errMsg = docError.message?.toLowerCase() || '';
+            const isOfflineError = errCode === 'unavailable' || errMsg.includes('offline') || errMsg.includes('network');
+
+            if (isOfflineError) {
+                 console.warn("⚠️ Client offline detected during profile fetch. Switching to Offline Mode.");
+                 setForceMock(true);
+                 setIsOfflineMode(true);
+                 return executeMockLogin(email);
             }
-            logActivity('LOGIN', 'USER', profile.name, 'Firebase Auth Login');
-        } else {
-            return '사용자 프로필을 찾을 수 없습니다. 관리자에게 문의하세요.';
+
+            if (docError.code === 'permission-denied' || docError.message?.includes('permission')) {
+                await signOut(auth);
+                return '사용자 정보에 접근할 수 없습니다. (권한 부족 또는 승인 대기중)';
+            }
+            if (docError.message?.includes('does not exist')) {
+                console.warn("⚠️ Database missing. Switching to Offline Mode.");
+                setForceMock(true);
+                setIsOfflineMode(true);
+                return executeMockLogin(email);
+            }
+            console.error("Profile Fetch Error:", docError);
+            throw docError;
         }
+
     } catch (error: any) {
         console.error("Login failed:", error);
         
-        // CRITICAL: Handle missing auth configuration (backend not ready) by switching to Offline Mode
-        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed') {
-            console.warn("⚠️ Authentication backend issue detected. Switching to Offline Mode.");
+        // Check for offline/network errors in main authentication flow
+        const errCode = error.code;
+        const errMsg = error.message?.toLowerCase() || '';
+        const isOfflineError = errCode === 'auth/network-request-failed' || errMsg.includes('offline') || errMsg.includes('network');
+
+        if (isOfflineError) {
+             console.warn("⚠️ Network authentication issue. Switching to Offline Mode.");
+             setForceMock(true);
+             setIsOfflineMode(true);
+             return executeMockLogin(email);
+        }
+
+        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed' || error.message?.includes('does not exist')) {
+            console.warn("⚠️ Backend issue detected. Switching to Offline Mode.");
             setForceMock(true);
             setIsOfflineMode(true);
-            
-            // Retry login logic in offline mode immediately
-            // We use the same logic as the top of this function
-            let currentUsers = allUsers.length > 0 ? allUsers : [DEFAULT_ADMIN];
-            const foundUser = currentUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-            
-            if (foundUser) {
-                 if (foundUser.status === 'PENDING') return '현재 관리자 승인 대기 중입니다.';
-                 if (foundUser.status === 'REJECTED') return '가입 요청이 거절되었거나 계정이 차단되었습니다.';
-                 setUser(foundUser);
-                 localStorage.setItem('greenmaster_user', JSON.stringify(foundUser));
-                 return; // Success
-            } else if (email === DEFAULT_ADMIN.email) {
-                 setUser(DEFAULT_ADMIN);
-                 localStorage.setItem('greenmaster_user', JSON.stringify(DEFAULT_ADMIN));
-                 return; // Success for admin
-            }
-            return '인증 서버가 설정되지 않았습니다. 오프라인 모드로 전환되었으나 계정을 찾을 수 없습니다.';
+            return executeMockLogin(email);
         }
         
         return parseAuthError(error.code);
     }
   };
 
-  const register = async (name: string, email: string, password?: string, department: Department = Department.SALES) => {
-    if (isMockMode || isOfflineMode) {
+  const register = async (name: string, email: string, password?: string, department: Department = Department.SALES): Promise<string> => {
+    const handleMockRegister = async () => {
         if (allUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
             throw new Error('이미 등록된 이메일입니다.');
         }
@@ -428,39 +469,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           status: 'PENDING'
         };
         await saveDocument('users', newUser);
-        return;
+        return newUser.id;
+    };
+
+    if (isMockMode || isOfflineMode) {
+        return handleMockRegister();
     }
 
     if (!auth || !password) throw new Error('비밀번호가 필요합니다.');
 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const uid = userCredential.user.uid;
+        console.log("👉 Registration Successful. UID:", uid);
+
         const newUser: UserProfile = {
-            id: userCredential.user.uid,
+            id: uid,
             name,
             email: email.trim(),
-            role: UserRole.INTERMEDIATE,
+            role: UserRole.INTERMEDIATE, 
             department,
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-            status: 'PENDING' 
+            status: 'PENDING'
         };
         
-        await setDoc(doc(db, 'users', newUser.id), newUser);
+        try {
+            await setDoc(doc(db, 'users', uid), newUser);
+        } catch (writeErr: any) {
+            if (writeErr.message?.includes('does not exist') || writeErr.message?.includes('offline')) {
+                console.warn("Permission/DB Error writing profile. Falling back to offline mode for this session.");
+                setForceMock(true);
+                setIsOfflineMode(true);
+                // In offline mode we save to local storage
+                await saveDocument('users', newUser); 
+                return newUser.id;
+            }
+            
+            if (writeErr.code !== 'permission-denied') {
+                console.error("Failed to write user profile to DB:", writeErr);
+            } else {
+                console.warn("Permission denied writing profile. User assumes PENDING state.");
+            }
+        }
+        
         await signOut(auth);
+        return uid;
         
     } catch (error: any) {
-        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed') {
+        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed' || error.message?.includes('does not exist') || error.code === 'auth/network-request-failed') {
              setForceMock(true);
              setIsOfflineMode(true);
-             // Retry register in mock mode
-             const newUser: UserProfile = {
-                id: `user-${Date.now()}-${Math.floor(Math.random()*1000)}`,
-                name, email: email.trim(), role: UserRole.INTERMEDIATE, department,
-                avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-                status: 'PENDING'
-             };
-             await saveDocument('users', newUser);
-             return;
+             return handleMockRegister();
         }
         console.error("Registration failed:", error);
         throw new Error(parseAuthError(error.code));

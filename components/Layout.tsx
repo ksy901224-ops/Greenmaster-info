@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, ListChecks, LayoutDashboard, Share2, Database, Wifi, WifiOff, FileText } from 'lucide-react';
+import { Menu, X, MapPin, Users, Home, PlusSquare, Settings, LogOut, Shield, User, Wifi, WifiOff, FileText } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { UserRole } from '../types';
 import { isMockMode } from '../firebaseConfig';
@@ -20,7 +20,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   // Only show these to Senior and Intermediate users
   if (canViewFullData) {
-    // Replaced Relationship Map with Work Logs
     navItems.push({ label: '업무일지', path: '/work-logs', icon: <FileText size={18} /> });
     navItems.push({ label: '등록', path: '/write', icon: <PlusSquare size={18} /> });
   }
@@ -175,9 +174,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             <p>© 2024 GreenMaster Info System. <span className="hidden sm:inline">All rights reserved.</span></p>
             <div className="flex items-center space-x-4 text-xs">
                 <span className="opacity-70">Logged in as <span className="font-medium text-slate-700">{user?.name}</span></span>
-                <div className={`flex items-center px-2 py-0.5 rounded-full border ${!isMockMode ? 'bg-green-100 text-green-700 border-green-200' : 'bg-orange-100 text-orange-700 border-orange-200'}`}>
-                    {isMockMode ? <WifiOff size={10} className="mr-1"/> : <Wifi size={10} className="mr-1"/>}
-                    <span className="font-bold">{isMockMode ? 'Local Mode (Offline)' : 'Live Server (Connected)'}</span>
+                <div className={`flex items-center px-3 py-1 rounded-full border shadow-sm transition-colors ${!isMockMode ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
+                    {isMockMode ? <WifiOff size={12} className="mr-1.5"/> : <Wifi size={12} className="mr-1.5"/>}
+                    <span className="font-bold">{isMockMode ? 'Local Mode (Offline/Mock)' : 'Live Server (Firebase Connected)'}</span>
                 </div>
             </div>
         </div>
