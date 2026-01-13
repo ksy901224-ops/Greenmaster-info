@@ -1,8 +1,9 @@
 
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
-// User provided configuration (Hardcoded for stability)
+// User provided configuration (Hardcoded for stability to resolve Vercel env issues)
 const firebaseConfig = {
   apiKey: "AIzaSyD7SFyIl_vM_Xy4PlPavHfla0C7JwMhZ4s",
   authDomain: "gen-lang-client-0655618246.firebaseapp.com",
@@ -19,21 +20,24 @@ export const isMockMode = !firebaseConfig.apiKey || firebaseConfig.apiKey === ''
 
 let app;
 let db: any;
+let auth: any;
 
 if (!isMockMode) {
   try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
+    auth = getAuth(app);
     console.log("🔥 [Firebase] Initialized successfully in Live Mode using provided keys.");
   } catch (e) {
     console.warn("⚠️ [Firebase] Initialization failed. Falling back to Mock Mode safely.");
     console.error(e);
-    // Fallback to mock mode if initialization fails despite keys being present
     db = null;
+    auth = null;
   }
 } else {
   console.log("⚠️ [System] Running in Mock Mode (No Firebase Keys found). Data will be local only.");
   db = null;
+  auth = null;
 }
 
-export { db };
+export { db, auth };

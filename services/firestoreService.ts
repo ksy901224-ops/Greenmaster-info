@@ -1,5 +1,5 @@
 
-import { db, isMockMode } from "../firebaseConfig";
+import { db, isMockMode as configMockMode } from "../firebaseConfig";
 import { collection, addDoc, getDocs, updateDoc, deleteDoc, doc, query, orderBy, Timestamp, onSnapshot, setDoc, writeBatch, QuerySnapshot, DocumentData } from "firebase/firestore";
 
 export interface TodoItem {
@@ -11,6 +11,16 @@ export interface TodoItem {
 }
 
 const COLLECTION_NAME = "todos";
+
+// --- DYNAMIC MOCK SWITCH ---
+// Allows the app to fallback to mock mode at runtime if Auth/DB fails
+let forceMock = false;
+export const setForceMock = (enable: boolean) => {
+  forceMock = enable;
+  console.log(`[FirestoreService] Force Mock Mode set to: ${enable}`);
+};
+
+const isMock = () => configMockMode || forceMock || !db;
 
 // --- MOCK SYSTEM FOR OFFLINE MODE ---
 const listeners: Record<string, Set<(data: any[]) => void>> = {};
@@ -47,7 +57,7 @@ const notifyListeners = (key: string, data: any[]) => {
 };
 
 export const subscribeToCollection = (collectionName: string, callback: (data: any[]) => void) => {
-  if (isMockMode || !db) {
+  if (isMock()) {
     if (!listeners[collectionName]) listeners[collectionName] = new Set();
     listeners[collectionName].add(callback);
     const current = getLocalData(collectionName);
@@ -64,11 +74,12 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
     callback(data);
   }, (error) => {
     console.error(`Error subscribing to ${collectionName}:`, error);
+    // Optional: Could trigger fallback here if we wanted to be very aggressive
   });
 };
 
 export const saveDocument = async (collectionName: string, data: any) => {
-  if (isMockMode || !db) {
+  if (isMock()) {
     const items = getLocalData(collectionName);
     const existingIndex = items.findIndex((i: any) => i.id === data.id);
     let newItems;
@@ -97,7 +108,7 @@ export const saveDocument = async (collectionName: string, data: any) => {
 };
 
 export const updateDocument = async (collectionName: string, id: string, data: any) => {
-  if (isMockMode || !db) {
+  if (isMock()) {
     const items = getLocalData(collectionName);
     const updated = items.map((i: any) => i.id === id ? { ...i, ...data } : i);
     setLocalData(collectionName, updated);
@@ -113,7 +124,7 @@ export const updateDocument = async (collectionName: string, id: string, data: a
 };
 
 export const deleteDocument = async (collectionName: string, id: string) => {
-  if (isMockMode || !db) {
+  if (isMock()) {
     const items = getLocalData(collectionName);
     const filtered = items.filter((i: any) => i.id !== id);
     setLocalData(collectionName, filtered);
@@ -133,7 +144,7 @@ export const seedCollection = async (collectionName: string, dataArray: any[], f
   if (seedingLocks[collectionName]) return;
   seedingLocks[collectionName] = true;
 
-  if (isMockMode || !db) {
+  if (isMock()) {
     const current = getLocalData(collectionName);
     if (current.length === 0 || force) {
         setLocalData(collectionName, dataArray);
@@ -165,7 +176,7 @@ export const seedCollection = async (collectionName: string, dataArray: any[], f
 };
 
 export const addTodo = async (text: string, author: string) => {
-  if (isMockMode || !db) {
+  if (isMock()) {
     const todos = getLocalData(COLLECTION_NAME);
     const newTodo = {
       id: `mock-todo-${Date.now()}`,
@@ -181,7 +192,7 @@ export const addTodo = async (text: string, author: string) => {
 };
 
 export const updateTodo = async (id: string, updates: Partial<TodoItem>) => {
-  if (isMockMode || !db) {
+  if (isMock()) {
     const todos = getLocalData(COLLECTION_NAME);
     setLocalData(COLLECTION_NAME, todos.map((t: any) => t.id === id ? { ...t, ...updates } : t));
     return;
@@ -190,7 +201,7 @@ export const updateTodo = async (id: string, updates: Partial<TodoItem>) => {
 };
 
 export const deleteTodo = async (id: string) => {
-  if (isMockMode || !db) {
+  if (isMock()) {
     const todos = getLocalData(COLLECTION_NAME);
     setLocalData(COLLECTION_NAME, todos.filter((t: any) => t.id !== id));
     return;

@@ -10,10 +10,12 @@ const Login: React.FC = () => {
   
   // Login State
   const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   
   // Signup State
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
   const [regDept, setRegDept] = useState<Department>(Department.SALES);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -35,27 +37,20 @@ const Login: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (!loginEmail.trim()) {
-        setErrorMsg("이메일을 입력해주세요.");
-        return;
-    }
-
-    if (!isValidEmail(loginEmail)) {
-        setErrorMsg("올바른 이메일 형식이 아닙니다.");
+    if (!loginEmail.trim() || !loginPassword.trim()) {
+        setErrorMsg("이메일과 비밀번호를 입력해주세요.");
         return;
     }
 
     setIsLoading(true);
     
     try {
-        // Simulated network delay for better UX feel
-        await new Promise(resolve => setTimeout(resolve, 600));
-        const error = await login(loginEmail);
+        const error = await login(loginEmail, loginPassword);
         if (error) {
             setErrorMsg(error);
         }
     } catch (e) {
-        setErrorMsg("로그인 시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+        setErrorMsg("로그인 시스템 오류가 발생했습니다.");
     } finally {
         setIsLoading(false);
     }
@@ -66,8 +61,8 @@ const Login: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (!regName.trim() || !regEmail.trim()) {
-        setErrorMsg("이름과 이메일을 모두 입력해주세요.");
+    if (!regName.trim() || !regEmail.trim() || !regPassword.trim()) {
+        setErrorMsg("모든 정보를 입력해주세요.");
         return;
     }
 
@@ -76,10 +71,14 @@ const Login: React.FC = () => {
         return;
     }
 
+    if (regPassword.length < 6) {
+        setErrorMsg("비밀번호는 최소 6자 이상이어야 합니다.");
+        return;
+    }
+
     setIsLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 800)); // UX delay
-      await register(regName, regEmail, regDept);
+      await register(regName, regEmail, regPassword, regDept);
       
       // Auto switch to login with success message
       setMode('LOGIN');
@@ -89,6 +88,7 @@ const Login: React.FC = () => {
       // Reset form
       setRegName('');
       setRegEmail('');
+      setRegPassword('');
       setRegDept(Department.SALES);
 
     } catch (e: any) {
@@ -150,7 +150,7 @@ const Login: React.FC = () => {
           {mode === 'LOGIN' ? (
             <div className="animate-in fade-in slide-in-from-left-4 duration-300">
                <h2 className="text-xl font-bold text-slate-900 mb-2 text-center">직원 로그인</h2>
-               <p className="text-sm text-slate-500 mb-8 text-center">승인된 계정 이메일로 접속하세요.</p>
+               <p className="text-sm text-slate-500 mb-8 text-center">승인된 계정 이메일과 비밀번호로 접속하세요.</p>
                
                <form onSubmit={handleLogin} className="space-y-5">
                  <div>
@@ -167,10 +167,25 @@ const Login: React.FC = () => {
                      />
                    </div>
                  </div>
+                 
+                 <div>
+                   <label className="block text-xs font-bold text-slate-700 mb-1.5 ml-1">비밀번호</label>
+                   <div className="relative group">
+                     <Lock className="absolute left-3.5 top-3.5 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={18} />
+                     <input 
+                       type="password" 
+                       className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all" 
+                       placeholder="••••••••"
+                       value={loginPassword}
+                       onChange={(e) => setLoginPassword(e.target.value)}
+                       autoComplete="current-password"
+                     />
+                   </div>
+                 </div>
 
                  {/* Demo Hint */}
                  <div className="text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex justify-center">
-                    <span className="font-bold mr-1">Admin Demo:</span> admin@greenmaster.com
+                    <span className="font-bold mr-1">Admin Demo:</span> admin@greenmaster.com / admin123
                  </div>
                  
                  <div className="pt-2">
@@ -186,7 +201,7 @@ const Login: React.FC = () => {
                      {isLoading ? (
                        <>
                         <Loader2 className="animate-spin mr-2" size={20} />
-                        확인 중...
+                        인증 중...
                        </>
                      ) : (
                        <>
@@ -221,6 +236,16 @@ const Login: React.FC = () => {
                      placeholder="user@example.com"
                      value={regEmail}
                      onChange={(e) => setRegEmail(e.target.value)}
+                   />
+                 </div>
+                 <div>
+                   <label className="block text-xs font-bold text-slate-700 mb-1.5 ml-1">비밀번호 (6자 이상)</label>
+                   <input 
+                     type="password" 
+                     className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all" 
+                     placeholder="••••••••"
+                     value={regPassword}
+                     onChange={(e) => setRegPassword(e.target.value)}
                    />
                  </div>
                  <div>
