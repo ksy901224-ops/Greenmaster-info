@@ -66,6 +66,10 @@ interface AppContextType {
   navigate: (path: string, state?: any) => void;
   routeParams: { id?: string };
   locationState: any;
+  
+  // Mode Control
+  isOfflineMode: boolean;
+  toggleOfflineMode: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -117,7 +121,32 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   
   // Auth state for Firebase
   const [isFirebaseReady, setIsFirebaseReady] = useState(isMockMode); 
-  const [isOfflineMode, setIsOfflineMode] = useState(isMockMode);
+  
+  // Initialize Offline Mode from LocalStorage or Default Config
+  const [isOfflineMode, setIsOfflineMode] = useState(() => {
+      const stored = localStorage.getItem('gm_force_offline');
+      return stored === 'true' || isMockMode;
+  });
+
+  // Apply Force Mock setting whenever isOfflineMode changes
+  useEffect(() => {
+      setForceMock(isOfflineMode);
+  }, [isOfflineMode]);
+
+  const toggleOfflineMode = () => {
+      const next = !isOfflineMode;
+      setIsOfflineMode(next);
+      setForceMock(next);
+      localStorage.setItem('gm_force_offline', String(next));
+      
+      if (!next) {
+          // If switching to Live, reload to re-establish Firebase listeners cleanly
+          window.location.reload();
+      } else {
+          // If switching to Offline, we can just let the state update trigger re-subscriptions in mock mode
+          console.log("Switched to Local Mode");
+      }
+  };
 
   const isAdmin = user?.role === UserRole.ADMIN;
   const isSeniorOrAdmin = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;
@@ -208,7 +237,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // --- AUTH INITIALIZATION ---
   useEffect(() => {
-    if (!isMockMode && auth) {
+    // Skip Firebase Auth listener if in forced offline mode
+    if (!isMockMode && !isOfflineMode && auth) {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 console.log("[Firebase] Auth State Changed: Logged In as", firebaseUser.uid);
@@ -265,7 +295,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } else {
         setIsFirebaseReady(true);
     }
-  }, []);
+  }, [isOfflineMode]); // Re-run if mode changes
 
   // --- DATA MIGRATION CHECK ---
   useEffect(() => {
@@ -284,6 +314,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // --- SUBSCRIPTIONS ---
   useEffect(() => {
+    // Allow subscription if we are in Mock/Offline mode OR if Firebase is ready and user is authenticated
     const canSubscribe = isMockMode || isOfflineMode || (isFirebaseReady && !!auth?.currentUser);
 
     if (!canSubscribe) {
@@ -412,8 +443,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
             if (isOfflineError) {
                  console.warn("⚠️ Client offline detected during profile fetch. Switching to Offline Mode.");
-                 setForceMock(true);
-                 setIsOfflineMode(true);
+                 // Automatically switch to offline mode on connection failure
+                 toggleOfflineMode();
                  return executeMockLogin(email);
             }
 
@@ -423,8 +454,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             }
             if (docError.message?.includes('does not exist')) {
                 console.warn("⚠️ Database missing. Switching to Offline Mode.");
-                setForceMock(true);
-                setIsOfflineMode(true);
+                toggleOfflineMode();
                 return executeMockLogin(email);
             }
             console.error("Profile Fetch Error:", docError);
@@ -441,15 +471,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
         if (isOfflineError) {
              console.warn("⚠️ Network authentication issue. Switching to Offline Mode.");
-             setForceMock(true);
-             setIsOfflineMode(true);
+             toggleOfflineMode();
              return executeMockLogin(email);
         }
 
         if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed' || error.message?.includes('does not exist')) {
             console.warn("⚠️ Backend issue detected. Switching to Offline Mode.");
-            setForceMock(true);
-            setIsOfflineMode(true);
+            toggleOfflineMode();
             return executeMockLogin(email);
         }
         
@@ -498,8 +526,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         } catch (writeErr: any) {
             if (writeErr.message?.includes('does not exist') || writeErr.message?.includes('offline')) {
                 console.warn("Permission/DB Error writing profile. Falling back to offline mode for this session.");
-                setForceMock(true);
-                setIsOfflineMode(true);
+                toggleOfflineMode();
                 // In offline mode we save to local storage
                 await saveDocument('users', newUser); 
                 return newUser.id;
@@ -517,8 +544,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
     } catch (error: any) {
         if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed' || error.message?.includes('does not exist') || error.code === 'auth/network-request-failed') {
-             setForceMock(true);
-             setIsOfflineMode(true);
+             toggleOfflineMode();
              return handleMockRegister();
         }
         console.error("Registration failed:", error);
@@ -786,7 +812,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addMaterial, updateMaterial, deleteMaterial,
     refreshLogs, resetData, exportAllData, importAllData, isSimulatedLive,
     canUseAI, canViewFullData, isAdmin, isSeniorOrAdmin,
-    currentPath, navigate, routeParams, locationState
+    currentPath, navigate, routeParams, locationState,
+    // Offline Mode control
+    isOfflineMode, toggleOfflineMode
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

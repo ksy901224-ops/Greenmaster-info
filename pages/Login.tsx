@@ -2,10 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Department } from '../types';
-import { Shield, Lock, ArrowRight, UserPlus, Mail, AlertTriangle, CheckCircle, Loader2, Copy } from 'lucide-react';
+import { Shield, Lock, ArrowRight, UserPlus, Mail, AlertTriangle, CheckCircle, Loader2, Copy, Wifi, WifiOff } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const { login, register } = useApp();
+  const { login, register, isOfflineMode, toggleOfflineMode } = useApp();
   const [mode, setMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
   
   // Login State
@@ -39,7 +39,7 @@ const Login: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (!loginEmail.trim() || !loginPassword.trim()) {
+    if (!loginEmail.trim() || (!loginPassword.trim() && !isOfflineMode)) {
         setErrorMsg("이메일과 비밀번호를 입력해주세요.");
         return;
     }
@@ -115,6 +115,17 @@ const Login: React.FC = () => {
       <div className="absolute top-10 left-10 w-32 h-32 bg-white opacity-5 rounded-full blur-2xl animate-pulse"></div>
       <div className="absolute top-20 right-20 w-64 h-64 bg-brand-500 opacity-10 rounded-full blur-3xl"></div>
 
+      {/* Mode Switcher */}
+      <div className="absolute top-6 right-6 z-20">
+          <button 
+            onClick={toggleOfflineMode}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-full text-xs font-bold transition-all shadow-md backdrop-blur-md border ${isOfflineMode ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-emerald-100 text-emerald-800 border-emerald-200'}`}
+          >
+              {isOfflineMode ? <WifiOff size={14} /> : <Wifi size={14} />}
+              <span>{isOfflineMode ? 'Local Mode (Offline)' : 'Live Server Mode'}</span>
+          </button>
+      </div>
+
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center p-4 bg-white rounded-2xl shadow-xl mb-5 transform hover:scale-105 transition-transform duration-300">
@@ -168,7 +179,7 @@ const Login: React.FC = () => {
           {mode === 'LOGIN' ? (
             <div className="animate-in fade-in slide-in-from-left-4 duration-300">
                <h2 className="text-xl font-bold text-slate-900 mb-2 text-center">직원 로그인</h2>
-               <p className="text-sm text-slate-500 mb-8 text-center">승인된 계정 이메일과 비밀번호로 접속하세요.</p>
+               <p className="text-sm text-slate-500 mb-8 text-center">{isOfflineMode ? '로컬 데이터로 접속합니다. (비밀번호 불필요)' : '승인된 계정 이메일과 비밀번호로 접속하세요.'}</p>
                
                <form onSubmit={handleLogin} className="space-y-5">
                  <div>
@@ -186,24 +197,26 @@ const Login: React.FC = () => {
                    </div>
                  </div>
                  
-                 <div>
-                   <label className="block text-xs font-bold text-slate-700 mb-1.5 ml-1">비밀번호</label>
-                   <div className="relative group">
-                     <Lock className="absolute left-3.5 top-3.5 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={18} />
-                     <input 
-                       type="password" 
-                       className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all" 
-                       placeholder="••••••••"
-                       value={loginPassword}
-                       onChange={(e) => setLoginPassword(e.target.value)}
-                       autoComplete="current-password"
-                     />
-                   </div>
-                 </div>
+                 {!isOfflineMode && (
+                     <div>
+                       <label className="block text-xs font-bold text-slate-700 mb-1.5 ml-1">비밀번호</label>
+                       <div className="relative group">
+                         <Lock className="absolute left-3.5 top-3.5 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={18} />
+                         <input 
+                           type="password" 
+                           className="w-full pl-11 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all" 
+                           placeholder="••••••••"
+                           value={loginPassword}
+                           onChange={(e) => setLoginPassword(e.target.value)}
+                           autoComplete="current-password"
+                         />
+                       </div>
+                     </div>
+                 )}
 
                  {/* Demo Hint */}
                  <div className="text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex justify-center">
-                    <span className="font-bold mr-1">Admin Demo:</span> admin@greenmaster.com / admin123
+                    <span className="font-bold mr-1">Admin Demo:</span> admin@greenmaster.com {isOfflineMode ? '' : '/ admin123'}
                  </div>
                  
                  <div className="pt-2">
@@ -233,7 +246,7 @@ const Login: React.FC = () => {
           ) : (
             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
               <h2 className="text-xl font-bold text-slate-900 mb-2 text-center">신규 계정 신청</h2>
-              <p className="text-sm text-slate-500 mb-6 text-center">관리자 승인 절차가 필요합니다.</p>
+              <p className="text-sm text-slate-500 mb-6 text-center">{isOfflineMode ? '로컬 모드에서는 회원가입이 자동으로 승인됩니다.' : '관리자 승인 절차가 필요합니다.'}</p>
               
               <form onSubmit={handleSignup} className="space-y-4">
                  <div>
@@ -284,7 +297,9 @@ const Login: React.FC = () => {
                  
                  <div className="text-xs text-orange-700 bg-orange-50 p-3 rounded-xl flex items-start border border-orange-100">
                     <AlertTriangle size={16} className="mr-2 mt-0.5 shrink-0"/>
-                    <span className="leading-relaxed">회원가입 후 <strong>관리자의 승인</strong>이 완료되어야 시스템을 이용하실 수 있습니다.</span>
+                    <span className="leading-relaxed">
+                        {isOfflineMode ? '오프라인 모드는 로컬 저장소를 사용하므로 보안에 유의하세요.' : <span>회원가입 후 <strong>관리자의 승인</strong>이 완료되어야 시스템을 이용하실 수 있습니다.</span>}
+                    </span>
                  </div>
 
                  <div className="pt-2">

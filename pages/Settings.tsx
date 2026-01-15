@@ -1,11 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson, LockIcon, Upload } from 'lucide-react';
+import { Bell, Monitor, User, Save, Moon, Sun, LogOut, Shield, Lock, Users, CheckCircle, XCircle, Edit2, X, Database, RotateCcw, Download, ShieldCheck, FileJson, LockIcon, Upload, Wifi, WifiOff } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { Department, UserRole, UserStatus } from '../types';
 
 const Settings: React.FC = () => {
-  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData, exportAllData, importAllData, isAdmin } = useApp();
+  const { user, allUsers, updateUserStatus, updateUserRole, updateUser, logout, resetData, exportAllData, importAllData, isAdmin, isOfflineMode, toggleOfflineMode } = useApp();
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(true);
   const [marketingNotif, setMarketingNotif] = useState(false);
@@ -116,6 +116,40 @@ const Settings: React.FC = () => {
       </div>
 
       <div className="grid gap-6">
+        
+        {/* Connection Mode Settings */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 relative">
+            <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center">
+                {isOfflineMode ? <WifiOff className="mr-2 text-amber-500" size={20} /> : <Wifi className="mr-2 text-emerald-500" size={20} />}
+                연결 모드 설정 (Connection Mode)
+            </h2>
+            <div className="flex flex-col md:flex-row justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100 gap-4">
+                <div>
+                    <h3 className="font-bold text-sm text-slate-800">
+                        현재 모드: <span className={isOfflineMode ? "text-amber-600" : "text-emerald-600"}>{isOfflineMode ? '로컬/오프라인 모드 (Local Mode)' : '라이브 서버 모드 (Live Server)'}</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                        {isOfflineMode 
+                            ? '브라우저 내부 저장소를 사용합니다. 인터넷 연결 없이도 작업이 가능하지만, 다른 사용자와 데이터가 공유되지 않습니다.' 
+                            : '중앙 서버(Firebase)와 실시간으로 동기화됩니다. 모든 팀원과 데이터가 공유됩니다.'}
+                    </p>
+                </div>
+                <button 
+                    onClick={() => {
+                        if (confirm(isOfflineMode 
+                            ? "라이브 서버 모드로 전환하시겠습니까? 앱이 새로고침 됩니다." 
+                            : "로컬 모드로 전환하시겠습니까? 현재 화면의 데이터 소스가 변경됩니다.")) {
+                            toggleOfflineMode();
+                        }
+                    }}
+                    className={`px-5 py-2.5 rounded-xl text-sm font-bold shadow-md transition-all whitespace-nowrap flex items-center ${isOfflineMode ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'bg-amber-500 text-white hover:bg-amber-600'}`}
+                >
+                    {isOfflineMode ? <Wifi size={16} className="mr-2"/> : <WifiOff size={16} className="mr-2"/>}
+                    {isOfflineMode ? '라이브 서버로 전환' : '로컬 모드로 전환'}
+                </button>
+            </div>
+        </div>
+
         {/* Intelligence Backup Section */}
         <div className="bg-indigo-900 rounded-2xl shadow-xl p-6 text-white relative overflow-hidden">
             <div className="absolute top-0 right-0 p-10 opacity-10"><Database size={120} /></div>
