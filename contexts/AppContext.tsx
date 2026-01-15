@@ -261,8 +261,24 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             localStorage.removeItem('greenmaster_user');
                         }
                     } else {
-                        console.warn("[Firebase] User authenticated but no profile found in Firestore. Likely pending creation.");
-                        setUser(null);
+                        // 프로필이 없는 경우 (파이어베이스 콘솔에서 직접 추가한 사용자 등)
+                        // 자동으로 슈퍼 관리자로 승격 및 프로필 생성
+                        console.log("[Firebase] New user detected (no profile). Promoting to ADMIN.");
+                        
+                        const newAdminProfile: UserProfile = {
+                            id: firebaseUser.uid,
+                            name: firebaseUser.displayName || 'Firebase Admin',
+                            email: firebaseUser.email || '',
+                            role: UserRole.ADMIN,
+                            department: Department.MANAGEMENT,
+                            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent('Admin')}&background=0D9488&color=fff`,
+                            status: 'APPROVED' // 즉시 승인
+                        };
+                        
+                        await setDoc(docRef, newAdminProfile);
+                        setUser(newAdminProfile);
+                        localStorage.setItem('greenmaster_user', JSON.stringify(newAdminProfile));
+                        console.log("👉 Auto-promoted user to ADMIN.");
                     }
                 } catch (e: any) {
                     const errCode = e.code;
@@ -433,7 +449,22 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 logActivity('LOGIN', 'USER', profile.name, 'Firebase Auth Login');
                 setUser(profile);
             } else {
-                return '사용자 프로필을 찾을 수 없습니다. (Firestore Document Missing)';
+                // 로그인 성공했지만 DB에 프로필이 없는 경우 (콘솔 추가 유저) -> 자동 관리자 생성
+                console.log("[Login] No profile found for authenticated user. Creating Admin profile.");
+                const newAdminProfile: UserProfile = {
+                    id: userCredential.user.uid,
+                    name: userCredential.user.displayName || 'Firebase Admin',
+                    email: userCredential.user.email || email,
+                    role: UserRole.ADMIN,
+                    department: Department.MANAGEMENT,
+                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent('Admin')}&background=0D9488&color=fff`,
+                    status: 'APPROVED'
+                };
+                
+                await setDoc(docRef, newAdminProfile);
+                setUser(newAdminProfile);
+                localStorage.setItem('greenmaster_user', JSON.stringify(newAdminProfile));
+                return;
             }
         } catch (docError: any) {
             // SPECIFIC HANDLER FOR OFFLINE ERRORS
@@ -518,7 +549,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             role: UserRole.INTERMEDIATE, 
             department,
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-            status: 'PENDING'
+            status: 'PENDING' // 일반 가입은 승인 대기
         };
         
         try {
