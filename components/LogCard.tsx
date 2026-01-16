@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { LogEntry, Department, UserRole } from '../types';
-import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, ShieldAlert, Zap, FileText, MapPin, Layers } from 'lucide-react';
+import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, ShieldAlert, Zap, FileText, MapPin, Layers, Phone } from 'lucide-react';
 import { analyzeLogEntry } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -91,6 +91,8 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   
   // Calculate extra courses
   const extraCoursesCount = log.relatedCourses ? log.relatedCourses.length - 1 : 0;
+  const hasExtraDetails = (log.relatedCourses && log.relatedCourses.length > 1) || log.contactPerson || (log.imageUrls && log.imageUrls.length > 0);
+  const showExpandButton = shouldTruncate || hasExtraDetails;
 
   return (
     <>
@@ -125,11 +127,63 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
             {log.content}
             {!isExpanded && shouldTruncate && <div className="absolute bottom-0 left-0 w-full h-12 bg-gradient-to-t from-white via-white/90 to-transparent cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }} />}
         </div>
-        {shouldTruncate && (
+
+        {/* Expanded Details Section */}
+        {isExpanded && (
+            <div className="mb-4 space-y-3 border-t border-slate-100 pt-3 animate-in fade-in slide-in-from-top-1 duration-300">
+                {/* Contact Info */}
+                {log.contactPerson && (
+                    <div className="flex items-center text-xs text-slate-500">
+                        <Phone size={12} className="mr-2 text-slate-400"/>
+                        <span className="font-bold mr-2 text-slate-700">관련 담당자:</span>
+                        <span className="bg-slate-50 px-2 py-0.5 rounded border border-slate-100 font-medium">{log.contactPerson}</span>
+                    </div>
+                )}
+
+                {/* Related Courses List */}
+                {log.relatedCourses && log.relatedCourses.length > 1 && (
+                    <div className="flex items-start text-xs text-slate-500">
+                        <Layers size={12} className="mr-2 mt-0.5 text-slate-400 flex-shrink-0"/>
+                        <span className="font-bold mr-2 text-slate-700 mt-0.5 flex-shrink-0">관련 골프장:</span>
+                        <div className="flex flex-wrap gap-1.5 flex-1">
+                            {log.relatedCourses.map(c => (
+                                <span key={c.id} className="bg-slate-50 border border-slate-100 px-2 py-0.5 rounded text-slate-600">
+                                    {c.name}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Attached Images */}
+                {log.imageUrls && log.imageUrls.length > 0 && (
+                    <div className="mt-2">
+                        <p className="text-xs font-bold text-slate-700 mb-2 flex items-center"><ImageIcon size={12} className="mr-2 text-slate-400"/>첨부 이미지</p>
+                        <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                            {log.imageUrls.map((url, idx) => (
+                                <img 
+                                    key={idx} 
+                                    src={url} 
+                                    alt={`Attachment ${idx}`} 
+                                    className="h-20 w-auto rounded-lg border border-slate-200 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(url, '_blank');
+                                    }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {showExpandButton && (
           <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} className="flex items-center text-xs font-bold text-slate-400 hover:text-brand-600 mb-4 transition-colors focus:outline-none w-fit">
-            {isExpanded ? <>접기 <ChevronUp size={14} className="ml-1"/></> : <>더 읽기 <ChevronDown size={14} className="ml-1"/></>}
+            {isExpanded ? <>접기 <ChevronUp size={14} className="ml-1"/></> : <>더 보기 (상세 정보) <ChevronDown size={14} className="ml-1"/></>}
           </button>
         )}
+
         <div className="mt-auto pt-4 border-t border-slate-50 flex items-center justify-between">
           <div className="flex items-center space-x-2 overflow-hidden flex-1 flex-wrap gap-y-2">
             {log.tags?.map((tag, idx) => (

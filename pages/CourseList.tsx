@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, ArrowRight, Filter, Grid, List as ListIcon, X, SlidersHorizontal, ChevronDown, Check, UserCog } from 'lucide-react';
+import { Search, MapPin, ArrowRight, Filter, Grid, List as ListIcon, X, SlidersHorizontal, ChevronDown, Check, UserCog, Briefcase, Building2 } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
-import { Region, CourseType, GrassType } from '../types';
+import { Region, CourseType, GrassType, ManagementModel } from '../types';
 
 const CourseList: React.FC = () => {
   const { courses, people, navigate } = useApp();
@@ -12,6 +12,7 @@ const CourseList: React.FC = () => {
   const [selectedType, setSelectedType] = useState<CourseType | '전체'>('전체');
   const [selectedHoles, setSelectedHoles] = useState<string | '전체'>('전체');
   const [selectedGrass, setSelectedGrass] = useState<GrassType | '전체'>('전체');
+  const [selectedMgmtModel, setSelectedMgmtModel] = useState<ManagementModel | '전체'>('전체');
   
   const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -24,6 +25,7 @@ const CourseList: React.FC = () => {
       const matchRegion = selectedRegion === '전체' || c.region === selectedRegion;
       const matchType = selectedType === '전체' || c.type === selectedType;
       const matchGrass = selectedGrass === '전체' || c.grassType === selectedGrass;
+      const matchMgmt = selectedMgmtModel === '전체' || c.management?.model === selectedMgmtModel;
       
       let matchHoles = true;
       if (selectedHoles !== '전체') {
@@ -38,20 +40,21 @@ const CourseList: React.FC = () => {
           matchManager = !!managerName && managerName.includes(managerSearch);
       }
       
-      return matchSearch && matchRegion && matchType && matchHoles && matchGrass && matchManager;
+      return matchSearch && matchRegion && matchType && matchHoles && matchGrass && matchManager && matchMgmt;
     });
-  }, [courses, people, searchTerm, managerSearch, selectedRegion, selectedType, selectedHoles, selectedGrass]);
+  }, [courses, people, searchTerm, managerSearch, selectedRegion, selectedType, selectedHoles, selectedGrass, selectedMgmtModel]);
 
   const resetFilters = () => {
       setSelectedRegion('전체');
       setSelectedType('전체');
       setSelectedHoles('전체');
       setSelectedGrass('전체');
+      setSelectedMgmtModel('전체');
       setSearchTerm('');
       setManagerSearch('');
   };
 
-  const activeFilterCount = [selectedRegion, selectedType, selectedHoles, selectedGrass].filter(f => f !== '전체').length + (managerSearch ? 1 : 0);
+  const activeFilterCount = [selectedRegion, selectedType, selectedHoles, selectedGrass, selectedMgmtModel].filter(f => f !== '전체').length + (managerSearch ? 1 : 0);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -80,7 +83,7 @@ const CourseList: React.FC = () => {
                   <h3 className="font-bold text-slate-800 flex items-center"><Filter size={16} className="mr-2 text-brand-600"/> 상세 검색 필터</h3>
                   <button onClick={resetFilters} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center"><X size={14} className="mr-1"/> 초기화</button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6">
                   <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">담당자(Manager)</label>
                       <div className="relative">
@@ -99,6 +102,10 @@ const CourseList: React.FC = () => {
                   <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">규모</label>
                       <select value={selectedHoles} onChange={(e) => setSelectedHoles(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold"><option value="전체">전체 규모</option><option value="9H">9홀 이하</option><option value="18H">18홀</option><option value="27H+">27홀 이상</option></select>
+                  </div>
+                  <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">관리 방식</label>
+                      <select value={selectedMgmtModel} onChange={(e) => setSelectedMgmtModel(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold"><option value="전체">전체 방식</option><option value="직영">직영 관리</option><option value="위탁">위탁(외주) 관리</option></select>
                   </div>
                   <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">주요 잔디</label>
@@ -120,19 +127,30 @@ const CourseList: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCourses.map(course => {
                 const manager = course.managerId ? people.find(p => p.id === course.managerId) : null;
+                const isOutsourced = course.management?.model === '위탁';
+                
                 return (
-                <div key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1 relative group">
-                    <div className={`h-24 bg-gradient-to-br from-brand-500 to-brand-700 p-6 flex flex-col justify-end`}>
-                        <h3 className="text-xl font-black text-white">{course.name}</h3>
+                <div key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all cursor-pointer transform hover:-translate-y-1 relative group flex flex-col h-full">
+                    <div className={`h-24 bg-gradient-to-br from-brand-500 to-brand-700 p-6 flex flex-col justify-end relative overflow-hidden`}>
+                        <div className="absolute top-0 right-0 p-4 opacity-10"><Building2 size={80}/></div>
+                        <h3 className="text-xl font-black text-white relative z-10">{course.name}</h3>
                     </div>
                     {manager && (
                         <div className="absolute top-4 right-4 bg-white/20 backdrop-blur-md border border-white/30 text-white text-[10px] font-bold px-2 py-1 rounded-lg flex items-center">
                             <UserCog size={12} className="mr-1"/> {manager.name}
                         </div>
                     )}
-                    <div className="p-6">
+                    <div className="p-6 flex-1 flex flex-col">
                         <div className="flex items-center text-slate-400 text-[11px] font-bold mb-4"><MapPin size={12} className="mr-1.5 text-brand-500" /> <span className="truncate">{course.address}</span></div>
-                        <div className="flex justify-between text-xs font-bold text-slate-700 border-t pt-4"><span>{course.holes} Holes</span><span>{course.type}</span></div>
+                        
+                        <div className="mt-auto space-y-3">
+                            <div className="flex justify-between text-xs font-bold text-slate-700 border-t border-slate-100 pt-4"><span>{course.holes} Holes</span><span>{course.type}</span></div>
+                            <div className={`flex items-center justify-center py-2 rounded-xl text-xs font-black border ${isOutsourced ? 'bg-amber-50 text-amber-700 border-amber-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>
+                                <Briefcase size={12} className="mr-1.5"/>
+                                {course.management?.model || '직영'}
+                                {isOutsourced && course.management?.outsourcingCompany && ` (${course.management.outsourcingCompany})`}
+                            </div>
+                        </div>
                     </div>
                 </div>
             )})}
@@ -141,15 +159,22 @@ const CourseList: React.FC = () => {
           <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
               <table className="w-full text-sm text-left">
                   <thead className="bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest border-b border-slate-100">
-                      <tr><th className="px-6 py-4">골프장 명칭</th><th className="px-6 py-4">지역</th><th className="px-6 py-4">담당자</th><th className="px-6 py-4">규모</th><th className="px-6 py-4">구분</th><th className="px-6 py-4 text-right">관리</th></tr>
+                      <tr><th className="px-6 py-4">골프장 명칭</th><th className="px-6 py-4">지역</th><th className="px-6 py-4">관리 방식</th><th className="px-6 py-4">담당자</th><th className="px-6 py-4">규모</th><th className="px-6 py-4">구분</th><th className="px-6 py-4 text-right">관리</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                       {filteredCourses.map(course => {
                           const manager = course.managerId ? people.find(p => p.id === course.managerId) : null;
+                          const isOutsourced = course.management?.model === '위탁';
                           return (
                           <tr key={course.id} onClick={() => navigate(`/courses/${course.id}`)} className="hover:bg-brand-50/30 transition-colors cursor-pointer group">
                               <td className="px-6 py-4 font-black text-slate-900">{course.name}</td>
                               <td className="px-6 py-4 text-slate-700 font-medium">{course.region}</td>
+                              <td className="px-6 py-4">
+                                  <span className={`text-[10px] font-black px-2 py-1 rounded border ${isOutsourced ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                      {course.management?.model || '직영'}
+                                      {isOutsourced && course.management?.outsourcingCompany && ` (${course.management.outsourcingCompany})`}
+                                  </span>
+                              </td>
                               <td className="px-6 py-4">
                                   {manager ? (
                                       <span className="text-[11px] font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded-md flex items-center w-fit"><UserCog size={12} className="mr-1"/> {manager.name}</span>

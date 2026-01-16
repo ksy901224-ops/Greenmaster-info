@@ -40,6 +40,30 @@ export enum GrassType {
 
 export type Region = '서울' | '경기' | '강원' | '충북' | '충남' | '전북' | '전남' | '경북' | '경남' | '제주' | '인천' | '부산' | '대구' | '울산' | '대전' | '광주' | '세종' | '기타';
 
+// --- New Types for Management Details ---
+export type ManagementModel = '직영' | '위탁';
+export type ContractType = '턴키' | '자재지급' | '인력용역' | '방제용역' | '부분위탁' | '기타';
+
+export interface CourseManagementInfo {
+  model: ManagementModel;
+  outsourcingCompany?: string; // 위탁사 명 (OO)
+  contractType?: ContractType; // 지급자재, 턴키, 인력용역, 방제용역 등
+  
+  staff: {
+    regularCount: number; // 관리직/정규직
+    dailyMale: number;    // 일용직 남
+    dailyFemale: number;  // 일용직 여
+  };
+  
+  budget: {
+    pesticide: number; // 농약 예산
+    fertilizer: number; // 비료 예산
+    material: number; // 자재 예산
+    total: number; // 총 관리 비용
+  };
+}
+// ---------------------------------------
+
 export interface GolfCoursePerson {
   personId: string;
   name: string;
@@ -69,12 +93,13 @@ export interface GolfCourse {
     tee: string;
     fairway: string;
   };
+  management?: CourseManagementInfo; // New Field
   length?: string;
   description: string;
   lat?: number;
   lng?: number;
   issues?: string[];
-  staffCount?: number;
+  staffCount?: number; // Legacy simple count, prefer management.staff.regularCount
   associatedPeople?: GolfCoursePerson[];
   managerId?: string; // Designated Key Contact / Manager ID
 }
