@@ -2,7 +2,7 @@
 import { GolfCourse, CourseType, GrassType, Region, Person, AffinityLevel, LogEntry, Department, ExternalEvent, FinancialRecord, MaterialRecord, MaterialCategory } from './types';
 
 // Bump this version to force client-side data refresh
-export const DATA_VERSION = '1.2.1-update-mgmt-info';
+export const DATA_VERSION = '1.2.2-update-outsourcing-types';
 
 // --- REAL DATA PARSING ---
 
@@ -410,6 +410,7 @@ const parseCourses = (data: string): GolfCourse[] => {
           staffCount: 0,
           management: {
               model: '직영',
+              outsourcingTypes: [], // Initialize as empty array
               staff: { regularCount: 0, dailyMale: 0, dailyFemale: 0 },
               budget: { pesticide: 0, fertilizer: 0, material: 0, total: 0 }
           }

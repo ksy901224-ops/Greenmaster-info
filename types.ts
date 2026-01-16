@@ -42,12 +42,14 @@ export type Region = '서울' | '경기' | '강원' | '충북' | '충남' | '전
 
 // --- New Types for Management Details ---
 export type ManagementModel = '직영' | '위탁';
-export type ContractType = '턴키' | '자재지급' | '인력용역' | '방제용역' | '부분위탁' | '기타';
+
+// Allow multiple types: e.g. Direct management but outsources Pest Control
+export type OutsourcingType = '전면위탁(턴키)' | '지급자재' | '인력용역' | '방제용역' | '장비용역' | '기타';
 
 export interface CourseManagementInfo {
   model: ManagementModel;
   outsourcingCompany?: string; // 위탁사 명 (OO)
-  contractType?: ContractType; // 지급자재, 턴키, 인력용역, 방제용역 등
+  outsourcingTypes?: OutsourcingType[]; // Changed from single contractType to array
   
   staff: {
     regularCount: number; // 관리직/정규직
