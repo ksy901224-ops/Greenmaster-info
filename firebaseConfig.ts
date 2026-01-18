@@ -20,11 +20,11 @@ const firebaseConfig = {
 };
 
 // API Key가 올바르게 설정되었는지 확인합니다.
-// 기본값("YOUR_API_KEY_HERE") 그대로면 Mock 모드(로컬 저장소)로 동작합니다.
+// 키가 존재하고 비어있지 않으면 설정된 것으로 간주합니다.
 const isConfigured = 
-  firebaseConfig.apiKey && 
-  firebaseConfig.apiKey !== "AIzaSyD7SFyIl_vM_Xy4PlPavHfla0C7JwMhZ4s" &&
-  firebaseConfig.projectId !== "gen-lang-client-0655618246";
+  !!firebaseConfig.apiKey && 
+  firebaseConfig.apiKey !== "YOUR_API_KEY_HERE" &&
+  firebaseConfig.apiKey !== "";
 
 export let isMockMode = !isConfigured;
 

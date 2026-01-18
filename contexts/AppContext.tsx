@@ -202,7 +202,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const executeMockLogin = (email: string) => {
       let currentUsers = allUsers;
       if (currentUsers.length === 0) {
-          // Attempt to load from local storage if state is empty
           try {
               const localUsersStr = localStorage.getItem('gm_mock_users');
               if (localUsersStr) {
@@ -237,34 +236,42 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // --- AUTH INITIALIZATION ---
   useEffect(() => {
-    // Skip Firebase Auth listener if in forced offline mode
     if (!isMockMode && !isOfflineMode && auth) {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
                 console.log("[Firebase] Auth State Changed: Logged In as", firebaseUser.uid);
                 setIsFirebaseReady(true);
                 
-                // Firestore에서 사용자 프로필 정보 동기화
                 try {
                     const docRef = doc(db, 'users', firebaseUser.uid);
                     let docSnap = await getDoc(docRef);
                     
-                    // --- SPECIFIC ADMIN OVERRIDE FOR soonyong90@gmail.com ---
-                    if (firebaseUser.email === 'soonyong90@gmail.com') {
-                        console.log("👑 Special Admin Login Detected: Forcing Admin Rights.");
+                    const isSuperAdmin = firebaseUser.email === 'soonyong90@gmail.com';
+                    
+                    if (isSuperAdmin) {
                         const forcedAdminProfile: UserProfile = {
                             id: firebaseUser.uid,
                             name: firebaseUser.displayName || '권순용',
                             email: firebaseUser.email || '',
-                            role: UserRole.ADMIN, // Force Admin
+                            role: UserRole.ADMIN,
                             department: Department.MANAGEMENT,
                             avatar: firebaseUser.photoURL || `https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff`,
-                            status: 'APPROVED' // Force Approved
+                            status: 'APPROVED'
                         };
-                        await setDoc(docRef, forcedAdminProfile, { merge: true });
-                        docSnap = await getDoc(docRef); // Refresh snapshot
+                        
+                        // Force DB update if possible
+                        try {
+                            if (!docSnap.exists() || docSnap.data().role !== UserRole.ADMIN) {
+                                await setDoc(docRef, forcedAdminProfile, { merge: true });
+                                docSnap = await getDoc(docRef);
+                            }
+                        } catch (e) { console.warn("DB Update Failed for Admin, using memory fallback"); }
+
+                        // Always set user for super admin, ignoring DB errors
+                        setUser(forcedAdminProfile);
+                        localStorage.setItem('greenmaster_user', JSON.stringify(forcedAdminProfile));
+                        return;
                     }
-                    // --------------------------------------------------------
 
                     if (docSnap.exists()) {
                         const userProfile = docSnap.data() as UserProfile;
@@ -272,57 +279,49 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             setUser(userProfile);
                             localStorage.setItem('greenmaster_user', JSON.stringify(userProfile));
                         } else {
-                            // 승인되지 않은 경우 로그아웃 처리
                             console.warn("User login attempt rejected: Status is", userProfile.status);
                             setUser(null);
                             localStorage.removeItem('greenmaster_user');
                         }
                     } else {
-                        // 프로필이 없는 경우 (파이어베이스 콘솔에서 직접 추가한 사용자 등)
-                        console.log("[Firebase] New user detected (no profile).");
-                        
                         const newProfile: UserProfile = {
                             id: firebaseUser.uid,
                             name: firebaseUser.displayName || 'New User',
                             email: firebaseUser.email || '',
-                            role: UserRole.JUNIOR, // Default role
+                            role: UserRole.JUNIOR,
                             department: Department.SALES,
                             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent('User')}&background=random`,
                             status: 'PENDING'
                         };
                         
-                        // If it's the specific admin email, force upgrade immediately
-                        if (firebaseUser.email === 'soonyong90@gmail.com') {
-                             newProfile.role = UserRole.ADMIN;
-                             newProfile.status = 'APPROVED';
-                             newProfile.department = Department.MANAGEMENT;
-                             newProfile.name = '권순용';
-                        }
-
                         await setDoc(docRef, newProfile);
-                        
-                        if (newProfile.status === 'APPROVED') {
-                            setUser(newProfile);
-                            localStorage.setItem('greenmaster_user', JSON.stringify(newProfile));
-                        } else {
-                            // Pending users don't get logged in fully locally yet
-                            console.log("User created but pending approval.");
-                        }
+                        console.log("User created but pending approval.");
                     }
                 } catch (e: any) {
+                    const isSuperAdmin = firebaseUser.email === 'soonyong90@gmail.com';
+                    if (isSuperAdmin) {
+                        const forcedAdminProfile: UserProfile = {
+                            id: firebaseUser.uid,
+                            name: '권순용',
+                            email: firebaseUser.email || '',
+                            role: UserRole.ADMIN,
+                            department: Department.MANAGEMENT,
+                            avatar: `https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff`,
+                            status: 'APPROVED'
+                        };
+                        setUser(forcedAdminProfile);
+                        return;
+                    }
+
                     const errCode = e.code;
                     const errMsg = e.message?.toLowerCase() || '';
-                    const isOfflineError = errCode === 'unavailable' || errMsg.includes('offline') || errMsg.includes('network');
-
-                    if (e.code === 'permission-denied' || e.message?.includes('permission') || e.message?.includes('insufficient')) {
-                        console.warn("[Firebase] Permission denied reading user profile. Likely pending approval or restricted rules.");
+                    if (e.code === 'permission-denied') {
+                        console.warn("[Firebase] Permission denied. Likely pending approval.");
                         setUser(null);
-                    } else if (e.message?.includes('does not exist') || isOfflineError) {
-                        // DATABASE MISSING ERROR OR OFFLINE -> SWITCH TO OFFLINE
-                        console.warn("[Firebase] Database unavailable or Client Offline. Switching to Offline Mode.");
+                    } else if (errMsg.includes('offline') || errMsg.includes('network')) {
+                        console.warn("[Firebase] Network Error. Switching to Offline Mode.");
                         setForceMock(true);
                         setIsOfflineMode(true);
-                        // Try to recover session from local storage if possible
                         const savedUser = localStorage.getItem('greenmaster_user');
                         if (savedUser) setUser(JSON.parse(savedUser));
                     } else {
@@ -340,7 +339,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     } else {
         setIsFirebaseReady(true);
     }
-  }, [isOfflineMode]); // Re-run if mode changes
+  }, [isOfflineMode]);
 
   // --- DATA MIGRATION CHECK ---
   useEffect(() => {
@@ -359,7 +358,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // --- SUBSCRIPTIONS ---
   useEffect(() => {
-    // Allow subscription if we are in Mock/Offline mode OR if Firebase is ready and user is authenticated
     const canSubscribe = isMockMode || isOfflineMode || (isFirebaseReady && !!auth?.currentUser);
 
     if (!canSubscribe) {
@@ -374,7 +372,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return;
     }
 
-    // Wrap subscriptions to handle permission errors silently for regular users who might not have list access
     const safeSubscribe = (col: string, setter: (d: any) => void, mockData: any[]) => {
         try {
             return subscribeToCollection(col, (data) => {
@@ -392,10 +389,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const unsubPeople = safeSubscribe('people', (data) => setPeople(data as Person[]), MOCK_PEOPLE);
     const unsubEvents = safeSubscribe('external_events', (data) => setExternalEvents(data as ExternalEvent[]), MOCK_EXTERNAL_EVENTS);
     
-    // RESTRICT SENSITIVE SUBSCRIPTIONS TO ADMINS ONLY
     const unsubUsers = isAdmin ? safeSubscribe('users', (data) => {
         setAllUsers(data as UserProfile[]);
-        // Update self if role changed
         if (user) {
             const updatedSelf = (data as UserProfile[]).find(u => u.id === user.id);
             if (updatedSelf && JSON.stringify(updatedSelf) !== JSON.stringify(user)) {
@@ -418,63 +413,51 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, [isFirebaseReady, isOfflineMode, user?.id, isAdmin]);
 
-  // Enrich courses with associated people
   const courses = useMemo(() => {
     return rawCourses.map(course => {
       const associatedPeople: GolfCoursePerson[] = [];
-      
       people.forEach(p => {
         if (p.currentCourseId === course.id) {
-          associatedPeople.push({
-            personId: p.id,
-            name: p.name,
-            role: p.currentRole,
-            affinity: p.affinity,
-            isCurrent: true
-          });
+          associatedPeople.push({ personId: p.id, name: p.name, role: p.currentRole, affinity: p.affinity, isCurrent: true });
         }
         p.careers.forEach(career => {
           if (career.courseId === course.id && p.currentCourseId !== course.id) {
-            associatedPeople.push({
-              personId: p.id,
-              name: p.name,
-              role: career.role,
-              affinity: p.affinity,
-              isCurrent: false
-            });
+            associatedPeople.push({ personId: p.id, name: p.name, role: career.role, affinity: p.affinity, isCurrent: false });
           }
         });
       });
-      
       return { ...course, associatedPeople };
     });
   }, [rawCourses, people]);
 
-  // LOGIN FUNCTION
   const login = async (email: string, password?: string): Promise<string | void> => {
-    if (isMockMode || isOfflineMode) {
-        return executeMockLogin(email);
-    }
-
+    if (isMockMode || isOfflineMode) return executeMockLogin(email);
     if (!auth || !password) return '비밀번호를 입력해주세요.';
 
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const docRef = doc(db, 'users', userCredential.user.uid);
+        const uid = userCredential.user.uid;
+        const isSuperAdmin = email === 'soonyong90@gmail.com';
         
-        // Handle Profile Fetch with specific permission error catch
+        const fallbackProfile: UserProfile = {
+            id: uid, name: '권순용', email: email, role: UserRole.ADMIN,
+            department: Department.MANAGEMENT,
+            avatar: `https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff`,
+            status: 'APPROVED'
+        };
+
         try {
+            const docRef = doc(db, 'users', uid);
             const docSnap = await getDoc(docRef);
+            
             if (docSnap.exists()) {
                 const profile = docSnap.data() as UserProfile;
-                
-                // Override check for specific admin
-                if (email === 'soonyong90@gmail.com' && profile.role !== UserRole.ADMIN) {
-                     // Auto-fix if needed (though onAuthStateChanged handles this mostly)
-                     console.log("Fixing permissions for admin during login...");
+                if (isSuperAdmin && profile.role !== UserRole.ADMIN) {
+                     await setDoc(docRef, { ...profile, role: UserRole.ADMIN, status: 'APPROVED' }, { merge: true });
+                     profile.role = UserRole.ADMIN;
+                     profile.status = 'APPROVED';
                 }
-
-                if (profile.status === 'PENDING' && email !== 'soonyong90@gmail.com') {
+                if (profile.status === 'PENDING' && !isSuperAdmin) {
                     await signOut(auth);
                     return '현재 관리자 승인 대기 중입니다.';
                 }
@@ -485,18 +468,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 logActivity('LOGIN', 'USER', profile.name, 'Firebase Auth Login');
                 setUser(profile);
             } else {
-                // 로그인 성공했지만 DB에 프로필이 없는 경우 -> 프로필 생성
-                const isAdminEmail = email === 'soonyong90@gmail.com';
                 const newProfile: UserProfile = {
-                    id: userCredential.user.uid,
-                    name: userCredential.user.displayName || (isAdminEmail ? '권순용' : 'New User'),
+                    id: uid,
+                    name: userCredential.user.displayName || (isSuperAdmin ? '권순용' : 'New User'),
                     email: userCredential.user.email || email,
-                    role: isAdminEmail ? UserRole.ADMIN : UserRole.JUNIOR,
-                    department: isAdminEmail ? Department.MANAGEMENT : Department.SALES,
-                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(isAdminEmail ? 'Admin' : 'User')}&background=random`,
-                    status: isAdminEmail ? 'APPROVED' : 'PENDING'
+                    role: isSuperAdmin ? UserRole.ADMIN : UserRole.JUNIOR,
+                    department: isSuperAdmin ? Department.MANAGEMENT : Department.SALES,
+                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(isSuperAdmin ? 'Admin' : 'User')}&background=random`,
+                    status: isSuperAdmin ? 'APPROVED' : 'PENDING'
                 };
-                
                 await setDoc(docRef, newProfile);
                 if (newProfile.status === 'APPROVED') {
                     setUser(newProfile);
@@ -505,63 +485,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                     await signOut(auth);
                     return '가입 신청이 완료되었습니다. 관리자 승인 대기 중입니다.';
                 }
-                return;
             }
         } catch (docError: any) {
-            // SPECIFIC HANDLER FOR OFFLINE ERRORS
-            const errCode = docError.code;
-            const errMsg = docError.message?.toLowerCase() || '';
-            const isOfflineError = errCode === 'unavailable' || errMsg.includes('offline') || errMsg.includes('network');
-
-            if (isOfflineError) {
-                 console.warn("⚠️ Client offline detected during profile fetch. Switching to Offline Mode.");
-                 // Automatically switch to offline mode on connection failure
+            console.error("Profile Fetch/Write Error:", docError);
+            if (isSuperAdmin) {
+                console.warn("👑 Super Admin Login: Bypassing DB error.");
+                setUser(fallbackProfile);
+                localStorage.setItem('greenmaster_user', JSON.stringify(fallbackProfile));
+                return;
+            }
+            if (docError.code === 'permission-denied') {
+                await signOut(auth);
+                return 'DB 접근 권한이 없습니다.';
+            }
+            if (docError.message?.includes('offline') || docError.message?.includes('network')) {
                  toggleOfflineMode();
                  return executeMockLogin(email);
             }
-
-            if (docError.code === 'permission-denied' || docError.message?.includes('permission')) {
-                await signOut(auth);
-                return '사용자 정보에 접근할 수 없습니다. (권한 부족 또는 승인 대기중)';
-            }
-            if (docError.message?.includes('does not exist')) {
-                console.warn("⚠️ Database missing. Switching to Offline Mode.");
-                toggleOfflineMode();
-                return executeMockLogin(email);
-            }
-            console.error("Profile Fetch Error:", docError);
             throw docError;
         }
-
     } catch (error: any) {
         console.error("Login failed:", error);
-        
-        // Check for offline/network errors in main authentication flow
-        const errCode = error.code;
-        const errMsg = error.message?.toLowerCase() || '';
-        const isOfflineError = errCode === 'auth/network-request-failed' || errMsg.includes('offline') || errMsg.includes('network');
-
-        if (isOfflineError) {
-             console.warn("⚠️ Network authentication issue. Switching to Offline Mode.");
+        if (error.code === 'auth/network-request-failed') {
              toggleOfflineMode();
              return executeMockLogin(email);
         }
-
-        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed' || error.message?.includes('does not exist')) {
-            console.warn("⚠️ Backend issue detected. Switching to Offline Mode.");
-            toggleOfflineMode();
-            return executeMockLogin(email);
-        }
-        
         return parseAuthError(error.code);
     }
   };
 
   const register = async (name: string, email: string, password?: string, department: Department = Department.SALES): Promise<string> => {
     const handleMockRegister = async () => {
-        if (allUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
-            throw new Error('이미 등록된 이메일입니다.');
-        }
+        if (allUsers.some(u => u.email.toLowerCase() === email.trim().toLowerCase())) throw new Error('이미 등록된 이메일입니다.');
         const newUser: UserProfile = {
           id: `user-${Date.now()}-${Math.floor(Math.random()*1000)}`,
           name, email: email.trim(), role: UserRole.INTERMEDIATE, department,
@@ -572,62 +527,54 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return newUser.id;
     };
 
-    if (isMockMode || isOfflineMode) {
-        return handleMockRegister();
-    }
-
+    if (isMockMode || isOfflineMode) return handleMockRegister();
     if (!auth || !password) throw new Error('비밀번호가 필요합니다.');
 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const uid = userCredential.user.uid;
-        console.log("👉 Registration Successful. UID:", uid);
-
-        const isAdminEmail = email === 'soonyong90@gmail.com';
+        const isSuperAdmin = email === 'soonyong90@gmail.com';
         const newUser: UserProfile = {
-            id: uid,
-            name,
-            email: email.trim(),
-            role: isAdminEmail ? UserRole.ADMIN : UserRole.INTERMEDIATE, 
-            department: isAdminEmail ? Department.MANAGEMENT : department,
+            id: uid, name, email: email.trim(),
+            role: isSuperAdmin ? UserRole.ADMIN : UserRole.INTERMEDIATE, 
+            department: isSuperAdmin ? Department.MANAGEMENT : department,
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-            status: isAdminEmail ? 'APPROVED' : 'PENDING' // 일반 가입은 승인 대기
+            status: isSuperAdmin ? 'APPROVED' : 'PENDING'
         };
         
         try {
             await setDoc(doc(db, 'users', uid), newUser);
         } catch (writeErr: any) {
+            if (isSuperAdmin) { setUser(newUser); return uid; }
             if (writeErr.message?.includes('does not exist') || writeErr.message?.includes('offline')) {
-                console.warn("Permission/DB Error writing profile. Falling back to offline mode for this session.");
                 toggleOfflineMode();
-                // In offline mode we save to local storage
                 await saveDocument('users', newUser); 
                 return newUser.id;
             }
-            
-            if (writeErr.code !== 'permission-denied') {
-                console.error("Failed to write user profile to DB:", writeErr);
-            } else {
-                console.warn("Permission denied writing profile. User assumes PENDING state.");
-            }
         }
         
-        await signOut(auth);
+        if (!isSuperAdmin) await signOut(auth);
         return uid;
         
     } catch (error: any) {
-        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/operation-not-allowed' || error.message?.includes('does not exist') || error.code === 'auth/network-request-failed') {
+        // --- AUTO-LOGIN IF ALREADY REGISTERED ---
+        if (error.code === 'auth/email-already-in-use') {
+             console.log("⚠️ Email exists. Attempting auto-login...");
+             const loginError = await login(email, password);
+             if (loginError) throw new Error(loginError);
+             return auth.currentUser?.uid || "existing-user";
+        }
+        
+        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/network-request-failed') {
              toggleOfflineMode();
              return handleMockRegister();
         }
-        console.error("Registration failed:", error);
         throw new Error(parseAuthError(error.code));
     }
   };
 
   const createUserManually = async (data: { name: string, email: string, department: Department, role: UserRole }) => {
     if (!isAdmin) throw new Error('권한 관리 권한이 없습니다.');
-    
     const newUser: UserProfile = {
       id: `user-manual-${Date.now()}`,
       ...data,
@@ -668,71 +615,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const updateUser = async (userId: string, data: Partial<UserProfile>) => {
-    if (!isAdmin) {
-        throw new Error("사용자 정보 수정 권한이 없습니다. 시스템 관리자에게 문의하세요.");
-    }
+    if (!isAdmin) throw new Error("사용자 정보 수정 권한이 없습니다. 시스템 관리자에게 문의하세요.");
     await updateDocument('users', userId, data);
     logActivity('UPDATE', 'USER', 'Profile', `Admin updated profile for user: ${userId}`);
   };
 
-  const addLog = (log: LogEntry) => {
-      saveDocument('logs', log);
-      logActivity('CREATE', 'LOG', log.title, `${log.courseName} - ${log.department}`);
-  };
-  const updateLog = async (log: LogEntry) => {
-      await updateDocument('logs', log.id, log);
-      logActivity('UPDATE', 'LOG', log.title);
-  };
-  const deleteLog = (id: string) => {
-      const target = logs.find(l => l.id === id);
-      deleteDocument('logs', id);
-      logActivity('DELETE', 'LOG', target?.title || 'Unknown Log');
-  };
+  const addLog = (log: LogEntry) => { saveDocument('logs', log); logActivity('CREATE', 'LOG', log.title, `${log.courseName} - ${log.department}`); };
+  const updateLog = async (log: LogEntry) => { await updateDocument('logs', log.id, log); logActivity('UPDATE', 'LOG', log.title); };
+  const deleteLog = (id: string) => { const target = logs.find(l => l.id === id); deleteDocument('logs', id); logActivity('DELETE', 'LOG', target?.title || 'Unknown Log'); };
 
-  const addCourse = (course: GolfCourse) => {
-      saveDocument('courses', course);
-      logActivity('CREATE', 'COURSE', course.name);
-  };
-  const updateCourse = async (course: GolfCourse) => {
-      await updateDocument('courses', course.id, course);
-      logActivity('UPDATE', 'COURSE', course.name);
-  };
-  const deleteCourse = async (id: string) => {
-      const target = rawCourses.find(c => c.id === id);
-      await deleteDocument('courses', id);
-      logActivity('DELETE', 'COURSE', target?.name || 'Unknown Course');
-  };
+  const addCourse = (course: GolfCourse) => { saveDocument('courses', course); logActivity('CREATE', 'COURSE', course.name); };
+  const updateCourse = async (course: GolfCourse) => { await updateDocument('courses', course.id, course); logActivity('UPDATE', 'COURSE', course.name); };
+  const deleteCourse = async (id: string) => { const target = rawCourses.find(c => c.id === id); await deleteDocument('courses', id); logActivity('DELETE', 'COURSE', target?.name || 'Unknown Course'); };
 
   const mergeCourses = async (targetId: string, sourceIds: string[]) => {
       if (!isAdmin) return;
-      
       const targetCourse = rawCourses.find(c => c.id === targetId);
       if (!targetCourse) return;
-
       const sources = rawCourses.filter(c => sourceIds.includes(c.id));
       
       let combinedIssues = [...(targetCourse.issues || [])];
       let combinedDesc = targetCourse.description;
-      
       sources.forEach(s => {
           if (s.issues) combinedIssues = [...combinedIssues, ...s.issues];
-          if (s.description && !combinedDesc.includes(s.description)) {
-              combinedDesc += `\n\n[Merged Info from ${s.name}]: ${s.description}`;
-          }
+          if (s.description && !combinedDesc.includes(s.description)) combinedDesc += `\n\n[Merged Info from ${s.name}]: ${s.description}`;
       });
       combinedIssues = Array.from(new Set(combinedIssues));
       
       await updateCourse({ ...targetCourse, issues: combinedIssues, description: combinedDesc });
 
       const logsToMove = logs.filter(l => sourceIds.includes(l.courseId));
-      for (const l of logsToMove) {
-          await updateLog({ ...l, courseId: targetId, courseName: targetCourse.name });
-      }
+      for (const l of logsToMove) await updateLog({ ...l, courseId: targetId, courseName: targetCourse.name });
 
       const peopleCurrent = people.filter(p => p.currentCourseId && sourceIds.includes(p.currentCourseId));
-      for (const p of peopleCurrent) {
-          await updatePerson({ ...p, currentCourseId: targetId });
-      }
+      for (const p of peopleCurrent) await updatePerson({ ...p, currentCourseId: targetId });
 
       for (const p of people) {
           let modified = false;
@@ -748,13 +664,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const fins = financials.filter(f => sourceIds.includes(f.courseId));
       for (const f of fins) await updateFinancial({ ...f, courseId: targetId });
-      
       const mats = materials.filter(m => sourceIds.includes(m.courseId));
       for (const m of mats) await updateMaterial({ ...m, courseId: targetId });
 
-      for (const id of sourceIds) {
-          await deleteCourse(id);
-      }
+      for (const id of sourceIds) await deleteCourse(id);
       
       logActivity('UPDATE', 'COURSE', targetCourse.name, `Merged ${sourceIds.length} duplicates.`);
       alert(`병합 완료: ${sources.length}건의 데이터를 '${targetCourse.name}'으로 통합했습니다.`);
@@ -772,48 +685,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
-  const updatePerson = async (person: Person) => {
-      await updateDocument('people', person.id, person);
-      logActivity('UPDATE', 'PERSON', person.name);
-  };
-  const deletePerson = (id: string) => {
-      const target = people.find(p => p.id === id);
-      deleteDocument('people', id);
-      logActivity('DELETE', 'PERSON', target?.name || 'Unknown Person');
-  };
+  const updatePerson = async (person: Person) => { await updateDocument('people', person.id, person); logActivity('UPDATE', 'PERSON', person.name); };
+  const deletePerson = (id: string) => { const target = people.find(p => p.id === id); deleteDocument('people', id); logActivity('DELETE', 'PERSON', target?.name || 'Unknown Person'); };
 
   const addExternalEvent = (event: ExternalEvent) => saveDocument('external_events', event);
   
-  const addFinancial = (record: FinancialRecord) => {
-    saveDocument('financials', record);
-    logActivity('CREATE', 'FINANCE', `${record.year} 매출`, `Course ID: ${record.courseId}`);
-  };
-  const updateFinancial = async (record: FinancialRecord) => {
-    await updateDocument('financials', record.id, record);
-    logActivity('UPDATE', 'FINANCE', `${record.year} 매출`);
-  };
-  const deleteFinancial = (id: string) => {
-    deleteDocument('financials', id);
-    logActivity('DELETE', 'FINANCE', '매출 기록');
-  };
+  const addFinancial = (record: FinancialRecord) => { saveDocument('financials', record); logActivity('CREATE', 'FINANCE', `${record.year} 매출`, `Course ID: ${record.courseId}`); };
+  const updateFinancial = async (record: FinancialRecord) => { await updateDocument('financials', record.id, record); logActivity('UPDATE', 'FINANCE', `${record.year} 매출`); };
+  const deleteFinancial = (id: string) => { deleteDocument('financials', id); logActivity('DELETE', 'FINANCE', '매출 기록'); };
 
-  const addMaterial = (record: MaterialRecord) => {
-    saveDocument('materials', record);
-    logActivity('CREATE', 'MATERIAL', record.name, `${record.category} - ${record.quantity}${record.unit}`);
-  };
-  const updateMaterial = async (record: MaterialRecord) => {
-    await updateDocument('materials', record.id, record);
-    logActivity('UPDATE', 'MATERIAL', record.name);
-  };
-  const deleteMaterial = (id: string) => {
-    const target = materials.find(m => m.id === id);
-    deleteDocument('materials', id);
-    logActivity('DELETE', 'MATERIAL', target?.name || '자재');
-  };
+  const addMaterial = (record: MaterialRecord) => { saveDocument('materials', record); logActivity('CREATE', 'MATERIAL', record.name, `${record.category} - ${record.quantity}${record.unit}`); };
+  const updateMaterial = async (record: MaterialRecord) => { await updateDocument('materials', record.id, record); logActivity('UPDATE', 'MATERIAL', record.name); };
+  const deleteMaterial = (id: string) => { const target = materials.find(m => m.id === id); deleteDocument('materials', id); logActivity('DELETE', 'MATERIAL', target?.name || '자재'); };
 
-  const refreshLogs = () => {
-    console.log("Real-time synchronization active via Firestore listeners.");
-  };
+  const refreshLogs = () => { console.log("Real-time synchronization active via Firestore listeners."); };
 
   const resetData = () => {
       if (window.confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
@@ -827,15 +712,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       exportedAt: new Date().toISOString(),
       version: "1.0.4",
       user: { name: user?.name, email: user?.email, department: user?.department },
-      collections: {
-        logs,
-        courses,
-        people,
-        financials,
-        materials,
-        externalEvents,
-        systemLogs
-      }
+      collections: { logs, courses, people, financials, materials, externalEvents, systemLogs }
     };
     
     const blob = new Blob([JSON.stringify(dataToExport, null, 2)], { type: 'application/json' });
@@ -847,18 +724,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    
     logActivity('UPDATE', 'USER', 'Data Export', 'User exported local data backup');
   };
 
   const importAllData = async (jsonData: any) => {
-      if (!jsonData || !jsonData.collections) {
-          throw new Error('유효하지 않은 백업 파일 형식입니다.');
-      }
-      
+      if (!jsonData || !jsonData.collections) throw new Error('유효하지 않은 백업 파일 형식입니다.');
       const collections = jsonData.collections;
       const tasks = [];
-
       if (collections.logs) tasks.push(seedCollection('logs', collections.logs, true));
       if (collections.courses) tasks.push(seedCollection('courses', collections.courses, true));
       if (collections.people) tasks.push(seedCollection('people', collections.people, true));
@@ -866,7 +738,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (collections.materials) tasks.push(seedCollection('materials', collections.materials, true));
       if (collections.externalEvents) tasks.push(seedCollection('external_events', collections.externalEvents, true));
       if (collections.systemLogs) tasks.push(seedCollection('system_logs', collections.systemLogs, true));
-
       await Promise.all(tasks);
       logActivity('UPDATE', 'USER', 'Data Import', 'User manually restored data from JSON backup');
   };
@@ -886,7 +757,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     refreshLogs, resetData, exportAllData, importAllData, isSimulatedLive,
     canUseAI, canViewFullData, isAdmin, isSeniorOrAdmin,
     currentPath, navigate, routeParams, locationState,
-    // Offline Mode control
     isOfflineMode, toggleOfflineMode
   };
 
