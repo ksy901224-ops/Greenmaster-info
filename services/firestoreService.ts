@@ -22,6 +22,27 @@ export const setForceMock = (enable: boolean) => {
 
 const isMock = () => configMockMode || forceMock || !db;
 
+// --- UTILITY: REMOVE UNDEFINED ---
+// Firestore throws an error if a field is undefined. It must be null or omitted.
+const sanitizeData = (data: any): any => {
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeData(item));
+  } else if (data !== null && typeof data === 'object') {
+    const newObj: any = {};
+    Object.keys(data).forEach(key => {
+      const value = data[key];
+      if (value !== undefined) {
+        newObj[key] = sanitizeData(value);
+      } else {
+        // Firestore does not accept undefined. We explicitly set it to null.
+        newObj[key] = null; 
+      }
+    });
+    return newObj;
+  }
+  return data;
+};
+
 // --- MOCK SYSTEM FOR OFFLINE MODE ---
 const listeners: Record<string, Set<(data: any[]) => void>> = {};
 const seedingLocks: Record<string, boolean> = {};
@@ -73,16 +94,21 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
     const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
     callback(data);
   }, (error) => {
-    // Gracefully handle permission errors
+    // Gracefully handle permission errors or offline errors
     if (error.code === 'permission-denied' || error.message.includes('permission')) {
         console.warn(`[Firestore] Permission denied for ${collectionName}. Subscription skipped.`);
+    } else if (error.message.includes('offline') || error.code === 'unavailable') {
+        console.warn(`[Firestore] Client is offline. Switching to mock for ${collectionName}.`);
+        // We allow the UI to handle the mode switch, just suppress the crash here
     } else {
         console.error(`Error subscribing to ${collectionName}:`, error);
     }
   });
 };
 
-export const saveDocument = async (collectionName: string, data: any) => {
+export const saveDocument = async (collectionName: string, rawData: any) => {
+  const data = sanitizeData(rawData); // Sanitize before saving to fix 'undefined' error
+
   if (isMock()) {
     const items = getLocalData(collectionName);
     const existingIndex = items.findIndex((i: any) => i.id === data.id);
@@ -105,13 +131,22 @@ export const saveDocument = async (collectionName: string, data: any) => {
        const { id, ...rest } = data; 
        await addDoc(collection(db, collectionName), rest);
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message.includes("offline") || error.code === 'unavailable') {
+        console.warn("Save failed due to offline. Saving locally instead.");
+        // Fallback to local storage if offline
+        const items = getLocalData(collectionName);
+        setLocalData(collectionName, [...items, { ...data, id: data.id || `offline-${Date.now()}` }]);
+        return;
+    }
     console.error(`Error saving to ${collectionName}:`, error);
     throw error;
   }
 };
 
-export const updateDocument = async (collectionName: string, id: string, data: any) => {
+export const updateDocument = async (collectionName: string, id: string, rawData: any) => {
+  const data = sanitizeData(rawData); // Sanitize before updating
+
   if (isMock()) {
     const items = getLocalData(collectionName);
     const updated = items.map((i: any) => i.id === id ? { ...i, ...data } : i);
@@ -165,7 +200,8 @@ export const seedCollection = async (collectionName: string, dataArray: any[], f
     for (let i = 0; i < dataArray.length; i += CHUNK_SIZE) {
       const chunk = dataArray.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(db);
-      chunk.forEach(data => {
+      chunk.forEach(rawItem => {
+        const data = sanitizeData(rawItem);
         const docRef = data.id ? doc(db, collectionName, data.id) : doc(collection(db, collectionName));
         batch.set(docRef, data);
       });

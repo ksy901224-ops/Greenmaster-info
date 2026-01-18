@@ -194,9 +194,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           actionType,
           targetType,
           targetName,
-          details
+          // FIX: Ensure details is never undefined, which breaks Firestore
+          details: details || null 
       };
-      saveDocument('system_logs', newLog);
+      // Use saveDocument safely; if in mock mode it goes to localStorage
+      saveDocument('system_logs', newLog).catch(e => console.warn("Failed to save system log", e));
   };
 
   const executeMockLogin = (email: string) => {
@@ -221,6 +223,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!foundUser && email.toLowerCase() === DEFAULT_ADMIN.email.toLowerCase()) {
            setUser(DEFAULT_ADMIN);
            localStorage.setItem('greenmaster_user', JSON.stringify(DEFAULT_ADMIN));
+           // Ensure mock mode is active before logging activity
+           setForceMock(true); 
            logActivity('LOGIN', 'USER', 'System Login (Offline Admin)');
            return;
       }
@@ -230,6 +234,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (foundUser.status === 'REJECTED') return '가입 요청이 거절되었거나 계정이 차단되었습니다.';
       setUser(foundUser);
       localStorage.setItem('greenmaster_user', JSON.stringify(foundUser));
+      setForceMock(true);
       logActivity('LOGIN', 'USER', 'System Login');
       return;
   };
@@ -315,11 +320,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
                     const errCode = e.code;
                     const errMsg = e.message?.toLowerCase() || '';
+                    // Handle Offline Error Explicitly
                     if (e.code === 'permission-denied') {
                         console.warn("[Firebase] Permission denied. Likely pending approval.");
                         setUser(null);
-                    } else if (errMsg.includes('offline') || errMsg.includes('network')) {
-                        console.warn("[Firebase] Network Error. Switching to Offline Mode.");
+                    } else if (errMsg.includes('offline') || errMsg.includes('network') || errMsg.includes('failed to get document') || e.code === 'unavailable') {
+                        console.warn("[Firebase] Network Error during profile fetch. Switching to Offline Mode.");
                         setForceMock(true);
                         setIsOfflineMode(true);
                         const savedUser = localStorage.getItem('greenmaster_user');
@@ -498,8 +504,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 await signOut(auth);
                 return 'DB 접근 권한이 없습니다.';
             }
-            if (docError.message?.includes('offline') || docError.message?.includes('network')) {
+            if (docError.message?.includes('offline') || docError.message?.includes('network') || docError.message?.includes('failed to get document') || docError.code === 'unavailable') {
                  toggleOfflineMode();
+                 // CRITICAL: Ensure we switch to mock logic synchronously for this action
+                 setForceMock(true); 
                  return executeMockLogin(email);
             }
             throw docError;
@@ -508,6 +516,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         console.error("Login failed:", error);
         if (error.code === 'auth/network-request-failed') {
              toggleOfflineMode();
+             setForceMock(true);
              return executeMockLogin(email);
         }
         return parseAuthError(error.code);
@@ -546,8 +555,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             await setDoc(doc(db, 'users', uid), newUser);
         } catch (writeErr: any) {
             if (isSuperAdmin) { setUser(newUser); return uid; }
-            if (writeErr.message?.includes('does not exist') || writeErr.message?.includes('offline')) {
+            if (writeErr.message?.includes('does not exist') || writeErr.message?.includes('offline') || writeErr.code === 'unavailable') {
                 toggleOfflineMode();
+                setForceMock(true);
                 await saveDocument('users', newUser); 
                 return newUser.id;
             }
@@ -567,6 +577,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         
         if (error.code === 'auth/configuration-not-found' || error.code === 'auth/network-request-failed') {
              toggleOfflineMode();
+             setForceMock(true);
              return handleMockRegister();
         }
         throw new Error(parseAuthError(error.code));
