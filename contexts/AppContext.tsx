@@ -247,8 +247,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 // Firestore에서 사용자 프로필 정보 동기화
                 try {
                     const docRef = doc(db, 'users', firebaseUser.uid);
-                    const docSnap = await getDoc(docRef);
+                    let docSnap = await getDoc(docRef);
                     
+                    // --- SPECIFIC ADMIN OVERRIDE FOR soonyong90@gmail.com ---
+                    if (firebaseUser.email === 'soonyong90@gmail.com') {
+                        console.log("👑 Special Admin Login Detected: Forcing Admin Rights.");
+                        const forcedAdminProfile: UserProfile = {
+                            id: firebaseUser.uid,
+                            name: firebaseUser.displayName || '권순용',
+                            email: firebaseUser.email || '',
+                            role: UserRole.ADMIN, // Force Admin
+                            department: Department.MANAGEMENT,
+                            avatar: firebaseUser.photoURL || `https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff`,
+                            status: 'APPROVED' // Force Approved
+                        };
+                        await setDoc(docRef, forcedAdminProfile, { merge: true });
+                        docSnap = await getDoc(docRef); // Refresh snapshot
+                    }
+                    // --------------------------------------------------------
+
                     if (docSnap.exists()) {
                         const userProfile = docSnap.data() as UserProfile;
                         if (userProfile.status === 'APPROVED') {
@@ -262,23 +279,35 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         }
                     } else {
                         // 프로필이 없는 경우 (파이어베이스 콘솔에서 직접 추가한 사용자 등)
-                        // 자동으로 슈퍼 관리자로 승격 및 프로필 생성
-                        console.log("[Firebase] New user detected (no profile). Promoting to ADMIN.");
+                        console.log("[Firebase] New user detected (no profile).");
                         
-                        const newAdminProfile: UserProfile = {
+                        const newProfile: UserProfile = {
                             id: firebaseUser.uid,
-                            name: firebaseUser.displayName || 'Firebase Admin',
+                            name: firebaseUser.displayName || 'New User',
                             email: firebaseUser.email || '',
-                            role: UserRole.ADMIN,
-                            department: Department.MANAGEMENT,
-                            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent('Admin')}&background=0D9488&color=fff`,
-                            status: 'APPROVED' // 즉시 승인
+                            role: UserRole.JUNIOR, // Default role
+                            department: Department.SALES,
+                            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent('User')}&background=random`,
+                            status: 'PENDING'
                         };
                         
-                        await setDoc(docRef, newAdminProfile);
-                        setUser(newAdminProfile);
-                        localStorage.setItem('greenmaster_user', JSON.stringify(newAdminProfile));
-                        console.log("👉 Auto-promoted user to ADMIN.");
+                        // If it's the specific admin email, force upgrade immediately
+                        if (firebaseUser.email === 'soonyong90@gmail.com') {
+                             newProfile.role = UserRole.ADMIN;
+                             newProfile.status = 'APPROVED';
+                             newProfile.department = Department.MANAGEMENT;
+                             newProfile.name = '권순용';
+                        }
+
+                        await setDoc(docRef, newProfile);
+                        
+                        if (newProfile.status === 'APPROVED') {
+                            setUser(newProfile);
+                            localStorage.setItem('greenmaster_user', JSON.stringify(newProfile));
+                        } else {
+                            // Pending users don't get logged in fully locally yet
+                            console.log("User created but pending approval.");
+                        }
                     }
                 } catch (e: any) {
                     const errCode = e.code;
@@ -438,7 +467,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const docSnap = await getDoc(docRef);
             if (docSnap.exists()) {
                 const profile = docSnap.data() as UserProfile;
-                if (profile.status === 'PENDING') {
+                
+                // Override check for specific admin
+                if (email === 'soonyong90@gmail.com' && profile.role !== UserRole.ADMIN) {
+                     // Auto-fix if needed (though onAuthStateChanged handles this mostly)
+                     console.log("Fixing permissions for admin during login...");
+                }
+
+                if (profile.status === 'PENDING' && email !== 'soonyong90@gmail.com') {
                     await signOut(auth);
                     return '현재 관리자 승인 대기 중입니다.';
                 }
@@ -449,21 +485,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 logActivity('LOGIN', 'USER', profile.name, 'Firebase Auth Login');
                 setUser(profile);
             } else {
-                // 로그인 성공했지만 DB에 프로필이 없는 경우 (콘솔 추가 유저) -> 자동 관리자 생성
-                console.log("[Login] No profile found for authenticated user. Creating Admin profile.");
-                const newAdminProfile: UserProfile = {
+                // 로그인 성공했지만 DB에 프로필이 없는 경우 -> 프로필 생성
+                const isAdminEmail = email === 'soonyong90@gmail.com';
+                const newProfile: UserProfile = {
                     id: userCredential.user.uid,
-                    name: userCredential.user.displayName || 'Firebase Admin',
+                    name: userCredential.user.displayName || (isAdminEmail ? '권순용' : 'New User'),
                     email: userCredential.user.email || email,
-                    role: UserRole.ADMIN,
-                    department: Department.MANAGEMENT,
-                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent('Admin')}&background=0D9488&color=fff`,
-                    status: 'APPROVED'
+                    role: isAdminEmail ? UserRole.ADMIN : UserRole.JUNIOR,
+                    department: isAdminEmail ? Department.MANAGEMENT : Department.SALES,
+                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(isAdminEmail ? 'Admin' : 'User')}&background=random`,
+                    status: isAdminEmail ? 'APPROVED' : 'PENDING'
                 };
                 
-                await setDoc(docRef, newAdminProfile);
-                setUser(newAdminProfile);
-                localStorage.setItem('greenmaster_user', JSON.stringify(newAdminProfile));
+                await setDoc(docRef, newProfile);
+                if (newProfile.status === 'APPROVED') {
+                    setUser(newProfile);
+                    localStorage.setItem('greenmaster_user', JSON.stringify(newProfile));
+                } else {
+                    await signOut(auth);
+                    return '가입 신청이 완료되었습니다. 관리자 승인 대기 중입니다.';
+                }
                 return;
             }
         } catch (docError: any) {
@@ -542,14 +583,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const uid = userCredential.user.uid;
         console.log("👉 Registration Successful. UID:", uid);
 
+        const isAdminEmail = email === 'soonyong90@gmail.com';
         const newUser: UserProfile = {
             id: uid,
             name,
             email: email.trim(),
-            role: UserRole.INTERMEDIATE, 
-            department,
+            role: isAdminEmail ? UserRole.ADMIN : UserRole.INTERMEDIATE, 
+            department: isAdminEmail ? Department.MANAGEMENT : department,
             avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`,
-            status: 'PENDING' // 일반 가입은 승인 대기
+            status: isAdminEmail ? 'APPROVED' : 'PENDING' // 일반 가입은 승인 대기
         };
         
         try {

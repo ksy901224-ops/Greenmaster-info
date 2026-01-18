@@ -34,7 +34,16 @@ const WorkLogList: React.FC = () => {
       const matchDate = (!start || logDate >= start) && (!end || logDate <= end);
 
       return matchSearch && matchDept && matchDate;
-    }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }).sort((a, b) => {
+        // Primary Sort: Date (Newest first)
+        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
+        if (dateDiff !== 0) return dateDiff;
+        
+        // Secondary Sort: Created Timestamp (Newest first) for same-day logs
+        const createdA = a.createdAt || 0;
+        const createdB = b.createdAt || 0;
+        return createdB - createdA;
+    });
   }, [logs, searchTerm, filterDept, startDate, endDate]);
 
   const resetFilters = () => {
@@ -52,7 +61,7 @@ const WorkLogList: React.FC = () => {
                 <FileText size={12}/><span>Unified Work Logs</span>
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">통합 업무 일지</h1>
-            <p className="text-slate-500 text-sm mt-1">전사 업무 기록을 조회, 검색 및 관리합니다.</p>
+            <p className="text-slate-500 text-sm mt-1">전사 업무 기록을 최신순으로 조회하고 관리합니다.</p>
         </div>
         
         <div className="flex items-center gap-3">
