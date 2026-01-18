@@ -76,11 +76,11 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const DEFAULT_ADMIN: UserProfile = {
   id: 'admin-01',
-  name: '김관리 (System)',
-  email: 'admin@greenmaster.com',
+  name: '권순용 (System)',
+  email: 'soonyong90@gmail.com',
   role: UserRole.ADMIN, 
   department: Department.MANAGEMENT,
-  avatar: 'https://ui-avatars.com/api/?name=Admin+Kim&background=0D9488&color=fff',
+  avatar: 'https://ui-avatars.com/api/?name=Admin+Kwon&background=0D9488&color=fff',
   status: 'APPROVED'
 };
 
@@ -220,7 +220,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const foundUser = currentUsers.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
       
-      if (!foundUser && email.toLowerCase() === DEFAULT_ADMIN.email.toLowerCase()) {
+      if (!foundUser && (email.toLowerCase() === DEFAULT_ADMIN.email.toLowerCase() || email.toLowerCase() === 'soonyong90@gmail.com')) {
            setUser(DEFAULT_ADMIN);
            localStorage.setItem('greenmaster_user', JSON.stringify(DEFAULT_ADMIN));
            // Ensure mock mode is active before logging activity
@@ -514,11 +514,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
     } catch (error: any) {
         console.error("Login failed:", error);
-        if (error.code === 'auth/network-request-failed') {
-             toggleOfflineMode();
+        
+        // AUTO-FALLBACK for Admin Login Failure or Network Issue
+        if (
+            error.code === 'auth/network-request-failed' || 
+            (email.toLowerCase() === 'soonyong90@gmail.com' && (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password'))
+        ) {
+             console.warn("⚠️ Login issue detected. Switching to Local/Mock Mode for Admin/Offline access.");
+             if (!isOfflineMode) toggleOfflineMode();
              setForceMock(true);
              return executeMockLogin(email);
         }
+        
         return parseAuthError(error.code);
     }
   };

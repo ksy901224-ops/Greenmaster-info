@@ -2,21 +2,21 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Department } from '../types';
-import { Shield, Lock, ArrowRight, UserPlus, Mail, AlertTriangle, CheckCircle, Loader2, Copy, Wifi, WifiOff, HelpCircle, ExternalLink, X, Code, Database, Key } from 'lucide-react';
+import { Shield, Lock, ArrowRight, UserPlus, Mail, AlertTriangle, CheckCircle, Loader2, Copy, Wifi, WifiOff, HelpCircle, ExternalLink, X, Database, Key } from 'lucide-react';
 
 const Login: React.FC = () => {
   const { login, register, isOfflineMode, toggleOfflineMode } = useApp();
   const [mode, setMode] = useState<'LOGIN' | 'SIGNUP'>('LOGIN');
   const [showGuide, setShowGuide] = useState(false);
   
-  // Login State - Pre-filled with requested admin credentials for convenience
-  const [loginEmail, setLoginEmail] = useState('soonyong90@gmail.com');
-  const [loginPassword, setLoginPassword] = useState('rnjstnsdyd1!');
+  // Login State
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   
   // Signup State
-  const [regName, setRegName] = useState('권순용');
-  const [regEmail, setRegEmail] = useState('soonyong90@gmail.com');
-  const [regPassword, setRegPassword] = useState('rnjstnsdyd1!');
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
   const [regDept, setRegDept] = useState<Department>(Department.MANAGEMENT);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -353,11 +353,6 @@ service cloud.firestore {
                        </div>
                      </div>
                  )}
-
-                 {/* Demo Hint */}
-                 <div className="text-[11px] text-slate-400 bg-slate-50 p-2.5 rounded-lg border border-slate-100 flex justify-center">
-                    <span className="font-bold mr-1">Admin Demo:</span> soonyong90@gmail.com / rnjstnsdyd1!
-                 </div>
                  
                  <div className="pt-2">
                    <button 
