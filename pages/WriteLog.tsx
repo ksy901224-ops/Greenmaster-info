@@ -30,6 +30,10 @@ const WriteLog: React.FC = () => {
   const [editingAiCourseIdx, setEditingAiCourseIdx] = useState<number | null>(null);
   const [tempAiCourseData, setTempAiCourseData] = useState<any>(null);
   
+  // NEW: Editing State for Logs (Content)
+  const [editingAiLogIdx, setEditingAiLogIdx] = useState<number | null>(null);
+  const [tempAiLogData, setTempAiLogData] = useState<any>(null);
+  
   // Tracks user-corrected course IDs for logs. Key: log index, Value: { id, name }
   const [aiLogCourseMappings, setAiLogCourseMappings] = useState<Record<number, {id: string, name: string}>>({});
 
@@ -264,7 +268,7 @@ const WriteLog: React.FC = () => {
     }
   };
 
-  // --- Inline Editing Handlers ---
+  // --- Inline Editing Handlers (Course) ---
   const startEditingAiCourse = (index: number, data: any) => {
       setEditingAiCourseIdx(index);
       setTempAiCourseData({ ...data });
@@ -282,6 +286,26 @@ const WriteLog: React.FC = () => {
       setAiResults({ ...aiResults, extractedCourses: newCourses });
       setEditingAiCourseIdx(null);
       setTempAiCourseData(null);
+  };
+
+  // --- Inline Editing Handlers (Log) ---
+  const startEditingAiLog = (index: number, data: any) => {
+      setEditingAiLogIdx(index);
+      setTempAiLogData({ ...data });
+  };
+
+  const cancelEditingAiLog = () => {
+      setEditingAiLogIdx(null);
+      setTempAiLogData(null);
+  };
+
+  const saveAiLogEdit = () => {
+      if (!aiResults || editingAiLogIdx === null) return;
+      const newLogs = [...aiResults.extractedLogs];
+      newLogs[editingAiLogIdx] = tempAiLogData;
+      setAiResults({ ...aiResults, extractedLogs: newLogs });
+      setEditingAiLogIdx(null);
+      setTempAiLogData(null);
   };
 
   const startAiAnalysis = async () => {
@@ -657,21 +681,16 @@ const WriteLog: React.FC = () => {
                                             const isMapped = !!currentMapping?.id;
                                             const displayCourseName = currentMapping?.name || log.courseName;
                                             const isRawMatchDifferent = log.rawCourseName && log.rawCourseName !== log.courseName;
-                                            
-                                            // Check matching quality for UI feedback
                                             const isExactMatch = isMapped && log.rawCourseName === currentMapping?.name;
+                                            const isEditing = editingAiLogIdx === idx;
+                                            const displayData = isEditing ? tempAiLogData : log;
 
                                             return (
-                                            <div key={idx} onClick={() => toggleSelection('LOG', idx)} className={`p-5 rounded-2xl border transition-all cursor-pointer flex gap-4 ${selectedLogIndices.has(idx) ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}>
+                                            <div key={idx} onClick={() => !isEditing && toggleSelection('LOG', idx)} className={`p-5 rounded-2xl border transition-all cursor-pointer flex gap-4 ${selectedLogIndices.has(idx) ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}>
                                                 <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center mt-1 shrink-0 ${selectedLogIndices.has(idx) ? 'bg-brand-500 border-brand-500' : 'border-slate-300'}`}>
                                                     {selectedLogIndices.has(idx) && <Check size={12} className="text-white"/>}
                                                 </div>
                                                 <div className="flex-1 w-full">
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <h4 className="font-bold text-slate-900">{log.title}</h4>
-                                                        <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded whitespace-nowrap">{log.date}</span>
-                                                    </div>
-                                                    
                                                     {/* Course Selector for Logs */}
                                                     <div className="mb-3" onClick={e => e.stopPropagation()}>
                                                         <div className="relative group">
@@ -699,20 +718,41 @@ const WriteLog: React.FC = () => {
                                                         </div>
                                                     </div>
 
-                                                    <div className="bg-white/60 p-3 rounded-xl border border-slate-100 text-sm text-slate-700 mb-2 font-medium">
-                                                        <span className="text-[10px] text-slate-400 font-black uppercase mr-2">Summary</span>
-                                                        {log.summary || log.content?.substring(0, 100)}
-                                                    </div>
-                                                    
-                                                    {log.details && (
-                                                        <details className="text-xs text-slate-500 mt-2 cursor-pointer group/details" onClick={e => e.stopPropagation()}>
-                                                            <summary className="font-bold hover:text-brand-600 transition-colors list-none flex items-center">
-                                                                <ChevronDown size={14} className="mr-1 group-open/details:rotate-180 transition-transform"/> 상세 내용 보기 (Course Specific)
-                                                            </summary>
-                                                            <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 whitespace-pre-line leading-relaxed">
-                                                                {log.details}
+                                                    {isEditing ? (
+                                                        <div className="space-y-3 bg-white p-3 rounded-xl border border-brand-200 shadow-sm" onClick={e => e.stopPropagation()}>
+                                                            <input type="text" className="w-full font-bold text-sm p-2 border rounded" value={displayData.title} onChange={e => setTempAiLogData({...displayData, title: e.target.value})} placeholder="제목" />
+                                                            <textarea className="w-full text-sm p-2 border rounded h-32" value={displayData.details} onChange={e => setTempAiLogData({...displayData, details: e.target.value})} placeholder="상세 내용" />
+                                                            <div className="flex justify-end gap-2">
+                                                                <button onClick={cancelEditingAiLog} className="px-3 py-1.5 bg-slate-100 rounded text-xs font-bold">Cancel</button>
+                                                                <button onClick={saveAiLogEdit} className="px-3 py-1.5 bg-brand-600 text-white rounded text-xs font-bold">Update Content</button>
                                                             </div>
-                                                        </details>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="flex justify-between items-start mb-2 group/edit">
+                                                                <h4 className="font-bold text-slate-900">{displayData.title}</h4>
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded whitespace-nowrap">{displayData.date}</span>
+                                                                    <button onClick={(e) => { e.stopPropagation(); startEditingAiLog(idx, log); }} className="p-1 text-slate-400 hover:text-brand-600 rounded bg-slate-50 opacity-0 group-hover/edit:opacity-100 transition-opacity"><Edit size={12}/></button>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="bg-white/60 p-3 rounded-xl border border-slate-100 text-sm text-slate-700 mb-2 font-medium">
+                                                                <span className="text-[10px] text-slate-400 font-black uppercase mr-2">Summary</span>
+                                                                {displayData.summary || displayData.content?.substring(0, 100)}
+                                                            </div>
+                                                            
+                                                            {displayData.details && (
+                                                                <details className="text-xs text-slate-500 mt-2 cursor-pointer group/details" onClick={e => e.stopPropagation()}>
+                                                                    <summary className="font-bold hover:text-brand-600 transition-colors list-none flex items-center">
+                                                                        <ChevronDown size={14} className="mr-1 group-open/details:rotate-180 transition-transform"/> 상세 내용 보기 (Course Specific)
+                                                                    </summary>
+                                                                    <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 whitespace-pre-line leading-relaxed">
+                                                                        {displayData.details}
+                                                                    </div>
+                                                                </details>
+                                                            )}
+                                                        </>
                                                     )}
                                                 </div>
                                             </div>

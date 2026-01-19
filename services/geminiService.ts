@@ -70,22 +70,17 @@ export const analyzeDocument = async (
 
       [분석 및 추출 가이드라인 - 매우 중요]
       
-      1. **업무 일지 (Logs) 분리 및 매칭 원칙 (Critical)**:
-         - **골프장별 완벽 분리**: 문서 내에 서로 다른 골프장에 대한 내용이 섞여 있다면, **반드시 골프장 단위로 내용을 분리하여 각각 별도의 Log 항목**으로 생성하세요. 절대 하나로 뭉뚱그리지 마세요.
-           - (X) 잘못된 예: "태릉CC는 배수 공사 중이고, 남서울CC는 미팅함" (하나의 로그로 작성 금지)
-           - (O) 올바른 예: 
-             Log 1 -> courseName: "태릉 골프장", details: "배수 공사 진행 중..."
-             Log 2 -> courseName: "남서울컨트리클럽", details: "대표이사 미팅 진행..."
-         
-         - **매칭 정확도**: 'courseName' 필드는 위 'Reference DB'에 있는 명칭과 정확히 일치시키는 것을 최우선으로 하세요.
-         - **내용의 구체성**: 각 골프장에 해당하는 구체적인 수치, 이슈, 대화 내용만 'details'에 담으세요. 다른 골프장 이야기는 섞지 마세요.
+      1. **문맥 결합 프로토콜 (Context Binding Protocol) - 엄격 준수**:
+         - **근접성 원칙 (Proximity Rule)**: 특정 골프장 이름이 언급된 문장과 그 직후에 이어지는 문장들만 해당 골프장의 정보로 간주하세요.
+         - **섹션 분리 (Section Isolation)**: 문서가 여러 단락이나 표로 나뉘어 있다면, 시각적/구조적 구분을 엄격히 따르세요. A골프장 섹션에 있는 내용을 B골프장 로그에 절대 포함시키지 마세요.
+         - **모호성 회피 (Ambiguity Handling)**: 주어가 생략되었거나 어떤 골프장의 내용인지 100% 확신할 수 없는 경우, 억지로 매핑하지 말고 '기타/공통' 또는 '[검증 필요]' 태그를 붙여 별도 로그로 추출하세요.
 
-      2. **골프장 (Courses)**: 
-         - 새로운 골프장 정보(제원, 주소, 홀수 등)가 발견된 경우에만 추출하세요.
-         - 단순 업무 보고에 언급된 수준이면 Courses 목록에는 추가하지 말고 Logs에만 남기세요.
+      2. **업무 일지 (Logs) 상세 작성**:
+         - **details 필드**: "공사 진행함" 같이 짧게 쓰지 말고, "3번 홀 그린 주변 배수 불량으로 유공관 교체 작업 착수 (진척률 30%)" 처럼 육하원칙에 의거하여 최대한 상세하게 기술하세요.
+         - **Fact-Check**: 금액, 날짜, 인원 수 등 숫자가 포함된 정보는 반드시 해당 골프장이 맞는지 두 번 확인하세요.
 
-      3. **인물 (People)**: 
-         - 성함, 직책, 성향/특징을 추출하세요. 해당 인물이 소속된 골프장 이름도 'Reference DB' 기준으로 매핑하세요.
+      3. **골프장 (Courses) 및 인물 (People)**: 
+         - 새로운 정보가 발견된 경우에만 추출하며, 단순 언급은 Logs에만 남기세요.
 
       반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요. Markdown 포맷 없이 순수 JSON만 출력하세요.
     `
@@ -130,7 +125,7 @@ export const analyzeDocument = async (
                   rawCourseName: { type: Type.STRING, description: "The exact string found in the text" },
                   title: { type: Type.STRING, description: "Title specific to this course's issue" },
                   summary: { type: Type.STRING, description: "Key takeaway summary for this course" },
-                  details: { type: Type.STRING, description: "Full detailed content specific to this course" },
+                  details: { type: Type.STRING, description: "Full detailed content specific to this course. Use bullet points (-) for clarity." },
                   strategy: { type: Type.STRING },
                   risk: { type: Type.STRING },
                   priority: { type: Type.NUMBER },
