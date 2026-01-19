@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { Department, LogEntry } from '../types';
 import LogCard from '../components/LogCard';
-import { Search, Filter, Calendar, FileText, Plus, X, List, Grid } from 'lucide-react';
+import { Search, Filter, Calendar, FileText, Plus, X, List, Grid, ArrowUpDown, ArrowDown, ArrowUp } from 'lucide-react';
 
 const WorkLogList: React.FC = () => {
   const { logs, user, navigate } = useApp();
@@ -14,6 +14,7 @@ const WorkLogList: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [viewMode, setViewMode] = useState<'GRID' | 'LIST'>('GRID');
+  const [sortOrder, setSortOrder] = useState<'LATEST' | 'OLDEST'>('LATEST');
 
   // Filter Logic
   const filteredLogs = useMemo(() => {
@@ -35,22 +36,31 @@ const WorkLogList: React.FC = () => {
 
       return matchSearch && matchDept && matchDate;
     }).sort((a, b) => {
-        // Primary Sort: Date (Newest first)
-        const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
-        if (dateDiff !== 0) return dateDiff;
-        
-        // Secondary Sort: Created Timestamp (Newest first) for same-day logs
+        const dateA = new Date(a.date).getTime();
+        const dateB = new Date(b.date).getTime();
         const createdA = a.createdAt || 0;
         const createdB = b.createdAt || 0;
-        return createdB - createdA;
+
+        if (sortOrder === 'LATEST') {
+            // Primary Sort: Date (Newest first)
+            if (dateB !== dateA) return dateB - dateA;
+            // Secondary Sort: Created Timestamp (Newest first)
+            return createdB - createdA;
+        } else {
+            // Primary Sort: Date (Oldest first)
+            if (dateA !== dateB) return dateA - dateB;
+            // Secondary Sort: Created Timestamp (Oldest first)
+            return createdA - createdB;
+        }
     });
-  }, [logs, searchTerm, filterDept, startDate, endDate]);
+  }, [logs, searchTerm, filterDept, startDate, endDate, sortOrder]);
 
   const resetFilters = () => {
       setSearchTerm('');
       setFilterDept('ALL');
       setStartDate('');
       setEndDate('');
+      setSortOrder('LATEST');
   };
 
   return (
@@ -61,7 +71,7 @@ const WorkLogList: React.FC = () => {
                 <FileText size={12}/><span>Unified Work Logs</span>
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tight">통합 업무 일지</h1>
-            <p className="text-slate-500 text-sm mt-1">전사 업무 기록을 최신순으로 조회하고 관리합니다.</p>
+            <p className="text-slate-500 text-sm mt-1">전사 업무 기록을 조회하고 원하는 내용을 검색할 수 있습니다.</p>
         </div>
         
         <div className="flex items-center gap-3">
@@ -76,11 +86,12 @@ const WorkLogList: React.FC = () => {
 
       {/* Filter Section */}
       <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-2 relative group">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+              {/* Search Bar - Larger */}
+              <div className="md:col-span-5 relative group">
                   <input 
                     type="text" 
-                    placeholder="제목, 내용, 골프장, 작성자 검색..." 
+                    placeholder="제목, 내용, 골프장, 작성자, 태그 검색..." 
                     className="w-full pl-11 pr-4 py-3 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500 outline-none transition-all font-medium text-sm bg-slate-50 focus:bg-white" 
                     value={searchTerm} 
                     onChange={(e) => setSearchTerm(e.target.value)} 
@@ -88,7 +99,8 @@ const WorkLogList: React.FC = () => {
                   <Search className="absolute left-4 top-3.5 text-slate-400 group-focus-within:text-brand-500 transition-colors" size={18} />
               </div>
               
-              <div className="relative">
+              {/* Department Filter */}
+              <div className="md:col-span-3 relative">
                   <Filter className="absolute left-4 top-3.5 text-slate-400 pointer-events-none" size={18} />
                   <select 
                     value={filterDept} 
@@ -100,7 +112,8 @@ const WorkLogList: React.FC = () => {
                   </select>
               </div>
 
-              <div className="flex gap-2 items-center">
+              {/* Date Filter */}
+              <div className="md:col-span-4 flex gap-2 items-center">
                   <div className="relative flex-1">
                       <input 
                         type="date" 
@@ -120,18 +133,40 @@ const WorkLogList: React.FC = () => {
                   </div>
               </div>
           </div>
-          <div className="flex justify-between items-center mt-4 pt-4 border-t border-slate-100">
+
+          <div className="flex flex-col md:flex-row justify-between items-center mt-4 pt-4 border-t border-slate-100 gap-4">
               <div className="flex items-center text-xs font-bold text-slate-500">
-                  총 <span className="text-brand-600 mx-1 text-base">{filteredLogs.length}</span> 건의 기록이 있습니다.
+                  <span className="bg-slate-100 px-2 py-1 rounded-md mr-2">Total</span>
+                  <span className="text-brand-600 text-base mr-1">{filteredLogs.length}</span> 건의 기록
               </div>
-              <div className="flex gap-3">
-                  <button onClick={resetFilters} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center transition-colors">
-                      <X size={14} className="mr-1"/> 필터 초기화
-                  </button>
-                  <div className="flex bg-slate-100 p-1 rounded-lg">
-                      <button onClick={() => setViewMode('GRID')} className={`p-1.5 rounded-md transition-all ${viewMode === 'GRID' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400'}`}><Grid size={16}/></button>
-                      <button onClick={() => setViewMode('LIST')} className={`p-1.5 rounded-md transition-all ${viewMode === 'LIST' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400'}`}><List size={16}/></button>
+              
+              <div className="flex gap-3 items-center w-full md:w-auto justify-end">
+                  {/* Sort Control */}
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                      <button 
+                        onClick={() => setSortOrder('LATEST')}
+                        className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${sortOrder === 'LATEST' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <ArrowDown size={14} className="mr-1"/> 최신순
+                      </button>
+                      <button 
+                        onClick={() => setSortOrder('OLDEST')}
+                        className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${sortOrder === 'OLDEST' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <ArrowUp size={14} className="mr-1"/> 과거순
+                      </button>
                   </div>
+
+                  <div className="w-px h-6 bg-slate-200 mx-1 hidden md:block"></div>
+
+                  <div className="flex bg-slate-100 p-1 rounded-xl">
+                      <button onClick={() => setViewMode('GRID')} className={`p-2 rounded-lg transition-all ${viewMode === 'GRID' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="그리드 뷰"><Grid size={16}/></button>
+                      <button onClick={() => setViewMode('LIST')} className={`p-2 rounded-lg transition-all ${viewMode === 'LIST' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`} title="리스트 뷰"><List size={16}/></button>
+                  </div>
+
+                  <button onClick={resetFilters} className="text-xs font-bold text-slate-400 hover:text-red-500 flex items-center transition-colors ml-2">
+                      <X size={14} className="mr-1"/> 초기화
+                  </button>
               </div>
           </div>
       </div>
