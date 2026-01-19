@@ -31,7 +31,7 @@ const getMockResponse = (message: string) => {
 };
 
 /**
- * Enhanced Multi-Entity Extraction with Confidence Scores
+ * Enhanced Multi-Entity Extraction with Structure Recognition (Table vs List)
  */
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
@@ -50,37 +50,36 @@ export const analyzeDocument = async (
       }
   }
 
-  // Optimize the list of courses to avoid token limits if the list is huge,
-  // but for now we assume it fits or is truncated logically.
   const courseListString = existingCourseNames.join(", ");
 
   contentParts.push({
     text: `
-      당신은 대한민국 골프장 비즈니스 인텔리전스 데이터 분석 전문가입니다. 
-      제공된 문서(이미지, PDF, 텍스트 등)를 정밀 분석하여 구조화된 JSON 데이터로 추출하세요.
+      당신은 대한민국 골프장 비즈니스 인텔리전스 데이터 정밀 분석관입니다. 
+      제공된 문서(이미지, PDF, 텍스트)는 주로 **'표(Table)'** 또는 **'번호 매기기(List 1. 2. 3...)'** 형식의 업무 보고서입니다.
+      각 골프장과 그에 해당하는 업무 내용을 정확히 1:1로 매칭하여 JSON으로 추출하십시오.
 
       [분석 컨텍스트 힌트]
-      사용자가 제공한 추가 힌트: "${contextHint}"
-      (이 힌트를 바탕으로 날짜, 주제, 관련 골프장을 유추하세요.)
+      "${contextHint}"
 
-      [매칭 기준 데이터베이스 (Reference DB - 중요)]
-      아래는 현재 시스템에 등록된 골프장 명칭 목록입니다. 
-      문서에서 추출된 골프장 이름이 아래 목록의 이름과 유사하다면(예: 별칭, 약어 사용 시), **반드시 이 목록에 있는 '표준 명칭'으로 변환(Normalize)**하여 출력하세요.
-      목록: [${courseListString}]
+      [매칭 기준 데이터베이스 (Reference DB)]
+      시스템 보유 골프장 명칭: [${courseListString}]
+      * 추출된 이름이 위 목록과 유사하면 표준 명칭으로 변환하십시오.
 
-      [분석 및 추출 가이드라인 - 매우 중요]
-      
-      1. **문맥 결합 프로토콜 (Context Binding Protocol) - 엄격 준수**:
-         - **근접성 원칙 (Proximity Rule)**: 특정 골프장 이름이 언급된 문장과 그 직후에 이어지는 문장들만 해당 골프장의 정보로 간주하세요.
-         - **섹션 분리 (Section Isolation)**: 문서가 여러 단락이나 표로 나뉘어 있다면, 시각적/구조적 구분을 엄격히 따르세요. A골프장 섹션에 있는 내용을 B골프장 로그에 절대 포함시키지 마세요.
-         - **모호성 회피 (Ambiguity Handling)**: 주어가 생략되었거나 어떤 골프장의 내용인지 100% 확신할 수 없는 경우, 억지로 매핑하지 말고 '기타/공통' 또는 '[검증 필요]' 태그를 붙여 별도 로그로 추출하세요.
+      [구조별 파싱 알고리즘 - 엄격 준수]
 
-      2. **업무 일지 (Logs) 상세 작성**:
-         - **details 필드**: "공사 진행함" 같이 짧게 쓰지 말고, "3번 홀 그린 주변 배수 불량으로 유공관 교체 작업 착수 (진척률 30%)" 처럼 육하원칙에 의거하여 최대한 상세하게 기술하세요.
-         - **Fact-Check**: 금액, 날짜, 인원 수 등 숫자가 포함된 정보는 반드시 해당 골프장이 맞는지 두 번 확인하세요.
+      1. **Case A: 표(Table) 형식 보고서**:
+         - 이미지가 표(Grid) 형태라면, **각 행(Row)을 독립적인 데이터 유닛**으로 처리하십시오.
+         - '골프장명' 또는 '현장명' 컬럼을 기준으로 행을 분리하십시오.
+         - **절대 규칙**: 윗 행의 내용이 아랫 행으로 섞이거나 침범해서는 안 됩니다. 각 행은 완전히 분리된 사실입니다.
 
-      3. **골프장 (Courses) 및 인물 (People)**: 
-         - 새로운 정보가 발견된 경우에만 추출하며, 단순 언급은 Logs에만 남기세요.
+      2. **Case B: 번호 목록(List) 형식 보고서**:
+         - "1. A골프장", "2. B골프장" 처럼 번호로 나열된 경우, **해당 번호 항목 전체를 하나의 구역(Zone)**으로 설정하십시오.
+         - 줄바꿈이 있더라도 다음 번호(예: "2.")가 나오기 전까지의 모든 텍스트는 앞선 골프장의 내용입니다.
+         - 예: "1. 태릉CC: 배수 공사 진행 중..." -> 이 문장 전체가 태릉CC의 정보입니다.
+
+      3. **매칭 검증 (Evidence Check)**:
+         - 추출된 정보가 정확한지 확인하기 위해, 판단의 근거가 된 **원본 텍스트 문장(또는 표의 한 행 전체)**을 \`evidenceSnippet\` 필드에 그대로 복사하십시오.
+         - 만약 골프장 이름이 명시되지 않은 '공통 사항'이라면, \`courseName\`을 "Common" 또는 "Unknown"으로 설정하십시오.
 
       반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요. Markdown 포맷 없이 순수 JSON만 출력하세요.
     `
@@ -91,7 +90,7 @@ export const analyzeDocument = async (
       model: 'gemini-2.0-flash',
       contents: { parts: contentParts },
       config: {
-        temperature: 0.1, // Lower temperature for more deterministic extraction
+        temperature: 0.0, // Zero temperature for maximum determinism regarding structure
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -122,13 +121,11 @@ export const analyzeDocument = async (
                 properties: {
                   date: { type: Type.STRING },
                   courseName: { type: Type.STRING, description: "Normalized course name from Reference DB" },
-                  rawCourseName: { type: Type.STRING, description: "The exact string found in the text" },
-                  title: { type: Type.STRING, description: "Title specific to this course's issue" },
-                  summary: { type: Type.STRING, description: "Key takeaway summary for this course" },
-                  details: { type: Type.STRING, description: "Full detailed content specific to this course. Use bullet points (-) for clarity." },
-                  strategy: { type: Type.STRING },
-                  risk: { type: Type.STRING },
-                  priority: { type: Type.NUMBER },
+                  rawCourseName: { type: Type.STRING, description: "The exact course name found in the document row/item" },
+                  title: { type: Type.STRING, description: "Specific topic of the work" },
+                  summary: { type: Type.STRING },
+                  details: { type: Type.STRING, description: "Full detailed content. Use bullet points." },
+                  evidenceSnippet: { type: Type.STRING, description: "The raw text row or list item used as source" },
                   department: { type: Type.STRING },
                   tags: { type: Type.ARRAY, items: { type: Type.STRING } },
                   confidence: { type: Type.NUMBER }
@@ -150,7 +147,7 @@ export const analyzeDocument = async (
               }
             }
           },
-          required: ["extractedCourses", "extractedLogs", "extractedPeople", "documentSummary", "documentDetailedReport"]
+          required: ["extractedCourses", "extractedLogs", "extractedPeople", "documentSummary"]
         }
       }
     });
@@ -185,7 +182,6 @@ export const createChatSession = (
   `;
 
   if (!hasKey || !ai) {
-      // Return a dummy object that mimics a Chat session with error message
       return {
           sendMessage: async () => ({ text: "시스템 오류: API 키가 설정되지 않았습니다." }),
           sendMessageStream: async function* () { yield { text: "시스템 오류: API 키가 설정되지 않았습니다. 관리자에게 문의하세요." } as any; }
@@ -208,34 +204,17 @@ export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
     다음 업무 일지를 정밀 분석하여 임원 보고용 비즈니스 인텔리전스 리포트를 작성하세요.
     
     [일지 데이터]
-    - 메인 골프장: ${log.courseName} (참고: 내용에 다른 골프장들이 포함되어 있을 수 있음)
+    - 메인 골프장: ${log.courseName}
     - 부서: ${log.department}
     - 제목: ${log.title}
     - 내용: ${log.content}
 
-    [필수 작성 포맷 - 반드시 아래 5개 섹션 헤더를 사용하세요]
-    
+    [작성 포맷]
     1. **핵심 요약 (Executive Summary)**
-       - 전체 내용을 1~2문장으로 요약하여, 의사결정자가 즉시 파악할 수 있는 핵심 메시지를 제시하세요.
-    
     2. **상세 분석 (Detailed Analysis)**
-       - 업무 내용에 포함된 수치, 인물, 기술적 이슈를 구체적으로 분석하세요.
-       - 단순 나열이 아닌, 현상의 원인과 배경을 추론하여 설명하세요.
-    
     3. **전략적 시사점 (Strategic Implications)**
-       - 이 건이 우리 회사 또는 해당 골프장 비즈니스에 미치는 긍정적/부정적 영향을 분석하세요.
-       - 영업 기회, 관계 강화 포인트, 혹은 운영 개선점 등을 도출하세요.
-    
     4. **잠재적 리스크 및 대응 (Risks & Countermeasures)**
-       - 향후 발생 가능한 문제점(재무, 관계, 운영, 법적 등)을 경고하세요.
-       - 이에 대한 즉각적이고 구체적인 실행 액션(Action Plan)을 제안하세요.
-
-    5. **골프장별 세부 특이사항 (Course-Specific Details)**
-       - (매우 중요) 만약 일지 내용에 **두 개 이상의 골프장**이 언급되어 있거나, 메인 골프장 외 다른 현장 이야기가 있다면, 
-         반드시 아래 포맷으로 각각 분리하여 정리하세요. 단일 골프장일 경우 '특이사항 없음'으로 표기.
-         - [골프장명]: 해당 골프장 관련 이슈 및 특이사항 요약
-         - [골프장명]: 해당 골프장 관련 이슈 및 특이사항 요약
-
+    
     톤앤매너: 전문적, 객관적, 통찰력 있음. Markdown 형식을 준수하세요.
   `;
 

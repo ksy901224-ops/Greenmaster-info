@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region, CareerRecord } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter, CheckSquare, Square, UserCheck, Edit, PenTool, Layers, ArrowRightLeft, Lightbulb, Link2, MessageSquare } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter, CheckSquare, Square, UserCheck, Edit, PenTool, Layers, ArrowRightLeft, Lightbulb, Link2, MessageSquare, Quote, Eye } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -466,7 +466,8 @@ const WriteLog: React.FC = () => {
               
               // Combined content: Summary + Details + Strategy/Risk
               // Strictly formatted for clarity per course
-              const combinedContent = `[요약]\n${l.summary || l.content || ''}\n\n[상세 내용]\n${l.details || ''}\n\n[전략 가치]\n${l.strategy || ''}\n\n[리스크]\n${l.risk || ''}`;
+              // Add evidence to content for future reference if needed, or rely on detailed structure
+              const combinedContent = `[요약]\n${l.summary || l.content || ''}\n\n[상세 내용]\n${l.details || ''}\n\n[매칭 근거]\n${l.evidenceSnippet || '자동 추출됨'}\n\n[전략 가치]\n${l.strategy || ''}\n\n[리스크]\n${l.risk || ''}`;
               
               await addLog({ 
                   id: `l-ai-${Date.now()}-${idx}`, 
@@ -742,10 +743,26 @@ const WriteLog: React.FC = () => {
                                                                 {displayData.summary || displayData.content?.substring(0, 100)}
                                                             </div>
                                                             
+                                                            {/* Evidence Snippet Section */}
+                                                            {displayData.evidenceSnippet && (
+                                                                <div className="mb-3 bg-amber-50/50 p-3 rounded-xl border border-amber-100 flex items-start gap-3">
+                                                                    <div className="p-1.5 bg-amber-100 rounded-lg text-amber-500 shrink-0"><Quote size={12}/></div>
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">Source Evidence (Raw Text)</span>
+                                                                            <span className="text-[9px] text-amber-500 bg-white px-2 py-0.5 rounded-full border border-amber-100 font-bold">Verification</span>
+                                                                        </div>
+                                                                        <p className="text-xs text-slate-700 font-medium italic leading-relaxed bg-white/50 p-2 rounded-lg border border-amber-100/50">
+                                                                            "{displayData.evidenceSnippet}"
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
                                                             {displayData.details && (
                                                                 <details className="text-xs text-slate-500 mt-2 cursor-pointer group/details" onClick={e => e.stopPropagation()}>
                                                                     <summary className="font-bold hover:text-brand-600 transition-colors list-none flex items-center">
-                                                                        <ChevronDown size={14} className="mr-1 group-open/details:rotate-180 transition-transform"/> 상세 내용 보기 (Course Specific)
+                                                                        <ChevronDown size={14} className="mr-1 group-open/details:rotate-180 transition-transform"/> 상세 내용 보기 (Structured Data)
                                                                     </summary>
                                                                     <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 whitespace-pre-line leading-relaxed">
                                                                         {displayData.details}
