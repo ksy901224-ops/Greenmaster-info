@@ -17,7 +17,7 @@ const WriteLog: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<string>('');
-  const [contextHint, setContextHint] = useState(''); // New Context Hint
+  const [contextHint, setContextHint] = useState(''); 
   const [aiResults, setAiResults] = useState<{
       extractedCourses: any[],
       extractedLogs: any[],
@@ -110,6 +110,28 @@ const WriteLog: React.FC = () => {
         }
     }
   }, [editingLog, locationState, globalPeople, globalCourses]);
+
+  // --- Helper: Find Best Course Match ---
+  const findBestMatch = (extractedName: string, courses: GolfCourse[]) => {
+      // 1. Exact match
+      let match = courses.find(c => c.name === extractedName);
+      if (match) return match;
+
+      // 2. Normalized match (remove spaces, ignore case)
+      const normalize = (s: string) => s.replace(/\s+/g, '').toLowerCase();
+      const target = normalize(extractedName);
+      match = courses.find(c => normalize(c.name) === target);
+      if (match) return match;
+
+      // 3. Keyword match (if extracted name contains core name like "Taereung" but missing "CC")
+      const coreName = extractedName.replace(/CC|GC|컨트리클럽|골프장|골프클럽/gi, '').trim();
+      if (coreName.length > 2) {
+          match = courses.find(c => c.name.includes(coreName));
+          if (match) return match;
+      }
+
+      return null;
+  };
 
   const handleLogSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -292,15 +314,13 @@ const WriteLog: React.FC = () => {
           });
           setSelectedCourseIndices(highConfCourses);
 
-          // Auto-match courses for logs
+          // Auto-match courses for logs using 3-Step Matching
           const initialLogMappings: Record<number, {id: string, name: string}> = {};
           const highConfLogs = new Set<number>();
           results.extractedLogs.forEach((l: any, i: number) => { 
               if(l.confidence > 0.7) highConfLogs.add(i);
               
-              // Smart fuzzy match logic handled by the AI service mostly, 
-              // but we verify if the AI-provided 'courseName' exists in our DB.
-              const matched = globalCourses.find(gc => gc.name === l.courseName);
+              const matched = findBestMatch(l.courseName, globalCourses);
               if (matched) {
                   initialLogMappings[i] = { id: matched.id, name: matched.name };
               }
@@ -637,6 +657,9 @@ const WriteLog: React.FC = () => {
                                             const isMapped = !!currentMapping?.id;
                                             const displayCourseName = currentMapping?.name || log.courseName;
                                             const isRawMatchDifferent = log.rawCourseName && log.rawCourseName !== log.courseName;
+                                            
+                                            // Check matching quality for UI feedback
+                                            const isExactMatch = isMapped && log.rawCourseName === currentMapping?.name;
 
                                             return (
                                             <div key={idx} onClick={() => toggleSelection('LOG', idx)} className={`p-5 rounded-2xl border transition-all cursor-pointer flex gap-4 ${selectedLogIndices.has(idx) ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}>
@@ -654,8 +677,8 @@ const WriteLog: React.FC = () => {
                                                         <div className="relative group">
                                                             <div className="flex items-center gap-2 mb-1">
                                                                 {isMapped ? (
-                                                                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded flex items-center">
-                                                                        <CheckCircle size={10} className="mr-1"/> DB Matched
+                                                                    <span className={`text-[10px] font-black px-2 py-0.5 rounded flex items-center ${isExactMatch ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                                        <CheckCircle size={10} className="mr-1"/> {isExactMatch ? 'Exact Match' : 'Smart Match'}
                                                                         {isRawMatchDifferent && <span className="ml-1 opacity-75">(원본: {log.rawCourseName})</span>}
                                                                     </span>
                                                                 ) : (
@@ -684,7 +707,7 @@ const WriteLog: React.FC = () => {
                                                     {log.details && (
                                                         <details className="text-xs text-slate-500 mt-2 cursor-pointer group/details" onClick={e => e.stopPropagation()}>
                                                             <summary className="font-bold hover:text-brand-600 transition-colors list-none flex items-center">
-                                                                <ChevronDown size={14} className="mr-1 group-open/details:rotate-180 transition-transform"/> 상세 내용 보기
+                                                                <ChevronDown size={14} className="mr-1 group-open/details:rotate-180 transition-transform"/> 상세 내용 보기 (Course Specific)
                                                             </summary>
                                                             <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 whitespace-pre-line leading-relaxed">
                                                                 {log.details}
@@ -737,6 +760,7 @@ const WriteLog: React.FC = () => {
 
             {activeTab === 'LOG' && (
                 <form onSubmit={handleLogSubmit} className="space-y-8 animate-in fade-in duration-300">
+                    {/* ... (Existing Manual Log Form) ... */}
                     <div className="flex justify-between items-center border-b border-slate-100 pb-6 mb-6">
                         <h3 className="text-xl font-black text-slate-900 flex items-center"><FileText className="mr-3 text-brand-600"/> 업무 기록 작성</h3>
                     </div>
@@ -838,6 +862,7 @@ const WriteLog: React.FC = () => {
                     </div>
 
                     <form onSubmit={handlePersonSubmit} className="space-y-10">
+                        {/* ... Person Form (Same as before) ... */}
                         <section className="space-y-6">
                             <div className="flex items-center justify-between border-b border-brand-100 pb-2">
                                 <h4 className="text-[11px] font-black text-brand-700 uppercase tracking-widest">기본 인적 사항</h4>
@@ -896,7 +921,7 @@ const WriteLog: React.FC = () => {
             )}
       </div>
 
-      {/* Quick Add Course Modal */}
+      {/* Quick Add Course Modal (Same as before) */}
       {isCourseModalOpen && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md animate-in zoom-in-95 duration-200">
               <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
@@ -905,6 +930,7 @@ const WriteLog: React.FC = () => {
                       <button onClick={() => { setIsCourseModalOpen(false); setNewCourseForm({ name: '', region: '경기', holes: 18, type: CourseType.PUBLIC, address: '', description: '' }); }} className="text-slate-400 hover:text-slate-900 transition-colors p-2 hover:bg-white rounded-full"><X size={28}/></button>
                   </div>
                   <div className="p-8 space-y-6 max-h-[80vh] overflow-y-auto custom-scrollbar">
+                      {/* ... Course Add Form Fields ... */}
                       <div>
                           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">골프장 공식 명칭 *</label>
                           <input type="text" required className="w-full rounded-2xl border-slate-200 p-4 text-sm font-black shadow-sm focus:ring-4 focus:ring-brand-500/5 focus:border-brand-500" value={newCourseForm.name} onChange={e => setNewCourseForm({...newCourseForm, name: e.target.value})} placeholder="골프장 이름 입력" />
