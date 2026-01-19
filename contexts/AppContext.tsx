@@ -194,9 +194,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const executeMockLogin = (email: string, password?: string) => {
-      // --- Special Test Account ---
+      // --- Special Test Account 1 ---
       if (email.trim() === 'admin123@greenmaster.com') {
-          if (password !== 'admin123') return '비밀번호가 일치하지 않습니다.';
+          // Password check removed for local test convenience
           
           const localAdmin: UserProfile = {
               id: 'local-admin-123',
@@ -211,7 +211,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setUser(localAdmin);
           localStorage.setItem('greenmaster_user', JSON.stringify(localAdmin));
           setForceMock(true);
-          logActivity('LOGIN', 'USER', 'System Login (Local Test Admin)');
+          logActivity('LOGIN', 'USER', 'System Login (Local Test Admin 1)');
+          return;
+      }
+
+      // --- Special Test Account 2 (New) ---
+      if (email.trim() === 'admin@greenmaster.com') {
+          // Password check removed for local test convenience
+          
+          const localAdmin: UserProfile = {
+              id: 'local-admin-root',
+              name: 'Root Admin',
+              email: 'admin@greenmaster.com',
+              role: UserRole.ADMIN,
+              department: Department.MANAGEMENT,
+              avatar: 'https://ui-avatars.com/api/?name=Root+Admin&background=ef4444&color=fff',
+              status: 'APPROVED'
+          };
+          
+          setUser(localAdmin);
+          localStorage.setItem('greenmaster_user', JSON.stringify(localAdmin));
+          setForceMock(true);
+          logActivity('LOGIN', 'USER', 'System Login (Local Root Admin)');
           return;
       }
 
