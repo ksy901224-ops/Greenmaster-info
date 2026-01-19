@@ -67,22 +67,24 @@ export const analyzeDocument = async (
       아래는 현재 시스템에 등록된 골프장 명칭 목록입니다. 추출된 골프장 이름이 아래 목록과 유사하다면, 반드시 이 목록에 있는 '표준 명칭'으로 변환(Normalize)하여 출력하세요.
       목록: [${courseListString}]
 
-      [분석 및 추출 가이드라인]
+      [분석 및 추출 가이드라인 - 매우 중요]
       
-      1. **업무 일지 (Logs) - 중요**:
-         - 문서 내에 **서로 다른 날짜**나 **서로 다른 주제**의 보고 내용이 포함되어 있다면, 이를 **반드시 개별적인 Log 항목으로 분리**하세요. 뭉뚱그리지 마세요.
-         - **courseName**: 본문에 언급된 골프장 이름을 추출하되, 위 'Reference DB'에 있는 명칭과 가장 유사한 것으로 매핑하세요. (예: '태릉CC' -> '태릉 골프장')
+      1. **업무 일지 (Logs) 분리 원칙**:
+         - **핵심**: 만약 문서 하나에 여러 골프장(예: A골프장, B골프장)에 대한 보고가 섞여 있다면, **반드시 골프장별로 나누어 개별적인 Log 항목으로 분리**하세요. 절대 하나로 뭉치지 마세요.
+         - 예시: "태릉CC는 배수 공사 중이고, 남서울CC는 대표이사 미팅함" -> 태릉CC 로그 1개, 남서울CC 로그 1개로 분리하여 추출.
+         
+         - **courseName**: 본문에 언급된 골프장 이름을 추출하되, 위 'Reference DB'에 있는 명칭과 가장 유사한 것으로 매핑하세요.
          - **date**: 문서에 날짜가 명시되어 있다면 해당 날짜(YYYY-MM-DD)를 사용하고, 없다면 오늘 날짜를 사용하세요.
-         - **summary**: 전체 내용을 1~2문장으로 요약한 핵심 거버닝 메시지.
-         - **details**: 육하원칙에 의거한 상세 내용, 수치, 구체적 이슈 사항.
-         - **risk**: 발견된 잠재적 위험 요소.
+         - **summary**: 해당 골프장에 대한 내용만 요약하세요.
+         - **details**: 해당 골프장에 해당하는 구체적인 수치, 이슈, 대화 내용을 상세히 기술하세요. 다른 골프장 내용은 포함하지 마세요.
+         - **risk**: 해당 골프장의 잠재적 위험 요소.
 
       2. **골프장 (Courses)**: 
          - 새로운 골프장 정보(제원, 주소, 홀수 등)가 발견된 경우에만 추출하세요.
          - 단순 언급 수준이면 추출하지 마세요.
 
       3. **인물 (People)**: 
-         - 성함, 직책, 성향/특징을 추출하세요.
+         - 성함, 직책, 성향/특징을 추출하세요. 해당 인물이 소속된 골프장 이름도 정확히 매핑하세요.
 
       반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요. Markdown 포맷 없이 순수 JSON만 출력하세요.
     `
@@ -123,11 +125,11 @@ export const analyzeDocument = async (
                 type: Type.OBJECT,
                 properties: {
                   date: { type: Type.STRING },
-                  courseName: { type: Type.STRING, description: "Normalized course name from Reference DB if possible" },
+                  courseName: { type: Type.STRING, description: "Normalized course name from Reference DB" },
                   rawCourseName: { type: Type.STRING, description: "The exact string found in the text" },
-                  title: { type: Type.STRING },
-                  summary: { type: Type.STRING, description: "Key takeaway summary" },
-                  details: { type: Type.STRING, description: "Full detailed content" },
+                  title: { type: Type.STRING, description: "Title specific to this course's issue" },
+                  summary: { type: Type.STRING, description: "Key takeaway summary for this course" },
+                  details: { type: Type.STRING, description: "Full detailed content specific to this course" },
                   strategy: { type: Type.STRING },
                   risk: { type: Type.STRING },
                   priority: { type: Type.NUMBER },

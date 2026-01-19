@@ -421,6 +421,7 @@ const WriteLog: React.FC = () => {
               const finalCourseName = mapping?.name || l.courseName;
               
               // Combined content: Summary + Details + Strategy/Risk
+              // Strictly formatted for clarity per course
               const combinedContent = `[요약]\n${l.summary || l.content || ''}\n\n[상세 내용]\n${l.details || ''}\n\n[전략 가치]\n${l.strategy || ''}\n\n[리스크]\n${l.risk || ''}`;
               
               await addLog({ 
