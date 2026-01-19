@@ -3,13 +3,12 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useMe
 import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord, GolfCoursePerson } from '../types';
 import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS, DATA_VERSION } from '../constants';
 import { subscribeToCollection, saveDocument, updateDocument, deleteDocument, seedCollection, setForceMock } from '../services/firestoreService';
-import { auth, db, isMockMode } from '../firebaseConfig'; // db import needed
+import { auth, db, isMockMode } from '../firebaseConfig';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut, 
-  onAuthStateChanged,
-  signInAnonymously
+  onAuthStateChanged
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -119,16 +118,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [locationState, setLocationState] = useState<any>(null);
   const [routeParams, setRouteParams] = useState<{ id?: string }>({});
   
-  // Auth state for Firebase
   const [isFirebaseReady, setIsFirebaseReady] = useState(isMockMode); 
   
-  // Initialize Offline Mode from LocalStorage or Default Config
   const [isOfflineMode, setIsOfflineMode] = useState(() => {
       const stored = localStorage.getItem('gm_force_offline');
       return stored === 'true' || isMockMode;
   });
 
-  // Apply Force Mock setting whenever isOfflineMode changes
   useEffect(() => {
       setForceMock(isOfflineMode);
   }, [isOfflineMode]);
@@ -140,10 +136,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       localStorage.setItem('gm_force_offline', String(next));
       
       if (!next) {
-          // If switching to Live, reload to re-establish Firebase listeners cleanly
           window.location.reload();
       } else {
-          // If switching to Offline, we can just let the state update trigger re-subscriptions in mock mode
           console.log("Switched to Local Mode");
       }
   };
@@ -194,14 +188,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           actionType,
           targetType,
           targetName,
-          // FIX: Ensure details is never undefined, which breaks Firestore
           details: details || null 
       };
-      // Use saveDocument safely; if in mock mode it goes to localStorage
       saveDocument('system_logs', newLog).catch(e => console.warn("Failed to save system log", e));
   };
 
-  const executeMockLogin = (email: string) => {
+  const executeMockLogin = (email: string, password?: string) => {
+      // --- Special Test Account ---
+      if (email.trim() === 'admin123@greenmaster.com') {
+          if (password !== 'admin123') return '비밀번호가 일치하지 않습니다.';
+          
+          const localAdmin: UserProfile = {
+              id: 'local-admin-123',
+              name: 'Local Admin',
+              email: 'admin123@greenmaster.com',
+              role: UserRole.ADMIN,
+              department: Department.MANAGEMENT,
+              avatar: 'https://ui-avatars.com/api/?name=Local+Admin&background=6366f1&color=fff',
+              status: 'APPROVED'
+          };
+          
+          setUser(localAdmin);
+          localStorage.setItem('greenmaster_user', JSON.stringify(localAdmin));
+          setForceMock(true);
+          logActivity('LOGIN', 'USER', 'System Login (Local Test Admin)');
+          return;
+      }
+
       let currentUsers = allUsers;
       if (currentUsers.length === 0) {
           try {
@@ -223,7 +236,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!foundUser && (email.toLowerCase() === DEFAULT_ADMIN.email.toLowerCase() || email.toLowerCase() === 'soonyong90@gmail.com')) {
            setUser(DEFAULT_ADMIN);
            localStorage.setItem('greenmaster_user', JSON.stringify(DEFAULT_ADMIN));
-           // Ensure mock mode is active before logging activity
            setForceMock(true); 
            logActivity('LOGIN', 'USER', 'System Login (Offline Admin)');
            return;
@@ -260,19 +272,15 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                             email: firebaseUser.email || '',
                             role: UserRole.ADMIN,
                             department: Department.MANAGEMENT,
-                            avatar: firebaseUser.photoURL || `https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff`,
+                            avatar: firebaseUser.photoURL || `https://ui-avatars.com/api/?name=Admin+Kwon&background=0D9488&color=fff`,
                             status: 'APPROVED'
                         };
-                        
-                        // Force DB update if possible
                         try {
                             if (!docSnap.exists() || docSnap.data().role !== UserRole.ADMIN) {
                                 await setDoc(docRef, forcedAdminProfile, { merge: true });
                                 docSnap = await getDoc(docRef);
                             }
                         } catch (e) { console.warn("DB Update Failed for Admin, using memory fallback"); }
-
-                        // Always set user for super admin, ignoring DB errors
                         setUser(forcedAdminProfile);
                         localStorage.setItem('greenmaster_user', JSON.stringify(forcedAdminProfile));
                         return;
@@ -300,34 +308,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                         };
                         
                         await setDoc(docRef, newProfile);
-                        console.log("User created but pending approval.");
                     }
                 } catch (e: any) {
-                    const isSuperAdmin = firebaseUser.email === 'soonyong90@gmail.com';
-                    if (isSuperAdmin) {
-                        const forcedAdminProfile: UserProfile = {
-                            id: firebaseUser.uid,
-                            name: '권순용',
-                            email: firebaseUser.email || '',
-                            role: UserRole.ADMIN,
-                            department: Department.MANAGEMENT,
-                            avatar: `https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff`,
-                            status: 'APPROVED'
-                        };
-                        setUser(forcedAdminProfile);
-                        return;
-                    }
-
+                    // ROBUST ERROR HANDLING
                     const errCode = e.code;
                     const errMsg = e.message?.toLowerCase() || '';
-                    // Handle Offline Error Explicitly
-                    if (e.code === 'permission-denied') {
-                        console.warn("[Firebase] Permission denied. Likely pending approval.");
-                        setUser(null);
-                    } else if (errMsg.includes('offline') || errMsg.includes('network') || errMsg.includes('failed to get document') || e.code === 'unavailable') {
+                    
+                    if (errMsg.includes('offline') || errMsg.includes('network') || errMsg.includes('failed to get document') || e.code === 'unavailable') {
                         console.warn("[Firebase] Network Error during profile fetch. Switching to Offline Mode.");
                         setForceMock(true);
                         setIsOfflineMode(true);
+                        // Try to load cached user if available
                         const savedUser = localStorage.getItem('greenmaster_user');
                         if (savedUser) setUser(JSON.parse(savedUser));
                     } else {
@@ -437,19 +428,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [rawCourses, people]);
 
   const login = async (email: string, password?: string): Promise<string | void> => {
-    if (isMockMode || isOfflineMode) return executeMockLogin(email);
+    if (isMockMode || isOfflineMode) return executeMockLogin(email, password);
     if (!auth || !password) return '비밀번호를 입력해주세요.';
 
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const uid = userCredential.user.uid;
-        const isSuperAdmin = email === 'soonyong90@gmail.com';
         
+        // Define fallback profile for offline/error scenarios
         const fallbackProfile: UserProfile = {
-            id: uid, name: '권순용', email: email, role: UserRole.ADMIN,
-            department: Department.MANAGEMENT,
-            avatar: `https://ui-avatars.com/api/?name=Admin&background=0D9488&color=fff`,
-            status: 'APPROVED'
+            id: uid, name: userCredential.user.displayName || email.split('@')[0],
+            email: email, role: email === 'soonyong90@gmail.com' ? UserRole.ADMIN : UserRole.JUNIOR,
+            department: Department.SALES,
+            avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent('User')}&background=random`,
+            status: 'APPROVED' // Auto-approve if falling back
         };
 
         try {
@@ -458,12 +450,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             
             if (docSnap.exists()) {
                 const profile = docSnap.data() as UserProfile;
-                if (isSuperAdmin && profile.role !== UserRole.ADMIN) {
-                     await setDoc(docRef, { ...profile, role: UserRole.ADMIN, status: 'APPROVED' }, { merge: true });
-                     profile.role = UserRole.ADMIN;
-                     profile.status = 'APPROVED';
-                }
-                if (profile.status === 'PENDING' && !isSuperAdmin) {
+                if (profile.status === 'PENDING' && email !== 'soonyong90@gmail.com') {
                     await signOut(auth);
                     return '현재 관리자 승인 대기 중입니다.';
                 }
@@ -474,56 +461,36 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
                 logActivity('LOGIN', 'USER', profile.name, 'Firebase Auth Login');
                 setUser(profile);
             } else {
-                const newProfile: UserProfile = {
-                    id: uid,
-                    name: userCredential.user.displayName || (isSuperAdmin ? '권순용' : 'New User'),
-                    email: userCredential.user.email || email,
-                    role: isSuperAdmin ? UserRole.ADMIN : UserRole.JUNIOR,
-                    department: isSuperAdmin ? Department.MANAGEMENT : Department.SALES,
-                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(isSuperAdmin ? 'Admin' : 'User')}&background=random`,
-                    status: isSuperAdmin ? 'APPROVED' : 'PENDING'
-                };
-                await setDoc(docRef, newProfile);
-                if (newProfile.status === 'APPROVED') {
-                    setUser(newProfile);
-                    localStorage.setItem('greenmaster_user', JSON.stringify(newProfile));
-                } else {
-                    await signOut(auth);
-                    return '가입 신청이 완료되었습니다. 관리자 승인 대기 중입니다.';
-                }
+                // If doc doesn't exist but auth succeeded, create it
+                await setDoc(docRef, fallbackProfile);
+                setUser(fallbackProfile);
             }
         } catch (docError: any) {
-            console.error("Profile Fetch/Write Error:", docError);
-            if (isSuperAdmin) {
-                console.warn("👑 Super Admin Login: Bypassing DB error.");
-                setUser(fallbackProfile);
-                localStorage.setItem('greenmaster_user', JSON.stringify(fallbackProfile));
-                return;
-            }
-            if (docError.code === 'permission-denied') {
-                await signOut(auth);
-                return 'DB 접근 권한이 없습니다.';
-            }
-            if (docError.message?.includes('offline') || docError.message?.includes('network') || docError.message?.includes('failed to get document') || docError.code === 'unavailable') {
-                 toggleOfflineMode();
-                 // CRITICAL: Ensure we switch to mock logic synchronously for this action
+            const errMsg = docError.message?.toLowerCase() || '';
+            const isOfflineError = errMsg.includes('offline') || errMsg.includes('network') || errMsg.includes('failed to get document') || docError.code === 'unavailable';
+
+            if (isOfflineError) {
+                 console.warn(`[Login] Database unreachable (${docError.code}). Switching to Local Mode with Auth credentials.`);
+                 
+                 // Enable Offline Mode
+                 if (!isOfflineMode) toggleOfflineMode();
                  setForceMock(true); 
-                 return executeMockLogin(email);
+                 
+                 // Use credentials from Auth to perform a "Mock Login"
+                 setUser(fallbackProfile);
+                 localStorage.setItem('greenmaster_user', JSON.stringify(fallbackProfile));
+                 return;
             }
             throw docError;
         }
     } catch (error: any) {
         console.error("Login failed:", error);
         
-        // AUTO-FALLBACK for Admin Login Failure or Network Issue
-        if (
-            error.code === 'auth/network-request-failed' || 
-            (email.toLowerCase() === 'soonyong90@gmail.com' && (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password'))
-        ) {
-             console.warn("⚠️ Login issue detected. Switching to Local/Mock Mode for Admin/Offline access.");
+        if (error.code === 'auth/network-request-failed' || (email === 'soonyong90@gmail.com' && error.code === 'auth/invalid-credential')) {
+             console.warn("⚠️ Login issue detected. Switching to Local/Mock Mode.");
              if (!isOfflineMode) toggleOfflineMode();
              setForceMock(true);
-             return executeMockLogin(email);
+             return executeMockLogin(email, password);
         }
         
         return parseAuthError(error.code);
@@ -561,8 +528,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         try {
             await setDoc(doc(db, 'users', uid), newUser);
         } catch (writeErr: any) {
+            // If DB write fails, fall back to offline but keep auth
             if (isSuperAdmin) { setUser(newUser); return uid; }
-            if (writeErr.message?.includes('does not exist') || writeErr.message?.includes('offline') || writeErr.code === 'unavailable') {
+            if (writeErr.message?.includes('offline') || writeErr.code === 'unavailable') {
                 toggleOfflineMode();
                 setForceMock(true);
                 await saveDocument('users', newUser); 
@@ -574,15 +542,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         return uid;
         
     } catch (error: any) {
-        // --- AUTO-LOGIN IF ALREADY REGISTERED ---
         if (error.code === 'auth/email-already-in-use') {
-             console.log("⚠️ Email exists. Attempting auto-login...");
              const loginError = await login(email, password);
              if (loginError) throw new Error(loginError);
              return auth.currentUser?.uid || "existing-user";
         }
-        
-        if (error.code === 'auth/configuration-not-found' || error.code === 'auth/network-request-failed') {
+        if (error.code === 'auth/network-request-failed') {
              toggleOfflineMode();
              setForceMock(true);
              return handleMockRegister();
