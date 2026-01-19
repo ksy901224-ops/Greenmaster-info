@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region, CareerRecord } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter, CheckSquare, Square, UserCheck, Edit, PenTool, Layers, ArrowRightLeft, Lightbulb, Link2 } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter, CheckSquare, Square, UserCheck, Edit, PenTool, Layers, ArrowRightLeft, Lightbulb, Link2, MessageSquare } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -17,6 +17,7 @@ const WriteLog: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisProgress, setAnalysisProgress] = useState<string>('');
+  const [contextHint, setContextHint] = useState(''); // New Context Hint
   const [aiResults, setAiResults] = useState<{
       extractedCourses: any[],
       extractedLogs: any[],
@@ -280,7 +281,8 @@ const WriteLog: React.FC = () => {
           });
       }));
       const existingNames = globalCourses.map(c => c.name);
-      const results = await analyzeDocument(inputData, existingNames);
+      // Pass the contextHint to the service
+      const results = await analyzeDocument(inputData, existingNames, contextHint);
       if (results) {
           setAiResults(results);
           const highConfCourses = new Set<number>();
@@ -296,7 +298,8 @@ const WriteLog: React.FC = () => {
           results.extractedLogs.forEach((l: any, i: number) => { 
               if(l.confidence > 0.7) highConfLogs.add(i);
               
-              // Fuzzy or exact match for course
+              // Smart fuzzy match logic handled by the AI service mostly, 
+              // but we verify if the AI-provided 'courseName' exists in our DB.
               const matched = globalCourses.find(gc => gc.name === l.courseName);
               if (matched) {
                   initialLogMappings[i] = { id: matched.id, name: matched.name };
@@ -339,6 +342,18 @@ const WriteLog: React.FC = () => {
           ...prev,
           [logIndex]: { id: matched ? matched.id : '', name: courseName }
       }));
+  };
+
+  const clearAnalysis = () => {
+      if (window.confirm('현재 분석 결과를 초기화하시겠습니까?')) {
+          setAiResults(null);
+          setSelectedFiles([]);
+          setSelectedCourseIndices(new Set());
+          setSelectedLogIndices(new Set());
+          setSelectedPeopleIndices(new Set());
+          setAiLogCourseMappings({});
+          if (fileInputRef.current) fileInputRef.current.value = '';
+      }
   };
 
   const commitAiResults = async () => {
@@ -489,6 +504,20 @@ const WriteLog: React.FC = () => {
                                 <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-4">AI 지능형 데이터 분석 및 선택적 반영</h2>
                                 <p className="text-slate-500 leading-relaxed font-medium">분석된 결과 중 시스템에 반영할 항목을 직접 선택할 수 있습니다. <br/>기존 골프장 데이터와 매칭되면 업데이트 모드로 자동 전환됩니다.</p>
                             </div>
+                            
+                            {/* NEW: Context Hint Input */}
+                            <div className="max-w-xl mx-auto bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-inner">
+                                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2 flex items-center">
+                                    <MessageSquare size={12} className="mr-1"/> 분석 정확도를 높이는 힌트 (선택)
+                                </label>
+                                <textarea 
+                                    className="w-full rounded-xl border-slate-200 p-3 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none h-20"
+                                    placeholder="예: 2024년 5월 공사 진행 관련 보고서 3건입니다. 태릉CC와 남서울CC 관련 내용이 포함되어 있습니다."
+                                    value={contextHint}
+                                    onChange={(e) => setContextHint(e.target.value)}
+                                />
+                            </div>
+
                             {!isAnalyzing ? (
                                 <div className="border-2 border-dashed border-slate-200 rounded-[3rem] p-20 text-center hover:border-brand-500 hover:bg-brand-50/10 cursor-pointer group transition-all duration-500" onClick={() => fileInputRef.current?.click()}>
                                     <input type="file" multiple accept="image/*,application/pdf" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
@@ -510,6 +539,15 @@ const WriteLog: React.FC = () => {
                     ) : (
                         // AI Results UI
                         <div className="animate-in fade-in slide-in-from-bottom-6 duration-700">
+                            <div className="flex justify-end mb-4">
+                                <button 
+                                    onClick={clearAnalysis}
+                                    className="flex items-center text-slate-500 hover:text-red-600 text-xs font-bold px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-red-50 transition-all shadow-sm"
+                                >
+                                    <RotateCcw size={14} className="mr-2"/> 분석 결과 초기화
+                                </button>
+                            </div>
+
                             {/* 1. Summary Section */}
                             <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 mb-10 shadow-inner">
                                 <h3 className="text-lg font-black text-slate-900 mb-4 flex items-center"><Lightbulb size={20} className="mr-2 text-brand-600"/> AI Document Summary</h3>
@@ -597,6 +635,7 @@ const WriteLog: React.FC = () => {
                                             const currentMapping = aiLogCourseMappings[idx];
                                             const isMapped = !!currentMapping?.id;
                                             const displayCourseName = currentMapping?.name || log.courseName;
+                                            const isRawMatchDifferent = log.rawCourseName && log.rawCourseName !== log.courseName;
 
                                             return (
                                             <div key={idx} onClick={() => toggleSelection('LOG', idx)} className={`p-5 rounded-2xl border transition-all cursor-pointer flex gap-4 ${selectedLogIndices.has(idx) ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}>
@@ -614,7 +653,10 @@ const WriteLog: React.FC = () => {
                                                         <div className="relative group">
                                                             <div className="flex items-center gap-2 mb-1">
                                                                 {isMapped ? (
-                                                                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded flex items-center"><CheckCircle size={10} className="mr-1"/> DB Matched</span>
+                                                                    <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded flex items-center">
+                                                                        <CheckCircle size={10} className="mr-1"/> DB Matched
+                                                                        {isRawMatchDifferent && <span className="ml-1 opacity-75">(원본: {log.rawCourseName})</span>}
+                                                                    </span>
                                                                 ) : (
                                                                     <span className="text-[10px] font-black bg-orange-100 text-orange-700 px-2 py-0.5 rounded flex items-center"><AlertTriangle size={10} className="mr-1"/> Unmatched (Raw Text)</span>
                                                                 )}

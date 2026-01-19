@@ -35,7 +35,8 @@ const getMockResponse = (message: string) => {
  */
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
-  existingCourseNames: string[] = []
+  existingCourseNames: string[] = [],
+  contextHint: string = ""
 ): Promise<any | null> => {
   if (!hasKey || !ai) return getMockResponse("Document Analysis");
 
@@ -49,21 +50,41 @@ export const analyzeDocument = async (
       }
   }
 
+  // Optimize the list of courses to avoid token limits if the list is huge,
+  // but for now we assume it fits or is truncated logically.
+  const courseListString = existingCourseNames.join(", ");
+
   contentParts.push({
     text: `
-      당신은 대한민국 골프장 비즈니스 인텔리전스 전문가입니다. 
-      제공된 문서를 정밀 분석하여 전략적 데이터베이스 형태로 변환하세요.
+      당신은 대한민국 골프장 비즈니스 인텔리전스 데이터 분석 전문가입니다. 
+      제공된 문서(이미지, PDF, 텍스트 등)를 정밀 분석하여 구조화된 JSON 데이터로 추출하세요.
+
+      [분석 컨텍스트 힌트]
+      사용자가 제공한 추가 힌트: "${contextHint}"
+      (이 힌트를 바탕으로 날짜, 주제, 관련 골프장을 유추하세요.)
+
+      [매칭 기준 데이터베이스 (Reference DB)]
+      아래는 현재 시스템에 등록된 골프장 명칭 목록입니다. 추출된 골프장 이름이 아래 목록과 유사하다면, 반드시 이 목록에 있는 '표준 명칭'으로 변환(Normalize)하여 출력하세요.
+      목록: [${courseListString}]
+
+      [분석 및 추출 가이드라인]
       
-      [분석 가이드라인]
-      1. **골프장(Courses)**: 명칭, 지역, 홀수, 운영 형태(회원제/대중제), 개장년도를 정확히 추출하세요. 
-         - 기존 DB 목록(${JSON.stringify(existingCourseNames.slice(0, 50))}...)을 참고하여 가능한 공식 명칭을 사용하세요.
-      2. **업무 일지(Logs)**: 
+      1. **업무 일지 (Logs) - 중요**:
+         - 문서 내에 **서로 다른 날짜**나 **서로 다른 주제**의 보고 내용이 포함되어 있다면, 이를 **반드시 개별적인 Log 항목으로 분리**하세요. 뭉뚱그리지 마세요.
+         - **courseName**: 본문에 언급된 골프장 이름을 추출하되, 위 'Reference DB'에 있는 명칭과 가장 유사한 것으로 매핑하세요. (예: '태릉CC' -> '태릉 골프장')
+         - **date**: 문서에 날짜가 명시되어 있다면 해당 날짜(YYYY-MM-DD)를 사용하고, 없다면 오늘 날짜를 사용하세요.
          - **summary**: 전체 내용을 1~2문장으로 요약한 핵심 거버닝 메시지.
          - **details**: 육하원칙에 의거한 상세 내용, 수치, 구체적 이슈 사항.
          - **risk**: 발견된 잠재적 위험 요소.
-      3. **인물(People)**: 성함, 직책, 성향/특징을 추출하세요.
 
-      반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요.
+      2. **골프장 (Courses)**: 
+         - 새로운 골프장 정보(제원, 주소, 홀수 등)가 발견된 경우에만 추출하세요.
+         - 단순 언급 수준이면 추출하지 마세요.
+
+      3. **인물 (People)**: 
+         - 성함, 직책, 성향/특징을 추출하세요.
+
+      반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요. Markdown 포맷 없이 순수 JSON만 출력하세요.
     `
   });
 
@@ -72,6 +93,7 @@ export const analyzeDocument = async (
       model: 'gemini-2.0-flash',
       contents: { parts: contentParts },
       config: {
+        temperature: 0.1, // Lower temperature for more deterministic extraction
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -101,7 +123,8 @@ export const analyzeDocument = async (
                 type: Type.OBJECT,
                 properties: {
                   date: { type: Type.STRING },
-                  courseName: { type: Type.STRING },
+                  courseName: { type: Type.STRING, description: "Normalized course name from Reference DB if possible" },
+                  rawCourseName: { type: Type.STRING, description: "The exact string found in the text" },
                   title: { type: Type.STRING },
                   summary: { type: Type.STRING, description: "Key takeaway summary" },
                   details: { type: Type.STRING, description: "Full detailed content" },
@@ -184,17 +207,33 @@ export const analyzeLogEntry = async (log: LogEntry): Promise<string> => {
   if (!hasKey || !ai) return "AI 분석 기능을 사용할 수 없습니다. (API Key Missing)";
 
   const prompt = `
-    다음 업무 일지를 정밀 분석하여 비즈니스 인텔리전스 보고서를 전문적인 한국어로 작성하세요.
-    [일지 정보]
-    골프장: ${log.courseName}
-    제목: ${log.title}
-    내용: ${log.content}
+    다음 업무 일지를 정밀 분석하여 임원 보고용 비즈니스 인텔리전스 리포트를 작성하세요.
+    내용과 분석 결과의 연관성을 최우선으로 고려하세요.
 
-    [작성 양식]
-    1. **요약 (Summary)**: 이 일지의 핵심 쟁점을 단 한 문장으로 기술.
-    2. **상세 분석 (Detailed Analysis)**: 일지 내용에 숨겨진 기술적/운영적 세부 사항 분석.
-    3. **전략적 함의 (Strategic Implications)**: 당사 비즈니스에 미치는 영향 및 기회.
-    4. **리스크 및 대응 (Risks & Actions)**: 주의해야 할 리스크와 즉각적인 후속 조치 제안.
+    [일지 데이터]
+    - 골프장: ${log.courseName}
+    - 부서: ${log.department}
+    - 제목: ${log.title}
+    - 내용: ${log.content}
+
+    [필수 작성 포맷 - 반드시 아래 4개 섹션 헤더를 사용하세요]
+    
+    1. **핵심 요약 (Executive Summary)**
+       - 전체 내용을 1~2문장으로 요약하여, 의사결정자가 즉시 파악할 수 있는 핵심 메시지를 제시하세요.
+    
+    2. **상세 분석 (Detailed Analysis)**
+       - 업무 내용에 포함된 수치, 인물, 기술적 이슈를 구체적으로 분석하세요.
+       - 단순 나열이 아닌, 현상의 원인과 배경을 추론하여 설명하세요.
+    
+    3. **전략적 시사점 (Strategic Implications)**
+       - 이 건이 우리 회사 또는 해당 골프장 비즈니스에 미치는 긍정적/부정적 영향을 분석하세요.
+       - 영업 기회, 관계 강화 포인트, 혹은 운영 개선점 등을 도출하세요.
+    
+    4. **잠재적 리스크 및 대응 (Risks & Countermeasures)**
+       - 향후 발생 가능한 문제점(재무, 관계, 운영, 법적 등)을 경고하세요.
+       - 이에 대한 즉각적이고 구체적인 실행 액션(Action Plan)을 제안하세요.
+
+    톤앤매너: 전문적, 객관적, 통찰력 있음.
   `;
 
   try {

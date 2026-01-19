@@ -116,7 +116,7 @@ const AdminDashboard: React.FC = () => {
               inputData.push(...fileData);
           }
 
-          const results = await analyzeDocument(inputData, courses.map(c => c.name));
+          const results = await analyzeDocument(inputData, courses.map(c => c.name), ""); // Pass empty context hint for admin catalog sync
           
           if (results) {
               setDocSummary(results.documentSummary);

@@ -51,36 +51,57 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
   };
 
   const renderStructuredInsight = (text: string) => {
+    // Split by the specific header format requested in the prompt: "1. **Title**"
     const parts = text.split(/(?=\d+\.\s\*\*)/);
+    
     return parts.map((part, index) => {
       const headerMatch = part.match(/\*\*(.*?)\*\*/);
       if (!headerMatch) {
-        if(part.trim()) return <p key={index} className="mb-4 text-sm text-slate-600 px-1">{part}</p>;
+        // Render introductory text or unstructured content if any
+        if(part.trim()) return <p key={index} className="mb-4 text-sm text-slate-600 px-1 whitespace-pre-line">{part.trim()}</p>;
         return null;
       }
-      const rawTitle = headerMatch[1].replace(/:$/, '').trim(); 
-      const body = part.replace(headerMatch[0], '').replace(/^\d+\.\s*:?/, '').trim(); 
       
-      let styleClass = "bg-slate-50 border-slate-200";
-      let titleClass = "text-slate-700";
+      const rawTitle = headerMatch[1].replace(/:$/, '').trim(); 
+      // Remove the header line (e.g., "1. **Title**") from the body
+      const body = part.replace(/^\d+\.\s\*\*.*?\*\*/, '').trim(); 
+      
+      let styleClass = "bg-white border-slate-200";
+      let titleClass = "text-slate-800";
       let Icon = Info;
+      let iconColor = "text-slate-400";
 
-      if (rawTitle.includes("요약")) {
-        styleClass = "bg-indigo-50 border-indigo-100"; titleClass = "text-indigo-700"; Icon = Lightbulb;
-      } else if (rawTitle.includes("상세") || rawTitle.includes("분석")) {
-        styleClass = "bg-white border-slate-200"; titleClass = "text-slate-700"; Icon = FileText;
-      } else if (rawTitle.includes("리스크") || rawTitle.includes("함의")) {
-        styleClass = "bg-red-50 border-red-100"; titleClass = "text-red-700"; Icon = ShieldAlert;
-      } else if (rawTitle.includes("전략") || rawTitle.includes("액션")) {
-        styleClass = "bg-emerald-50 border-emerald-100"; titleClass = "text-emerald-700"; Icon = Target;
+      // Enhanced Styling Logic based on Keywords
+      if (rawTitle.includes("요약") || rawTitle.includes("Summary")) {
+        styleClass = "bg-indigo-50/50 border-indigo-100 ring-1 ring-indigo-50"; 
+        titleClass = "text-indigo-800"; 
+        Icon = Lightbulb;
+        iconColor = "text-indigo-500";
+      } else if (rawTitle.includes("상세") || rawTitle.includes("분석") || rawTitle.includes("Analysis")) {
+        styleClass = "bg-white border-slate-200"; 
+        titleClass = "text-slate-800"; 
+        Icon = FileText;
+        iconColor = "text-brand-500";
+      } else if (rawTitle.includes("리스크") || rawTitle.includes("위험") || rawTitle.includes("Risk")) {
+        styleClass = "bg-red-50/50 border-red-100 ring-1 ring-red-50"; 
+        titleClass = "text-red-800"; 
+        Icon = ShieldAlert;
+        iconColor = "text-red-500";
+      } else if (rawTitle.includes("전략") || rawTitle.includes("시사점") || rawTitle.includes("Implication")) {
+        styleClass = "bg-emerald-50/50 border-emerald-100 ring-1 ring-emerald-50"; 
+        titleClass = "text-emerald-800"; 
+        Icon = Target;
+        iconColor = "text-emerald-500";
       }
 
       return (
-        <div key={index} className={`rounded-xl border p-5 mb-4 last:mb-0 shadow-sm transition-all hover:shadow-md ${styleClass}`}>
-          <h4 className={`font-black text-xs uppercase tracking-widest mb-3 flex items-center ${titleClass}`}>
-            <Icon size={14} className="mr-2" /> {rawTitle}
+        <div key={index} className={`rounded-2xl border p-5 mb-4 last:mb-0 shadow-sm transition-all hover:shadow-md ${styleClass}`}>
+          <h4 className={`font-black text-sm mb-3 flex items-center ${titleClass}`}>
+            <Icon size={18} className={`mr-2.5 ${iconColor}`} /> {rawTitle}
           </h4>
-          <p className="text-slate-800 text-sm leading-relaxed whitespace-pre-line font-medium">{body.replace(/^:/, '').trim()}</p>
+          <div className="text-slate-700 text-sm leading-7 font-medium whitespace-pre-line pl-1">
+             {body.replace(/^:/, '').trim()}
+          </div>
         </div>
       );
     });
@@ -193,9 +214,9 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
           <div className="flex items-center space-x-3 shrink-0 ml-2">
               <span className="text-xs text-slate-400 flex items-center bg-slate-50 px-2 py-1 rounded-full"><User size={10} className="mr-1"/> {log.author}</span>
               {canUseAI && (
-                  <button onClick={handleAnalyze} disabled={isLoading} className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-all shadow-sm ${showInsight ? 'bg-purple-100 text-purple-700 border-purple-200 ring-2 ring-purple-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-gradient-to-r hover:from-purple-500 hover:to-indigo-500 hover:text-white hover:border-transparent'}`}>
+                  <button onClick={handleAnalyze} disabled={isLoading} className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-full border transition-all shadow-sm ${showInsight ? 'bg-indigo-100 text-indigo-700 border-indigo-200 ring-2 ring-indigo-100' : 'bg-white text-slate-500 border-slate-200 hover:bg-gradient-to-r hover:from-indigo-500 hover:to-purple-600 hover:text-white hover:border-transparent'}`}>
                       {isLoading ? <Loader2 size={12} className="animate-spin mr-1" /> : <Sparkles size={12} className="mr-1" />}
-                      {isLoading ? '분석 중...' : 'Intelligent Insight'}
+                      {isLoading ? '분석 중...' : 'AI 인사이트'}
                   </button>
               )}
           </div>
@@ -204,38 +225,39 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
 
       {showInsight && insight && !isLoading && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setShowInsight(false)}>
-          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200 max-h-[85vh] ring-1 ring-white/20" onClick={(e) => e.stopPropagation()}>
-            <div className="bg-slate-900 p-6 flex justify-between items-center shrink-0 border-b border-slate-800">
-               <div className="flex items-center text-white">
-                  <div className="bg-brand-500/20 p-2.5 rounded-2xl mr-4 shadow-inner"><Sparkles className="text-brand-400" size={24} /></div>
+          <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-200 max-h-[85vh] ring-1 ring-white/20" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-slate-900 p-8 flex justify-between items-center shrink-0 relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-6 opacity-10"><Sparkles size={100} className="text-white"/></div>
+               <div className="flex items-center text-white relative z-10">
+                  <div className="bg-brand-500/20 p-3 rounded-2xl mr-5 shadow-inner backdrop-blur-sm border border-brand-500/30"><Sparkles className="text-brand-400" size={28} /></div>
                   <div>
                       <h3 className="font-black text-xl leading-none tracking-tight text-white uppercase">AI Business Insight</h3>
-                      <p className="text-[10px] text-slate-400 mt-1.5 uppercase tracking-[0.2em] font-black">Strategic Intelligence Report</p>
+                      <p className="text-[11px] text-slate-400 mt-2 uppercase tracking-[0.2em] font-bold">Strategic Intelligence Report</p>
                   </div>
                </div>
-               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-2.5 rounded-full transition-colors focus:outline-none"><X size={24} /></button>
+               <button onClick={() => setShowInsight(false)} className="text-slate-400 hover:text-white hover:bg-white/10 p-2.5 rounded-full transition-colors focus:outline-none relative z-10"><X size={24} /></button>
             </div>
             
-            <div className="p-8 overflow-y-auto custom-scrollbar bg-slate-50/30 flex-1">
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-8 shadow-sm flex items-start gap-4 ring-1 ring-slate-100">
-                   <div className="p-3 bg-slate-900 rounded-xl text-brand-400 shadow-lg"><Info size={20} /></div>
+            <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 mb-8 shadow-sm flex items-start gap-5 ring-1 ring-slate-100">
+                   <div className="p-3.5 bg-slate-900 rounded-2xl text-brand-400 shadow-lg shrink-0"><Info size={24} /></div>
                    <div className="flex-1 overflow-hidden">
-                      <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] mb-1.5 flex items-center justify-between">
-                          <span>Intelligence Source</span>
-                          <span className="font-mono text-slate-500">{log.date}</span>
+                      <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Analysis Target</span>
+                          <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded">{log.date}</span>
                       </div>
-                      <div className="font-black text-slate-900 text-base mb-1 truncate">{log.courseName} <span className="font-medium text-slate-400 mx-2">|</span> {log.department}</div>
-                      <div className="text-xs text-slate-500 truncate font-bold">{log.title}</div>
+                      <div className="font-black text-slate-900 text-lg mb-1 truncate leading-tight">{log.title}</div>
+                      <div className="text-xs font-bold text-slate-500">{log.courseName} <span className="text-slate-300 mx-2">|</span> {log.department}</div>
                    </div>
                 </div>
                 
-                <div className="space-y-4">
+                <div className="space-y-2">
                     {renderStructuredInsight(insight)}
                 </div>
             </div>
 
-            <div className="p-6 bg-white border-t border-slate-100 flex justify-end shrink-0 gap-3 shadow-inner">
-               <button onClick={() => setShowInsight(false)} className="px-10 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-[1.2rem] transition-all text-sm shadow-xl active:scale-95 flex items-center uppercase tracking-widest">
+            <div className="p-6 bg-white border-t border-slate-200 flex justify-end shrink-0 gap-3 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+               <button onClick={() => setShowInsight(false)} className="px-10 py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-[1.5rem] transition-all text-sm shadow-xl active:scale-95 flex items-center uppercase tracking-widest">
                    <CheckCircle size={18} className="mr-3 text-brand-400" />Done
                </button>
             </div>
