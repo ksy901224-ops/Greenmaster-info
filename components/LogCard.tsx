@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { LogEntry, Department, UserRole } from '../types';
-import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, ShieldAlert, Zap, FileText, MapPin, Layers, Phone } from 'lucide-react';
+import { Calendar, Tag, Image as ImageIcon, Sparkles, Loader2, X, Edit2, Trash2, ChevronDown, ChevronUp, Info, CheckCircle, User, AlertTriangle, Lightbulb, Target, ShieldAlert, Zap, FileText, MapPin, Layers, Phone, Building2 } from 'lucide-react';
 import { analyzeLogEntry } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -64,7 +64,7 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
       
       const rawTitle = headerMatch[1].replace(/:$/, '').trim(); 
       // Remove the header line (e.g., "1. **Title**") from the body
-      const body = part.replace(/^\d+\.\s\*\*.*?\*\*/, '').trim(); 
+      let body = part.replace(/^\d+\.\s\*\*.*?\*\*/, '').trim(); 
       
       let styleClass = "bg-white border-slate-200";
       let titleClass = "text-slate-800";
@@ -92,15 +92,64 @@ const LogCard: React.FC<LogCardProps> = ({ log }) => {
         titleClass = "text-emerald-800"; 
         Icon = Target;
         iconColor = "text-emerald-500";
+      } else if (rawTitle.includes("골프장별") || rawTitle.includes("Course-Specific")) {
+        styleClass = "bg-slate-50 border-slate-200 ring-1 ring-slate-100";
+        titleClass = "text-slate-900";
+        Icon = Building2;
+        iconColor = "text-slate-600";
       }
 
+      // Special rendering for Course-Specific Breakdown
+      if (rawTitle.includes("골프장별") || rawTitle.includes("Course-Specific")) {
+          // Check if body implies no issues
+          if (body.includes("없음") || body.length < 5) return null;
+
+          const courseItems = body.split('- ').filter(i => i.trim().length > 0);
+          return (
+              <div key={index} className="rounded-2xl border border-slate-200 p-5 mb-4 shadow-sm bg-slate-50">
+                  <h4 className="font-black text-sm mb-3 flex items-center text-slate-800">
+                      <Layers size={18} className="mr-2.5 text-brand-600" /> {rawTitle}
+                  </h4>
+                  <div className="space-y-3">
+                      {courseItems.map((item, idx) => {
+                          const match = item.match(/\[(.*?)\]:/);
+                          if (match) {
+                              const cName = match[1];
+                              const content = item.replace(/\[.*?\]:/, '').trim();
+                              return (
+                                  <div key={idx} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                                      <div className="text-xs font-black text-brand-700 bg-brand-50 px-2 py-1 rounded w-fit mb-1.5">{cName}</div>
+                                      <div className="text-sm text-slate-700 leading-relaxed">{content}</div>
+                                  </div>
+                              );
+                          }
+                          return <div key={idx} className="text-sm text-slate-600 pl-2 border-l-2 border-slate-300">{item}</div>;
+                      })}
+                  </div>
+              </div>
+          );
+      }
+
+      // Standard Rendering for other sections with markdown-like cleanup
       return (
         <div key={index} className={`rounded-2xl border p-5 mb-4 last:mb-0 shadow-sm transition-all hover:shadow-md ${styleClass}`}>
           <h4 className={`font-black text-sm mb-3 flex items-center ${titleClass}`}>
             <Icon size={18} className={`mr-2.5 ${iconColor}`} /> {rawTitle}
           </h4>
           <div className="text-slate-700 text-sm leading-7 font-medium whitespace-pre-line pl-1">
-             {body.replace(/^:/, '').trim()}
+             {body.split('\n').map((line, i) => {
+                 // Bold formatting for key points like "- **Point**:"
+                 const cleanLine = line.replace(/^\s*-\s*/, '');
+                 if (line.trim().startsWith('-')) {
+                     return (
+                         <div key={i} className="flex items-start mb-1">
+                             <span className="mr-2 mt-2 w-1 h-1 bg-slate-400 rounded-full shrink-0"></span>
+                             <span dangerouslySetInnerHTML={{ __html: cleanLine.replace(/\*\*(.*?)\*\*/g, '<strong class="text-slate-900">$1</strong>') }}></span>
+                         </div>
+                     );
+                 }
+                 return <div key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-slate-900">$1</strong>') }}></div>;
+             })}
           </div>
         </div>
       );
