@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
 import { LogEntry, Department, GolfCourse, UserProfile, UserRole, UserStatus, Person, CareerRecord, ExternalEvent, AffinityLevel, SystemLog, FinancialRecord, MaterialRecord, GolfCoursePerson } from '../types';
 import { MOCK_LOGS, MOCK_COURSES, MOCK_PEOPLE, MOCK_EXTERNAL_EVENTS, MOCK_FINANCIALS, MOCK_MATERIALS, DATA_VERSION } from '../constants';
-import { subscribeToCollection, saveDocument, updateDocument, deleteDocument, seedCollection, setForceMock } from '../services/firestoreService';
+import { subscribeToCollection, saveDocument, updateDocument, deleteDocument, seedCollection, setForceMock, mergeCollectionData } from '../services/firestoreService';
 import { auth, db, isMockMode } from '../firebaseConfig';
 import { 
   signInWithEmailAndPassword, 
@@ -735,15 +735,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       if (!jsonData || !jsonData.collections) throw new Error('유효하지 않은 백업 파일 형식입니다.');
       const collections = jsonData.collections;
       const tasks = [];
-      if (collections.logs) tasks.push(seedCollection('logs', collections.logs, true));
-      if (collections.courses) tasks.push(seedCollection('courses', collections.courses, true));
-      if (collections.people) tasks.push(seedCollection('people', collections.people, true));
-      if (collections.financials) tasks.push(seedCollection('financials', collections.financials, true));
-      if (collections.materials) tasks.push(seedCollection('materials', collections.materials, true));
-      if (collections.externalEvents) tasks.push(seedCollection('external_events', collections.externalEvents, true));
-      if (collections.systemLogs) tasks.push(seedCollection('system_logs', collections.systemLogs, true));
+      
+      // Use mergeCollectionData instead of seedCollection to append/merge
+      if (collections.logs) tasks.push(mergeCollectionData('logs', collections.logs));
+      if (collections.courses) tasks.push(mergeCollectionData('courses', collections.courses));
+      if (collections.people) tasks.push(mergeCollectionData('people', collections.people));
+      if (collections.financials) tasks.push(mergeCollectionData('financials', collections.financials));
+      if (collections.materials) tasks.push(mergeCollectionData('materials', collections.materials));
+      if (collections.externalEvents) tasks.push(mergeCollectionData('external_events', collections.externalEvents));
+      if (collections.systemLogs) tasks.push(mergeCollectionData('system_logs', collections.systemLogs));
+      
       await Promise.all(tasks);
-      logActivity('UPDATE', 'USER', 'Data Import', 'User manually restored data from JSON backup');
+      logActivity('UPDATE', 'USER', 'Data Import', 'User manually merged data from JSON backup');
   };
 
   const canUseAI = user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN;

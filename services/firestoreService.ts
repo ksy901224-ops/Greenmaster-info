@@ -215,6 +215,56 @@ export const seedCollection = async (collectionName: string, dataArray: any[], f
   }
 };
 
+/**
+ * INTELLIGENT MERGE: Used for Import feature.
+ * Appends new data and updates existing data by ID, preserving data not present in the import file.
+ */
+export const mergeCollectionData = async (collectionName: string, dataArray: any[]) => {
+  if (isMock()) {
+    const current = getLocalData(collectionName);
+    // Create a map for fast lookup and merging
+    const dataMap = new Map(current.map(item => [item.id, item]));
+    
+    dataArray.forEach(item => {
+      const sanitized = sanitizeData(item);
+      if (sanitized.id) {
+        dataMap.set(sanitized.id, sanitized); // Overwrite/Add
+      } else {
+        // If no ID, generate one and add
+        sanitized.id = `import-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        dataMap.set(sanitized.id, sanitized);
+      }
+    });
+    
+    setLocalData(collectionName, Array.from(dataMap.values()));
+    console.log(`[MockDB] Merged ${dataArray.length} items into ${collectionName}.`);
+    return;
+  }
+
+  // Firebase Live Mode Merge
+  try {
+    const CHUNK_SIZE = 250;
+    for (let i = 0; i < dataArray.length; i += CHUNK_SIZE) {
+      const chunk = dataArray.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(rawItem => {
+        const data = sanitizeData(rawItem);
+        // Ensure ID exists
+        if (!data.id) data.id = doc(collection(db, collectionName)).id;
+        
+        const docRef = doc(db, collectionName, data.id);
+        // { merge: true } ensures we don't wipe fields not present in the new data
+        batch.set(docRef, data, { merge: true });
+      });
+      await batch.commit();
+      console.log(`[Database] Merged ${i + chunk.length}/${dataArray.length} items to ${collectionName}`);
+    }
+  } catch (error) {
+    console.error(`Database Merge Error for ${collectionName}:`, error);
+    throw error;
+  }
+};
+
 export const addTodo = async (text: string, author: string) => {
   if (isMock()) {
     const todos = getLocalData(COLLECTION_NAME);

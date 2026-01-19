@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Department, GolfCourse, CourseType, GrassType, LogEntry, Person, AffinityLevel, EventType, Region, CareerRecord } from '../types';
-import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter, CheckSquare, Square, UserCheck, Edit, PenTool, Layers, ArrowRightLeft, Lightbulb, Link2, MessageSquare, Quote, Eye } from 'lucide-react';
+import { Camera, MapPin, Save, Loader2, FileText, Sparkles, UploadCloud, Plus, X, UserPlus, CalendarPlus, ChevronDown, Cloud, History, Trash2, RotateCcw, FileSpreadsheet, FileIcon, CheckCircle, AlertOctagon, ArrowRight, Building2, User, Search, ListChecks, Database, HeartHandshake, MinusCircle, Clock, PlusCircle, Trash, ExternalLink, Info, Check, AlertTriangle, Briefcase, Calendar, Target, ShieldAlert, Zap, Filter, CheckSquare, Square, UserCheck, Edit, PenTool, Layers, ArrowRightLeft, Lightbulb, Link2, MessageSquare, Quote, Eye, Wrench, Megaphone, Users, Trees, AlertCircle } from 'lucide-react';
 import { analyzeDocument } from '../services/geminiService';
 import { useApp } from '../contexts/AppContext';
 
@@ -30,9 +30,12 @@ const WriteLog: React.FC = () => {
   const [editingAiCourseIdx, setEditingAiCourseIdx] = useState<number | null>(null);
   const [tempAiCourseData, setTempAiCourseData] = useState<any>(null);
   
-  // NEW: Editing State for Logs (Content)
   const [editingAiLogIdx, setEditingAiLogIdx] = useState<number | null>(null);
   const [tempAiLogData, setTempAiLogData] = useState<any>(null);
+
+  // NEW: Editing State for People
+  const [editingAiPersonIdx, setEditingAiPersonIdx] = useState<number | null>(null);
+  const [tempAiPersonData, setTempAiPersonData] = useState<any>(null);
   
   // Tracks user-corrected course IDs for logs. Key: log index, Value: { id, name }
   const [aiLogCourseMappings, setAiLogCourseMappings] = useState<Record<number, {id: string, name: string}>>({});
@@ -115,7 +118,7 @@ const WriteLog: React.FC = () => {
     }
   }, [editingLog, locationState, globalPeople, globalCourses]);
 
-  // --- Helper: Find Best Course Match ---
+  // --- Helper: Find Best Match ---
   const findBestMatch = (extractedName: string, courses: GolfCourse[]) => {
       // 1. Exact match
       let match = courses.find(c => c.name === extractedName);
@@ -135,6 +138,17 @@ const WriteLog: React.FC = () => {
       }
 
       return null;
+  };
+
+  const getCategoryIcon = (category: string) => {
+      switch(category) {
+          case '코스관리': return <Trees size={12}/>;
+          case '공사/설비': return <Wrench size={12}/>;
+          case '운영/지원': return <Briefcase size={12}/>;
+          case '영업/마케팅': return <Megaphone size={12}/>;
+          case '미팅/행사': return <Users size={12}/>;
+          default: return <Info size={12}/>;
+      }
   };
 
   const handleLogSubmit = async (e: React.FormEvent) => {
@@ -308,6 +322,26 @@ const WriteLog: React.FC = () => {
       setTempAiLogData(null);
   };
 
+  // --- Inline Editing Handlers (Person) ---
+  const startEditingAiPerson = (index: number, data: any) => {
+      setEditingAiPersonIdx(index);
+      setTempAiPersonData({ ...data });
+  };
+
+  const cancelEditingAiPerson = () => {
+      setEditingAiPersonIdx(null);
+      setTempAiPersonData(null);
+  };
+
+  const saveAiPersonEdit = () => {
+      if (!aiResults || editingAiPersonIdx === null) return;
+      const newPeople = [...aiResults.extractedPeople];
+      newPeople[editingAiPersonIdx] = tempAiPersonData;
+      setAiResults({ ...aiResults, extractedPeople: newPeople });
+      setEditingAiPersonIdx(null);
+      setTempAiPersonData(null);
+  };
+
   const startAiAnalysis = async () => {
     if (selectedFiles.length === 0) return;
     setIsAnalyzing(true);
@@ -466,7 +500,6 @@ const WriteLog: React.FC = () => {
               
               // Combined content: Summary + Details + Strategy/Risk
               // Strictly formatted for clarity per course
-              // Add evidence to content for future reference if needed, or rely on detailed structure
               const combinedContent = `[요약]\n${l.summary || l.content || ''}\n\n[상세 내용]\n${l.details || ''}\n\n[매칭 근거]\n${l.evidenceSnippet || '자동 추출됨'}\n\n[전략 가치]\n${l.strategy || ''}\n\n[리스크]\n${l.risk || ''}`;
               
               await addLog({ 
@@ -479,7 +512,7 @@ const WriteLog: React.FC = () => {
                   relatedCourses: finalCourseId ? [{id: finalCourseId, name: finalCourseName}] : [],
                   title: l.title, 
                   content: combinedContent, 
-                  tags: ['AI추출', ...(l.tags || [])], 
+                  tags: ['AI추출', ...(l.tags || []), l.category], 
                   createdAt: Date.now() 
               });
           }
@@ -685,6 +718,7 @@ const WriteLog: React.FC = () => {
                                             const isExactMatch = isMapped && log.rawCourseName === currentMapping?.name;
                                             const isEditing = editingAiLogIdx === idx;
                                             const displayData = isEditing ? tempAiLogData : log;
+                                            const isLowConfidence = log.confidence < 0.8;
 
                                             return (
                                             <div key={idx} onClick={() => !isEditing && toggleSelection('LOG', idx)} className={`p-5 rounded-2xl border transition-all cursor-pointer flex gap-4 ${selectedLogIndices.has(idx) ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}>
@@ -704,6 +738,9 @@ const WriteLog: React.FC = () => {
                                                                 ) : (
                                                                     <span className="text-[10px] font-black bg-orange-100 text-orange-700 px-2 py-0.5 rounded flex items-center"><AlertTriangle size={10} className="mr-1"/> Unmatched (Raw Text)</span>
                                                                 )}
+                                                                {isLowConfidence && (
+                                                                    <span className="text-[10px] font-black bg-red-100 text-red-700 px-2 py-0.5 rounded flex items-center animate-pulse"><AlertTriangle size={10} className="mr-1"/> 맥락 불분명 - 확인 필요</span>
+                                                                )}
                                                             </div>
                                                             <input 
                                                                 list={`log-course-${idx}`} 
@@ -721,7 +758,17 @@ const WriteLog: React.FC = () => {
 
                                                     {isEditing ? (
                                                         <div className="space-y-3 bg-white p-3 rounded-xl border border-brand-200 shadow-sm" onClick={e => e.stopPropagation()}>
-                                                            <input type="text" className="w-full font-bold text-sm p-2 border rounded" value={displayData.title} onChange={e => setTempAiLogData({...displayData, title: e.target.value})} placeholder="제목" />
+                                                            <div className="flex gap-2">
+                                                                <input type="date" className="w-1/3 text-sm p-2 border rounded" value={displayData.date} onChange={e => setTempAiLogData({...displayData, date: e.target.value})} />
+                                                                <select 
+                                                                    className="w-1/3 text-sm p-2 border rounded"
+                                                                    value={displayData.department}
+                                                                    onChange={e => setTempAiLogData({...displayData, department: e.target.value})}
+                                                                >
+                                                                    {Object.values(Department).map(d => <option key={d} value={d}>{d}</option>)}
+                                                                </select>
+                                                                <input type="text" className="flex-1 font-bold text-sm p-2 border rounded" value={displayData.title} onChange={e => setTempAiLogData({...displayData, title: e.target.value})} placeholder="제목" />
+                                                            </div>
                                                             <textarea className="w-full text-sm p-2 border rounded h-32" value={displayData.details} onChange={e => setTempAiLogData({...displayData, details: e.target.value})} placeholder="상세 내용" />
                                                             <div className="flex justify-end gap-2">
                                                                 <button onClick={cancelEditingAiLog} className="px-3 py-1.5 bg-slate-100 rounded text-xs font-bold">Cancel</button>
@@ -731,7 +778,14 @@ const WriteLog: React.FC = () => {
                                                     ) : (
                                                         <>
                                                             <div className="flex justify-between items-start mb-2 group/edit">
-                                                                <h4 className="font-bold text-slate-900">{displayData.title}</h4>
+                                                                <div className="flex items-center gap-2">
+                                                                    {displayData.category && (
+                                                                        <span className="bg-slate-900 text-white text-[9px] px-2 py-0.5 rounded flex items-center font-bold">
+                                                                            {getCategoryIcon(displayData.category)} <span className="ml-1">{displayData.category}</span>
+                                                                        </span>
+                                                                    )}
+                                                                    <h4 className="font-bold text-slate-900">{displayData.title}</h4>
+                                                                </div>
                                                                 <div className="flex items-center gap-2">
                                                                     <span className="text-xs font-mono text-slate-400 bg-slate-100 px-2 py-0.5 rounded whitespace-nowrap">{displayData.date}</span>
                                                                     <button onClick={(e) => { e.stopPropagation(); startEditingAiLog(idx, log); }} className="p-1 text-slate-400 hover:text-brand-600 rounded bg-slate-50 opacity-0 group-hover/edit:opacity-100 transition-opacity"><Edit size={12}/></button>
@@ -755,6 +809,11 @@ const WriteLog: React.FC = () => {
                                                                         <p className="text-xs text-slate-700 font-medium italic leading-relaxed bg-white/50 p-2 rounded-lg border border-amber-100/50">
                                                                             "{displayData.evidenceSnippet}"
                                                                         </p>
+                                                                        {displayData.confidenceReason && (
+                                                                            <p className="text-[10px] text-red-500 mt-1 font-bold flex items-center">
+                                                                                <AlertCircle size={10} className="mr-1"/> 이유: {displayData.confidenceReason}
+                                                                            </p>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -783,20 +842,50 @@ const WriteLog: React.FC = () => {
                                 <div className="mb-10">
                                     <h3 className="text-xl font-black text-slate-900 mb-6 flex items-center"><UserPlus size={24} className="mr-3 text-brand-600"/> 관련 인물 추출 ({aiResults.extractedPeople.length})</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {aiResults.extractedPeople.map((person: any, idx: number) => (
-                                            <div key={idx} onClick={() => toggleSelection('PERSON', idx)} className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${selectedPeopleIndices.has(idx) ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-black"><User size={20}/></div>
-                                                    <div>
-                                                        <div className="font-bold text-slate-900">{person.name}</div>
-                                                        <div className="text-xs text-slate-500">{person.role} | {person.courseName}</div>
-                                                    </div>
+                                        {aiResults.extractedPeople.map((person: any, idx: number) => {
+                                            const isSelected = selectedPeopleIndices.has(idx);
+                                            const isEditing = editingAiPersonIdx === idx;
+                                            const displayData = isEditing ? tempAiPersonData : person;
+
+                                            return (
+                                            <div key={idx} onClick={() => !isEditing && toggleSelection('PERSON', idx)} className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${isSelected ? 'border-brand-500 bg-brand-50/30' : 'border-slate-100 bg-white hover:bg-slate-50'}`}>
+                                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-black shrink-0"><User size={20}/></div>
+                                                <div className="flex-1 min-w-0">
+                                                    {isEditing ? (
+                                                        <div className="space-y-3" onClick={e => e.stopPropagation()}>
+                                                            <div className="flex gap-2">
+                                                                <input type="text" className="w-1/2 text-sm font-bold p-1.5 border rounded" value={displayData.name} onChange={e => setTempAiPersonData({...displayData, name: e.target.value})} placeholder="이름" />
+                                                                <input type="text" className="w-1/2 text-sm p-1.5 border rounded" value={displayData.role} onChange={e => setTempAiPersonData({...displayData, role: e.target.value})} placeholder="직책" />
+                                                            </div>
+                                                            <input type="text" className="w-full text-sm p-1.5 border rounded" value={displayData.courseName} onChange={e => setTempAiPersonData({...displayData, courseName: e.target.value})} placeholder="소속 골프장" />
+                                                            <select className="w-full text-xs p-1.5 border rounded" value={displayData.affinity} onChange={e => setTempAiPersonData({...displayData, affinity: parseInt(e.target.value)})}>
+                                                                <option value={AffinityLevel.ALLY}>강력한 아군</option>
+                                                                <option value={AffinityLevel.FRIENDLY}>우호적</option>
+                                                                <option value={AffinityLevel.NEUTRAL}>중립</option>
+                                                                <option value={AffinityLevel.UNFRIENDLY}>비우호적</option>
+                                                                <option value={AffinityLevel.HOSTILE}>적대적</option>
+                                                            </select>
+                                                            <div className="flex justify-end gap-2 mt-2">
+                                                                <button onClick={cancelEditingAiPerson} className="px-2 py-1 bg-slate-200 rounded text-xs font-bold">Cancel</button>
+                                                                <button onClick={saveAiPersonEdit} className="px-2 py-1 bg-brand-600 text-white rounded text-xs font-bold">Save</button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="group/edit">
+                                                            <div className="flex justify-between items-start">
+                                                                <div className="font-bold text-slate-900">{displayData.name}</div>
+                                                                <button onClick={(e) => { e.stopPropagation(); startEditingAiPerson(idx, person); }} className="text-slate-400 hover:text-brand-600 opacity-0 group-hover/edit:opacity-100 transition-opacity"><Edit size={12}/></button>
+                                                            </div>
+                                                            <div className="text-xs text-slate-500">{displayData.role}</div>
+                                                            <div className="text-[10px] text-brand-600 font-bold mt-1 truncate">{displayData.courseName}</div>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPeopleIndices.has(idx) ? 'bg-brand-500 border-brand-500' : 'border-slate-300'}`}>
-                                                    {selectedPeopleIndices.has(idx) && <Check size={12} className="text-white"/>}
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? 'bg-brand-500 border-brand-500' : 'border-slate-300'}`}>
+                                                    {isSelected && <Check size={12} className="text-white"/>}
                                                 </div>
                                             </div>
-                                        ))}
+                                        )})}
                                     </div>
                                 </div>
                             )}

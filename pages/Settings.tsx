@@ -61,7 +61,7 @@ const Settings: React.FC = () => {
       const file = e.target.files?.[0];
       if (!file) return;
       
-      if (!confirm(`'${file.name}' 파일의 데이터로 시스템을 복원하시겠습니까?\n주의: 기존 데이터와 병합되거나 ID가 같은 경우 덮어씌워집니다.`)) {
+      if (!confirm(`'${file.name}' 파일의 데이터를 현재 시스템에 병합(Merge)하시겠습니까?\n\n- 기존에 없던 데이터는 추가됩니다.\n- 같은 ID를 가진 데이터는 파일 내용으로 업데이트됩니다.\n- 파일에 없는 기존 데이터는 유지됩니다.`)) {
           if(fileInputRef.current) fileInputRef.current.value = '';
           return;
       }
@@ -72,7 +72,7 @@ const Settings: React.FC = () => {
           try {
               const json = JSON.parse(event.target?.result as string);
               await importAllData(json);
-              alert('데이터 복구가 완료되었습니다. 최신 상태 반영을 위해 새로고침합니다.');
+              alert('데이터 병합이 완료되었습니다. 최신 상태 반영을 위해 새로고침합니다.');
               window.location.reload();
           } catch (error) {
               console.error(error);

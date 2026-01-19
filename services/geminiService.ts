@@ -31,7 +31,7 @@ const getMockResponse = (message: string) => {
 };
 
 /**
- * Enhanced Multi-Entity Extraction with Structure Recognition (Table vs List)
+ * Advanced Multi-Entity Extraction with Hierarchical Context & Categorization
  */
 export const analyzeDocument = async (
   inputData: { base64Data?: string, mimeType?: string, textData?: string }[],
@@ -54,9 +54,8 @@ export const analyzeDocument = async (
 
   contentParts.push({
     text: `
-      당신은 대한민국 골프장 비즈니스 인텔리전스 데이터 정밀 분석관입니다. 
-      제공된 문서(이미지, PDF, 텍스트)는 주로 **'표(Table)'** 또는 **'번호 매기기(List 1. 2. 3...)'** 형식의 업무 보고서입니다.
-      각 골프장과 그에 해당하는 업무 내용을 정확히 1:1로 매칭하여 JSON으로 추출하십시오.
+      당신은 골프장 현장 업무 보고서 전문 분석 AI입니다. 
+      입력된 문서(이미지, PDF, 텍스트)를 구조화된 데이터로 변환하십시오.
 
       [분석 컨텍스트 힌트]
       "${contextHint}"
@@ -65,21 +64,27 @@ export const analyzeDocument = async (
       시스템 보유 골프장 명칭: [${courseListString}]
       * 추출된 이름이 위 목록과 유사하면 표준 명칭으로 변환하십시오.
 
-      [구조별 파싱 알고리즘 - 엄격 준수]
+      [고급 분석 알고리즘 - 계층적 맥락 상속 (Hierarchical Context Inheritance)]
 
-      1. **Case A: 표(Table) 형식 보고서**:
-         - 이미지가 표(Grid) 형태라면, **각 행(Row)을 독립적인 데이터 유닛**으로 처리하십시오.
-         - '골프장명' 또는 '현장명' 컬럼을 기준으로 행을 분리하십시오.
-         - **절대 규칙**: 윗 행의 내용이 아랫 행으로 섞이거나 침범해서는 안 됩니다. 각 행은 완전히 분리된 사실입니다.
+      1. **헤더 정보의 상속 (Header Inheritance)**:
+         - 문서의 최상단이나 표의 제목(Title Row)에 있는 정보(골프장명, 날짜)는 '부모 컨텍스트'입니다.
+         - 아래 나열되는 개별 항목(Items)에 골프장 이름이 명시되지 않았다면, 무조건 '부모 컨텍스트'의 골프장을 상속받아야 합니다.
+         - 예: 제목이 "태릉CC 주간 업무 보고"이고, 항목 1이 "그린 시비 작업"이라면, 항목 1의 골프장은 "태릉CC"입니다.
 
-      2. **Case B: 번호 목록(List) 형식 보고서**:
-         - "1. A골프장", "2. B골프장" 처럼 번호로 나열된 경우, **해당 번호 항목 전체를 하나의 구역(Zone)**으로 설정하십시오.
-         - 줄바꿈이 있더라도 다음 번호(예: "2.")가 나오기 전까지의 모든 텍스트는 앞선 골프장의 내용입니다.
-         - 예: "1. 태릉CC: 배수 공사 진행 중..." -> 이 문장 전체가 태릉CC의 정보입니다.
+      2. **날짜 전파 (Date Propagation)**:
+         - 문서 전체를 관통하는 기준 날짜(작성일, 보고일)를 찾으십시오.
+         - 개별 항목에 날짜가 없으면 기준 날짜를 적용하십시오.
 
-      3. **매칭 검증 (Evidence Check)**:
-         - 추출된 정보가 정확한지 확인하기 위해, 판단의 근거가 된 **원본 텍스트 문장(또는 표의 한 행 전체)**을 \`evidenceSnippet\` 필드에 그대로 복사하십시오.
-         - 만약 골프장 이름이 명시되지 않은 '공통 사항'이라면, \`courseName\`을 "Common" 또는 "Unknown"으로 설정하십시오.
+      3. **표 구조의 수평/수직 스캔**:
+         - 표(Grid) 형태인 경우, 같은 행(Row)에 있는 정보는 하나의 세트입니다.
+         - 만약 셀이 병합(Merged)되어 있다면, 병합된 셀의 내용을 해당되는 모든 행에 적용하십시오.
+
+      4. **업무 유형 자동 분류 (Category Classification)**:
+         - 각 로그의 내용을 분석하여 다음 중 하나로 분류하십시오:
+           ['코스관리', '공사/설비', '운영/지원', '영업/마케팅', '미팅/행사', '기타']
+
+      5. **증거 기반 검증**:
+         - \`evidenceSnippet\`에 판단 근거가 된 원본 텍스트를 반드시 포함하십시오.
 
       반드시 제공된 JSON 스키마를 엄격히 준수하여 답변하세요. Markdown 포맷 없이 순수 JSON만 출력하세요.
     `
@@ -90,7 +95,7 @@ export const analyzeDocument = async (
       model: 'gemini-2.0-flash',
       contents: { parts: contentParts },
       config: {
-        temperature: 0.0, // Zero temperature for maximum determinism regarding structure
+        temperature: 0.0, // Zero temperature for maximum logic adherence
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -121,14 +126,16 @@ export const analyzeDocument = async (
                 properties: {
                   date: { type: Type.STRING },
                   courseName: { type: Type.STRING, description: "Normalized course name from Reference DB" },
-                  rawCourseName: { type: Type.STRING, description: "The exact course name found in the document row/item" },
-                  title: { type: Type.STRING, description: "Specific topic of the work" },
+                  rawCourseName: { type: Type.STRING, description: "The exact course name found or 'Inherited from Header'" },
+                  category: { type: Type.STRING, enum: ['코스관리', '공사/설비', '운영/지원', '영업/마케팅', '미팅/행사', '기타'] },
+                  title: { type: Type.STRING, description: "Specific topic" },
                   summary: { type: Type.STRING },
-                  details: { type: Type.STRING, description: "Full detailed content. Use bullet points." },
-                  evidenceSnippet: { type: Type.STRING, description: "The raw text row or list item used as source" },
+                  details: { type: Type.STRING, description: "Full details with bullet points" },
+                  evidenceSnippet: { type: Type.STRING, description: "Source text row or section header + item text" },
                   department: { type: Type.STRING },
                   tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  confidence: { type: Type.NUMBER }
+                  confidence: { type: Type.NUMBER },
+                  confidenceReason: { type: Type.STRING, description: "Why confidence is low/high?" }
                 }
               }
             },
