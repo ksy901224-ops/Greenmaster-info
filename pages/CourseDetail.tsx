@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseRelationshipIntelligence, analyzeMaterialInventory } from '../services/geminiService';
@@ -840,11 +841,202 @@ const CourseDetail: React.FC = () => {
         )}
       </div>
 
-      {/* ... Link Person Modal ... */}
-      {/* ... Manager Modal ... */}
-      {/* ... Financial Record Modal ... */}
-      {/* ... Material Modal ... */}
-      {/* ... AI Preview Modal ... */}
+      {/* Link Person Modal */}
+      {isLinkPersonModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-6 animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="font-black text-lg text-slate-900 flex items-center"><ArrowRightLeft size={20} className="mr-2 text-brand-600"/> 인물 소속 연동</h3>
+                      <button onClick={() => setIsLinkPersonModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24}/></button>
+                  </div>
+                  <p className="text-sm text-slate-500 mb-4">
+                      기존에 등록된 인물을 검색하여 <strong>{course.name}</strong>의 소속으로 변경합니다.
+                  </p>
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">인물 검색 (이름)</label>
+                          <input 
+                            list="people-list" 
+                            className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold focus:ring-4 focus:ring-brand-500/5 outline-none bg-slate-50"
+                            placeholder="이름 입력..."
+                            value={linkPersonSearch}
+                            onChange={(e) => setLinkPersonSearch(e.target.value)}
+                          />
+                          <datalist id="people-list">
+                              {people.map(p => <option key={p.id} value={p.name} />)}
+                          </datalist>
+                      </div>
+                      <button onClick={handleLinkPerson} className="w-full bg-brand-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-brand-700 transition-all">
+                          소속 변경 및 연동
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Manager Assignment Modal */}
+      {isManagerModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-6 animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="font-black text-lg text-slate-900 flex items-center"><UserCog size={20} className="mr-2 text-indigo-600"/> 담당자(Manager) 지정</h3>
+                      <button onClick={() => setIsManagerModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24}/></button>
+                  </div>
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">담당자 검색</label>
+                          <input 
+                            list="manager-people-list" 
+                            className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold focus:ring-4 focus:ring-indigo-500/5 outline-none bg-slate-50"
+                            placeholder="이름 입력..."
+                            value={managerSearch}
+                            onChange={(e) => setManagerSearch(e.target.value)}
+                          />
+                          <datalist id="manager-people-list">
+                              {people.map(p => <option key={p.id} value={p.name} />)}
+                          </datalist>
+                      </div>
+                      <button onClick={handleAssignManager} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all">
+                          담당자로 지정
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Financial Record Modal */}
+      {isFinModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-md overflow-hidden p-6 animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="font-black text-lg text-slate-900 flex items-center"><BarChart3 size={20} className="mr-2 text-brand-600"/> 재무 실적 {editingFin ? '수정' : '등록'}</h3>
+                      <button onClick={() => setIsFinModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24}/></button>
+                  </div>
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">회계 연도 (Year)</label>
+                          <input type="number" className="w-full rounded-xl border-slate-200 p-3 font-bold" value={finForm.year} onChange={(e) => setFinForm({...finForm, year: parseInt(e.target.value)})} />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">매출액 (Revenue)</label>
+                          <input type="number" className="w-full rounded-xl border-slate-200 p-3 font-bold" value={finForm.revenue} onChange={(e) => setFinForm({...finForm, revenue: parseInt(e.target.value)})} placeholder="단위: 원" />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">영업이익 (Operating Profit)</label>
+                          <input type="number" className="w-full rounded-xl border-slate-200 p-3 font-bold" value={finForm.profit} onChange={(e) => setFinForm({...finForm, profit: parseInt(e.target.value)})} placeholder="단위: 원" />
+                      </div>
+                      <button onClick={handleSaveFinancial} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-slate-800 transition-all mt-2">
+                          {editingFin ? '업데이트 저장' : '신규 실적 등록'}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* Material Modal */}
+      {isMatModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-md animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                  <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                      <h3 className="font-black text-lg text-slate-900 flex items-center"><Package size={20} className="mr-2 text-brand-600"/> 자재 입고/사용 내역 관리</h3>
+                      <button onClick={() => setIsMatModalOpen(false)} className="text-slate-400 hover:text-slate-900"><X size={24}/></button>
+                  </div>
+                  <div className="p-8 space-y-5 overflow-y-auto custom-scrollbar">
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">공급일자</label>
+                              <input type="date" className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold bg-slate-50" value={matForm.supplyDate} onChange={(e) => setMatForm({...matForm, supplyDate: e.target.value})} />
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">자재 분류</label>
+                              <select className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold bg-white" value={matForm.category} onChange={(e) => setMatForm({...matForm, category: e.target.value as MaterialCategory})}>
+                                  {Object.values(MaterialCategory).map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">제품명 (Item Name)</label>
+                          <input type="text" className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold" value={matForm.name} onChange={(e) => setMatForm({...matForm, name: e.target.value})} placeholder="예: 래피드업" />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                          <div className="col-span-1">
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">규격</label>
+                              <input type="text" className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold" value={matForm.standard} onChange={(e) => setMatForm({...matForm, standard: e.target.value})} placeholder="20kg" />
+                          </div>
+                          <div className="col-span-1">
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">수량</label>
+                              <input type="number" className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold" value={matForm.quantity} onChange={(e) => setMatForm({...matForm, quantity: parseFloat(e.target.value)})} />
+                          </div>
+                          <div className="col-span-1">
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">단위</label>
+                              <input type="text" className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold" value={matForm.unit} onChange={(e) => setMatForm({...matForm, unit: e.target.value})} placeholder="포/병" />
+                          </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">단가 (Unit Price)</label>
+                              <input type="number" className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold" value={matForm.unitPrice} onChange={(e) => setMatForm({...matForm, unitPrice: parseInt(e.target.value)})} />
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">담당자</label>
+                              <input type="text" className="w-full rounded-xl border-slate-200 p-3 text-sm font-bold" value={matForm.manager} onChange={(e) => setMatForm({...matForm, manager: e.target.value})} />
+                          </div>
+                      </div>
+                      <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">비고 / 메모</label>
+                          <textarea className="w-full rounded-xl border-slate-200 p-3 text-sm font-medium h-20" value={matForm.notes} onChange={(e) => setMatForm({...matForm, notes: e.target.value})} />
+                      </div>
+                  </div>
+                  <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end">
+                      <button onClick={handleSaveMaterial} className="bg-brand-600 text-white px-8 py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-brand-700 transition-all flex items-center">
+                          <CheckCircle size={18} className="mr-2"/> {editingMat ? '내역 업데이트' : '자재 등록 완료'}
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* AI Preview Modal */}
+      {isPreviewModalOpen && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-md animate-in fade-in duration-300">
+              <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden relative">
+                  <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                      <h3 className="font-bold text-lg flex items-center"><Sparkles className="mr-2 text-brand-400"/> AI 자재 내역 추출 결과 ({previewMaterials.length}건)</h3>
+                      <button onClick={() => setIsPreviewModalOpen(false)} className="text-slate-400 hover:text-white"><X size={24}/></button>
+                  </div>
+                  <div className="flex-1 overflow-auto p-0 bg-slate-50">
+                      <table className="w-full text-sm text-left border-collapse">
+                          <thead className="bg-slate-100 text-slate-500 font-bold border-b border-slate-200 sticky top-0 shadow-sm">
+                              <tr>
+                                  <th className="px-4 py-3">날짜</th>
+                                  <th className="px-4 py-3">분류</th>
+                                  <th className="px-4 py-3">품명</th>
+                                  <th className="px-4 py-3 text-right">수량</th>
+                                  <th className="px-4 py-3 text-right">단가</th>
+                                  <th className="px-4 py-3">비고</th>
+                              </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 bg-white">
+                              {previewMaterials.map((m, i) => (
+                                  <tr key={i} className="hover:bg-slate-50">
+                                      <td className="px-4 py-3">{m.supplyDate}</td>
+                                      <td className="px-4 py-3"><span className="bg-slate-100 px-2 py-1 rounded text-xs font-bold">{m.category}</span></td>
+                                      <td className="px-4 py-3 font-bold text-slate-800">{m.name} <span className="text-slate-400 text-xs font-normal">({m.standard})</span></td>
+                                      <td className="px-4 py-3 text-right font-mono">{m.quantity} {m.unit}</td>
+                                      <td className="px-4 py-3 text-right font-mono text-slate-600">{m.unitPrice.toLocaleString()}</td>
+                                      <td className="px-4 py-3 text-xs text-slate-500 truncate max-w-[150px]">{m.notes}</td>
+                                  </tr>
+                              ))}
+                          </tbody>
+                      </table>
+                  </div>
+                  <div className="p-6 bg-white border-t border-slate-200 flex justify-end gap-4 shrink-0">
+                      <button onClick={() => setIsPreviewModalOpen(false)} className="px-6 py-3 rounded-xl border border-slate-300 font-bold text-slate-600 hover:bg-slate-50">취소</button>
+                      <button onClick={applyPreviewMaterials} className="px-8 py-3 rounded-xl bg-brand-600 text-white font-bold shadow-lg hover:bg-brand-700 flex items-center"><CheckCircle size={18} className="mr-2"/> 전체 DB 반영</button>
+                  </div>
+              </div>
+          </div>
+      )}
       
       {/* Edit Modal - UPDATED */}
       {isEditModalOpen && editForm && (

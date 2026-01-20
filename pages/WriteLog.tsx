@@ -115,6 +115,14 @@ const WriteLog: React.FC = () => {
             
             setTitle(`${person.name} ${person.currentRole} 미팅`);
         }
+    } else if (locationState?.activeTab === 'PERSON') {
+        setActiveTab('PERSON');
+        if (locationState.currentCourseId) {
+            const course = globalCourses.find(c => c.id === locationState.currentCourseId);
+            if (course) {
+                setPersonForm(prev => ({ ...prev, currentCourseId: course.id, currentCourseName: course.name }));
+            }
+        }
     }
   }, [editingLog, locationState, globalPeople, globalCourses]);
 
@@ -282,65 +290,18 @@ const WriteLog: React.FC = () => {
     }
   };
 
-  // --- Inline Editing Handlers (Course) ---
-  const startEditingAiCourse = (index: number, data: any) => {
-      setEditingAiCourseIdx(index);
-      setTempAiCourseData({ ...data });
-  };
+  // --- Inline Editing Handlers ---
+  const startEditingAiCourse = (index: number, data: any) => { setEditingAiCourseIdx(index); setTempAiCourseData({ ...data }); };
+  const cancelEditingAiCourse = () => { setEditingAiCourseIdx(null); setTempAiCourseData(null); };
+  const saveAiCourseEdit = () => { if (!aiResults || editingAiCourseIdx === null) return; const newCourses = [...aiResults.extractedCourses]; newCourses[editingAiCourseIdx] = tempAiCourseData; setAiResults({ ...aiResults, extractedCourses: newCourses }); setEditingAiCourseIdx(null); setTempAiCourseData(null); };
 
-  const cancelEditingAiCourse = () => {
-      setEditingAiCourseIdx(null);
-      setTempAiCourseData(null);
-  };
+  const startEditingAiLog = (index: number, data: any) => { setEditingAiLogIdx(index); setTempAiLogData({ ...data }); };
+  const cancelEditingAiLog = () => { setEditingAiLogIdx(null); setTempAiLogData(null); };
+  const saveAiLogEdit = () => { if (!aiResults || editingAiLogIdx === null) return; const newLogs = [...aiResults.extractedLogs]; newLogs[editingAiLogIdx] = tempAiLogData; setAiResults({ ...aiResults, extractedLogs: newLogs }); setEditingAiLogIdx(null); setTempAiLogData(null); };
 
-  const saveAiCourseEdit = () => {
-      if (!aiResults || editingAiCourseIdx === null) return;
-      const newCourses = [...aiResults.extractedCourses];
-      newCourses[editingAiCourseIdx] = tempAiCourseData;
-      setAiResults({ ...aiResults, extractedCourses: newCourses });
-      setEditingAiCourseIdx(null);
-      setTempAiCourseData(null);
-  };
-
-  // --- Inline Editing Handlers (Log) ---
-  const startEditingAiLog = (index: number, data: any) => {
-      setEditingAiLogIdx(index);
-      setTempAiLogData({ ...data });
-  };
-
-  const cancelEditingAiLog = () => {
-      setEditingAiLogIdx(null);
-      setTempAiLogData(null);
-  };
-
-  const saveAiLogEdit = () => {
-      if (!aiResults || editingAiLogIdx === null) return;
-      const newLogs = [...aiResults.extractedLogs];
-      newLogs[editingAiLogIdx] = tempAiLogData;
-      setAiResults({ ...aiResults, extractedLogs: newLogs });
-      setEditingAiLogIdx(null);
-      setTempAiLogData(null);
-  };
-
-  // --- Inline Editing Handlers (Person) ---
-  const startEditingAiPerson = (index: number, data: any) => {
-      setEditingAiPersonIdx(index);
-      setTempAiPersonData({ ...data });
-  };
-
-  const cancelEditingAiPerson = () => {
-      setEditingAiPersonIdx(null);
-      setTempAiPersonData(null);
-  };
-
-  const saveAiPersonEdit = () => {
-      if (!aiResults || editingAiPersonIdx === null) return;
-      const newPeople = [...aiResults.extractedPeople];
-      newPeople[editingAiPersonIdx] = tempAiPersonData;
-      setAiResults({ ...aiResults, extractedPeople: newPeople });
-      setEditingAiPersonIdx(null);
-      setTempAiPersonData(null);
-  };
+  const startEditingAiPerson = (index: number, data: any) => { setEditingAiPersonIdx(index); setTempAiPersonData({ ...data }); };
+  const cancelEditingAiPerson = () => { setEditingAiPersonIdx(null); setTempAiPersonData(null); };
+  const saveAiPersonEdit = () => { if (!aiResults || editingAiPersonIdx === null) return; const newPeople = [...aiResults.extractedPeople]; newPeople[editingAiPersonIdx] = tempAiPersonData; setAiResults({ ...aiResults, extractedPeople: newPeople }); setEditingAiPersonIdx(null); setTempAiPersonData(null); };
 
   const startAiAnalysis = async () => {
     if (selectedFiles.length === 0) return;
@@ -447,8 +408,12 @@ const WriteLog: React.FC = () => {
       try {
           let updatedCount = 0;
           let createdCount = 0;
+          
+          // Temporary map to hold newly created course names to their IDs
+          // Key: Course Name (normalized?), Value: ID
+          const newCourseIdMap = new Map<string, string>();
 
-          // Process Courses
+          // 1. Process Courses First to get IDs
           for (let idx of Array.from(selectedCourseIndices)) {
               const c = aiResults.extractedCourses[idx];
               const existing = globalCourses.find(gc => gc.name === c.name);
@@ -463,10 +428,12 @@ const WriteLog: React.FC = () => {
                       openYear: c.openYear || existing.openYear,
                       description: c.description ? (existing.description + "\n\n[AI Update]: " + c.description) : existing.description
                   });
+                  newCourseIdMap.set(existing.name, existing.id);
                   updatedCount++;
               } else {
-                  await addCourse({ 
-                      id: `c-ai-${Date.now()}-${idx}`, 
+                  // addCourse now returns the ID
+                  const newId = await addCourse({ 
+                      id: `c-ai-${Date.now()}-${idx}`, // Fallback ID if addCourse doesn't use it
                       name: c.name, 
                       region: (c.region as Region) || '기타', 
                       address: c.address || '', 
@@ -478,28 +445,53 @@ const WriteLog: React.FC = () => {
                       openYear: c.openYear || '미상', 
                       issues: [] 
                   });
+                  newCourseIdMap.set(c.name, newId);
                   createdCount++;
               }
           }
 
-          // Process People
+          // 2. Process People
           for (let idx of Array.from(selectedPeopleIndices)) {
               const p = aiResults.extractedPeople[idx];
+              // Try to find course in global or newly created map
               const course = globalCourses.find(gc => gc.name === p.courseName);
-              await addPerson({ id: `p-ai-${Date.now()}-${idx}`, name: p.name, phone: '정보없음', currentRole: p.role, currentCourseId: course?.id, affinity: p.affinity as AffinityLevel, notes: p.notes || '', careers: [] });
+              const linkedCourseId = course ? course.id : newCourseIdMap.get(p.courseName);
+
+              await addPerson({ 
+                  id: `p-ai-${Date.now()}-${idx}`, 
+                  name: p.name, 
+                  phone: '정보없음', 
+                  currentRole: p.role, 
+                  currentCourseId: linkedCourseId, 
+                  affinity: p.affinity as AffinityLevel, 
+                  notes: p.notes || '', 
+                  careers: [] 
+              });
           }
 
-          // Process Logs (Enhanced with specific Course Mappings)
+          // 3. Process Logs (Link to courses)
           for (let idx of Array.from(selectedLogIndices)) {
               const l = aiResults.extractedLogs[idx];
               const mapping = aiLogCourseMappings[idx];
               
-              // Determine course details. If mapping exists, use it. Otherwise use raw AI output.
-              const finalCourseId = mapping?.id || '';
-              const finalCourseName = mapping?.name || l.courseName;
+              // Determine course details. 
+              // Priority: User Manual Mapping -> Newly Created ID -> Raw Match
+              let finalCourseId = mapping?.id || '';
+              let finalCourseName = mapping?.name || l.courseName;
+
+              // If mapping has name but no ID (e.g. user typed a name that matches a new course)
+              if (!finalCourseId && finalCourseName) {
+                  const newId = newCourseIdMap.get(finalCourseName);
+                  if (newId) finalCourseId = newId;
+              }
               
-              // Combined content: Summary + Details + Strategy/Risk
-              // Strictly formatted for clarity per course
+              // If still no ID, try to find in existing global courses one last time
+              if (!finalCourseId && finalCourseName) {
+                  const match = findBestMatch(finalCourseName, globalCourses);
+                  if (match) finalCourseId = match.id;
+              }
+
+              // Combined content
               const combinedContent = `[요약]\n${l.summary || l.content || ''}\n\n[상세 내용]\n${l.details || ''}\n\n[매칭 근거]\n${l.evidenceSnippet || '자동 추출됨'}\n\n[전략 가치]\n${l.strategy || ''}\n\n[리스크]\n${l.risk || ''}`;
               
               await addLog({ 
@@ -519,7 +511,10 @@ const WriteLog: React.FC = () => {
           
           alert(`총 ${totalToCommit}건의 데이터 처리 완료.\n(신규 골프장: ${createdCount}건, 업데이트: ${updatedCount}건)`);
           navigate('/work-logs');
-      } catch (err) { alert('데이터 저장 중 오류가 발생했습니다.'); } finally { setIsSubmitting(false); }
+      } catch (err) { 
+          console.error(err);
+          alert('데이터 저장 중 오류가 발생했습니다.'); 
+      } finally { setIsSubmitting(false); }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.files) setSelectedFiles(Array.from(e.target.files)); };

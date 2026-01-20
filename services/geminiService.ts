@@ -31,6 +31,24 @@ const getMockResponse = (message: string) => {
 };
 
 /**
+ * Utility to clean markdown code blocks from JSON string
+ */
+const cleanAndParseJson = (text: string | undefined): any => {
+    if (!text) return {};
+    let cleanText = text.trim();
+    // Remove markdown code blocks if present
+    if (cleanText.startsWith('```')) {
+        cleanText = cleanText.replace(/^```(json)?/, '').replace(/```$/, '');
+    }
+    try {
+        return JSON.parse(cleanText);
+    } catch (e) {
+        console.error("JSON Parse Error:", e, cleanText);
+        return {}; // Return empty object on failure to prevent crash
+    }
+};
+
+/**
  * Advanced Multi-Entity Extraction with Hierarchical Context & Categorization
  */
 export const analyzeDocument = async (
@@ -158,7 +176,7 @@ export const analyzeDocument = async (
         }
       }
     });
-    return JSON.parse(response.text || '{}');
+    return cleanAndParseJson(response.text);
   } catch (error) {
     console.error("Gemini API Error:", error);
     return null;
@@ -308,7 +326,7 @@ export const analyzeMaterialInventory = async (
         }
       }
     });
-    return JSON.parse(response.text || '[]');
+    return cleanAndParseJson(response.text) || [];
   } catch (e) { return []; }
 };
 

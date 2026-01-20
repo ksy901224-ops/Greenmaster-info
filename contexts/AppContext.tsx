@@ -32,15 +32,15 @@ interface AppContextType {
   financials: FinancialRecord[];
   materials: MaterialRecord[];
 
-  addLog: (log: LogEntry) => void;
-  updateLog: (log: LogEntry) => void;
+  addLog: (log: LogEntry) => Promise<string>;
+  updateLog: (log: LogEntry) => Promise<void>;
   deleteLog: (id: string) => void;
-  addCourse: (course: GolfCourse) => void;
+  addCourse: (course: GolfCourse) => Promise<string>;
   updateCourse: (course: GolfCourse) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   mergeCourses: (targetId: string, sourceIds: string[]) => Promise<void>;
-  addPerson: (person: Person) => void;
-  updatePerson: (person: Person) => void;
+  addPerson: (person: Person) => Promise<string>;
+  updatePerson: (person: Person) => Promise<void>;
   deletePerson: (id: string) => void;
   addExternalEvent: (event: ExternalEvent) => void;
   
@@ -624,11 +624,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     logActivity('UPDATE', 'USER', 'Profile', `Admin updated profile for user: ${userId}`);
   };
 
-  const addLog = (log: LogEntry) => { saveDocument('logs', log); logActivity('CREATE', 'LOG', log.title, `${log.courseName} - ${log.department}`); };
+  const addLog = async (log: LogEntry): Promise<string> => { 
+      const id = await saveDocument('logs', log); 
+      logActivity('CREATE', 'LOG', log.title, `${log.courseName} - ${log.department}`); 
+      return id;
+  };
   const updateLog = async (log: LogEntry) => { await updateDocument('logs', log.id, log); logActivity('UPDATE', 'LOG', log.title); };
   const deleteLog = (id: string) => { const target = logs.find(l => l.id === id); deleteDocument('logs', id); logActivity('DELETE', 'LOG', target?.title || 'Unknown Log'); };
 
-  const addCourse = (course: GolfCourse) => { saveDocument('courses', course); logActivity('CREATE', 'COURSE', course.name); };
+  const addCourse = async (course: GolfCourse): Promise<string> => { 
+      const id = await saveDocument('courses', course); 
+      logActivity('CREATE', 'COURSE', course.name); 
+      return id;
+  };
   const updateCourse = async (course: GolfCourse) => { await updateDocument('courses', course.id, course); logActivity('UPDATE', 'COURSE', course.name); };
   const deleteCourse = async (id: string) => { const target = rawCourses.find(c => c.id === id); await deleteDocument('courses', id); logActivity('DELETE', 'COURSE', target?.name || 'Unknown Course'); };
 
@@ -677,15 +685,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       alert(`병합 완료: ${sources.length}건의 데이터를 '${targetCourse.name}'으로 통합했습니다.`);
   };
 
-  const addPerson = async (newPerson: Person) => {
+  const addPerson = async (newPerson: Person): Promise<string> => {
     const normalize = (s: string) => s.trim().replace(/\s+/g, '').toLowerCase();
     const existing = people.find(p => normalize(p.name) === normalize(newPerson.name));
     if (existing) {
         await updateDocument('people', existing.id, { ...existing }); 
         logActivity('UPDATE', 'PERSON', existing.name, 'Merged duplicate entry');
+        return existing.id;
     } else {
-        await saveDocument('people', newPerson);
+        const id = await saveDocument('people', newPerson);
         logActivity('CREATE', 'PERSON', newPerson.name);
+        return id;
     }
   };
 

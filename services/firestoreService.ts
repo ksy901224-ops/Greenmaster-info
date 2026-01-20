@@ -106,38 +106,44 @@ export const subscribeToCollection = (collectionName: string, callback: (data: a
   });
 };
 
-export const saveDocument = async (collectionName: string, rawData: any) => {
+// MODIFIED: Returns the document ID (Promise<string>)
+export const saveDocument = async (collectionName: string, rawData: any): Promise<string> => {
   const data = sanitizeData(rawData); // Sanitize before saving to fix 'undefined' error
 
   if (isMock()) {
     const items = getLocalData(collectionName);
-    const existingIndex = items.findIndex((i: any) => i.id === data.id);
+    const id = data.id || `mock-${collectionName}-${Date.now()}`;
+    const dataWithId = { ...data, id };
+    
+    const existingIndex = items.findIndex((i: any) => i.id === id);
     let newItems;
     if (existingIndex >= 0) {
         newItems = [...items];
-        newItems[existingIndex] = { ...newItems[existingIndex], ...data };
+        newItems[existingIndex] = { ...newItems[existingIndex], ...dataWithId };
     } else {
-        const newItem = { ...data, id: data.id || `mock-${collectionName}-${Date.now()}` };
-        newItems = [...items, newItem];
+        newItems = [...items, dataWithId];
     }
     setLocalData(collectionName, newItems);
-    return;
+    return id;
   }
 
   try {
     if (data.id && !data.id.startsWith('temp-') && !data.id.startsWith('mock-')) {
        await setDoc(doc(db, collectionName, data.id), data, { merge: true });
+       return data.id;
     } else {
-       const { id, ...rest } = data; 
-       await addDoc(collection(db, collectionName), rest);
+       const { id, ...rest } = data; // Remove undefined/temp ID if present
+       const docRef = await addDoc(collection(db, collectionName), rest);
+       return docRef.id;
     }
   } catch (error: any) {
     if (error.message.includes("offline") || error.code === 'unavailable') {
         console.warn("Save failed due to offline. Saving locally instead.");
         // Fallback to local storage if offline
         const items = getLocalData(collectionName);
-        setLocalData(collectionName, [...items, { ...data, id: data.id || `offline-${Date.now()}` }]);
-        return;
+        const id = data.id || `offline-${Date.now()}`;
+        setLocalData(collectionName, [...items, { ...data, id }]);
+        return id;
     }
     console.error(`Error saving to ${collectionName}:`, error);
     throw error;
