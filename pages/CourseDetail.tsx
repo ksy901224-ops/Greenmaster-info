@@ -2,12 +2,12 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import LogCard from '../components/LogCard';
 import { generateCourseRelationshipIntelligence, analyzeMaterialInventory } from '../services/geminiService';
-import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus, UserCheck, UserCog, UserMinus, Trees, ShoppingCart, ChevronUp, Briefcase, Landmark, CheckSquare, Square } from 'lucide-react';
+import { Info, FileText, Users, User, Sparkles, History, Edit2, X, CheckCircle, MapPin, Trash2, Globe, Loader2, List, AlertTriangle, Plus, Minus, Lock, Calendar, Ruler, Map, Calculator, ArrowRightLeft, Cloud, Search, ArrowRight, BarChart3, TrendingUp, TrendingDown, Package, Droplets, Sprout, Box, Upload, Camera, Database, DollarSign, PieChart, ClipboardList, Activity, ArrowUpRight, Percent, ArrowDownRight, ChevronDown, ShieldCheck, FileWarning, Target, Lightbulb, UserPlus, UserCheck, UserCog, UserMinus, Trees, ShoppingCart, ChevronUp, Briefcase, Landmark, CheckSquare, Square, Coins } from 'lucide-react';
 import { AffinityLevel, CourseType, GrassType, GolfCourse, FinancialRecord, MaterialRecord, MaterialCategory, UserRole, Region, Person, LogEntry, GolfCoursePerson, ManagementModel, OutsourcingType } from '../types';
 import { useApp } from '../contexts/AppContext';
 
 // Utility for smart Korean currency formatting
-const formatKRW = (amount: number) => {
+const formatKRW = (amount: number | undefined) => {
     if (!amount || amount === 0) return "0원";
     
     // For smaller amounts like unit price, show full number with comma
@@ -32,19 +32,18 @@ const CourseDetail: React.FC = () => {
   const id = routeParams.id;
   
   const [activeTab, setActiveTab] = useState<'INFO' | 'LOGS' | 'PEOPLE' | 'MANAGEMENT'>('INFO');
+  
+  // --- Modals State ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState<GolfCourse | null>(null);
-  const [logSearchTerm, setLogSearchTerm] = useState('');
+  
   const [isFinModalOpen, setIsFinModalOpen] = useState(false);
   const [editingFin, setEditingFin] = useState<FinancialRecord | null>(null);
   const [finForm, setFinForm] = useState({ year: new Date().getFullYear(), revenue: 0, profit: 0 });
   
-  // --- Material State Updates ---
   const [isMatModalOpen, setIsMatModalOpen] = useState(false);
   const [editingMat, setEditingMat] = useState<MaterialRecord | null>(null);
   const [matCategory, setMatCategory] = useState<MaterialCategory>(MaterialCategory.PESTICIDE);
-  const currentYear = new Date().getFullYear();
-  const [matYearFilter, setMatYearFilter] = useState<number>(currentYear);
   const [matForm, setMatForm] = useState({
       supplyDate: new Date().toISOString().split('T')[0],
       category: MaterialCategory.PESTICIDE,
@@ -56,24 +55,30 @@ const CourseDetail: React.FC = () => {
       manager: '',
       notes: ''
   });
+  
+  const [isLinkPersonModalOpen, setIsLinkPersonModalOpen] = useState(false);
+  const [linkPersonSearch, setLinkPersonSearch] = useState('');
+
+  const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
+  const [managerSearch, setManagerSearch] = useState('');
+
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [previewMaterials, setPreviewMaterials] = useState<Omit<MaterialRecord, 'id' | 'courseId' | 'lastUpdated'>[]>([]);
+
+  // --- Filter & Search State ---
+  const [logSearchTerm, setLogSearchTerm] = useState('');
+  const currentYear = new Date().getFullYear();
+  const [matYearFilter, setMatYearFilter] = useState<number>(currentYear);
+  
+  // --- File Upload ---
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingMat, setIsUploadingMat] = useState(false);
-  const [previewMaterials, setPreviewMaterials] = useState<Omit<MaterialRecord, 'id' | 'courseId' | 'lastUpdated'>[]>([]);
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
   // --- Intelligence States ---
   const [isAnalyzingIntelligence, setIsAnalyzingIntelligence] = useState(false);
   const [intelReport, setIntelReport] = useState<string | null>(null);
 
-  // --- Link Person Modal ---
-  const [isLinkPersonModalOpen, setIsLinkPersonModalOpen] = useState(false);
-  const [linkPersonSearch, setLinkPersonSearch] = useState('');
-
-  // --- Manager Assignment Modal ---
-  const [isManagerModalOpen, setIsManagerModalOpen] = useState(false);
-  const [managerSearch, setManagerSearch] = useState('');
-
-  // --- Accordion State ---
+  // --- UI State ---
   const [isSpecExpanded, setIsSpecExpanded] = useState(false);
 
   // Derived Values via useMemo
@@ -135,11 +140,6 @@ const CourseDetail: React.FC = () => {
 
   const currentStaff = useMemo(() => 
     course?.associatedPeople?.filter(p => p.isCurrent) || [], 
-    [course]
-  );
-  
-  const formerStaff = useMemo(() => 
-    course?.associatedPeople?.filter(p => !p.isCurrent) || [], 
     [course]
   );
 
@@ -311,11 +311,13 @@ const CourseDetail: React.FC = () => {
       } else if (subField === 'staff') {
           newManagement.staff = { ...newManagement.staff, [field]: value };
       } else if (subField === 'budget') {
-          newManagement.budget = { ...newManagement.budget, [field]: value };
-          if (field !== 'total') {
-             const b = newManagement.budget;
-             newManagement.budget.total = (b.pesticide || 0) + (b.fertilizer || 0) + (b.material || 0);
-          }
+          // Update the specific budget field
+          const currentBudget = { ...newManagement.budget };
+          (currentBudget as any)[field] = value;
+          
+          // Re-calculate Total
+          currentBudget.total = (currentBudget.pesticide || 0) + (currentBudget.fertilizer || 0) + (currentBudget.material || 0);
+          newManagement.budget = currentBudget;
       }
       setEditForm({ ...editForm, management: newManagement });
   };
@@ -476,10 +478,10 @@ const CourseDetail: React.FC = () => {
                                 <span className="text-slate-500 font-bold">자재/기타 예산</span>
                                 <span className="font-black text-slate-800">{formatKRW(management.budget?.material)}</span>
                             </div>
-                            <div className="border-t border-slate-200 my-2"></div>
+                            <div className="border-t-2 border-slate-200 my-3 pt-2"></div>
                             <div className="flex justify-between items-center text-base">
-                                <span className="text-brand-700 font-black">총 관리 비용</span>
-                                <span className="font-black text-brand-700">{formatKRW(management.budget?.total)}</span>
+                                <span className="text-brand-700 font-black flex items-center"><Coins size={16} className="mr-1.5"/> 총 관리 비용 (Total)</span>
+                                <span className="font-black text-brand-700 text-lg">{formatKRW(management.budget?.total)}</span>
                             </div>
                         </div>
                     </div>
@@ -1128,7 +1130,7 @@ const CourseDetail: React.FC = () => {
                                 <input type="number" className="w-full rounded-2xl border-slate-200 text-sm font-black p-4 shadow-sm" value={editForm.management?.budget?.material || 0} onChange={(e) => handleManagementEditChange('budget', 'material', parseInt(e.target.value))} />
                             </div>
                             <div className="flex flex-col justify-end pb-2">
-                                <p className="text-xs text-slate-400 font-bold mb-1">총 관리 예산 합계 (자동계산됨)</p>
+                                <p className="text-xs text-slate-400 font-bold mb-1 flex items-center"><Coins size={14} className="mr-1"/> 총 관리 예산 합계 (자동계산됨)</p>
                                 <p className="text-2xl font-black text-brand-700">{formatKRW((editForm.management?.budget?.pesticide || 0) + (editForm.management?.budget?.fertilizer || 0) + (editForm.management?.budget?.material || 0))}</p>
                             </div>
                         </div>
