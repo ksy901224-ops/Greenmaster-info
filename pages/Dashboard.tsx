@@ -5,7 +5,7 @@ import LogCard from '../components/LogCard';
 import { CalendarView } from '../components/CalendarView';
 import { CalendarSettingsModal } from '../components/CalendarSettingsModal';
 import { Department, LogEntry, UserRole } from '../types';
-import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText, Send, User, RotateCcw, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, List as ListIcon, X, CalendarPlus, Settings, LayoutGrid, Users, ArrowUpDown, CheckCircle, PlusCircle, Loader2, Search, Sparkles, MessageCircleQuestion, Clock, Activity, AlertTriangle, ChevronRight, Lock, TrendingUp, AlertOctagon, FileText, Send, User, RotateCcw, Trash2, RefreshCcw } from 'lucide-react';
 import { useApp } from '../contexts/AppContext';
 import { addTodo } from '../services/firestoreService';
 import { createChatSession } from '../services/geminiService';
@@ -16,7 +16,7 @@ interface ChatMessage {
 }
 
 const Dashboard: React.FC = () => {
-  const { logs, courses, people, user, canUseAI, canViewFullData, isAdmin, navigate } = useApp();
+  const { logs, courses, people, user, canUseAI, canViewFullData, isAdmin, navigate, refreshLogs } = useApp();
   
   const [filterDept, setFilterDept] = useState<Department | 'ALL'>(
     (user?.role === UserRole.SENIOR || user?.role === UserRole.ADMIN) ? 'ALL' : (user?.department || 'ALL')
@@ -37,6 +37,7 @@ const Dashboard: React.FC = () => {
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [isOutlookConnected, setIsOutlookConnected] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSyncingCalendar, setIsSyncingCalendar] = useState(false);
 
   // --- TODO Widget State ---
   const [todoText, setTodoText] = useState('');
@@ -54,6 +55,23 @@ const Dashboard: React.FC = () => {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages, isStreaming]);
+
+  // Initial Sync on Mount
+  useEffect(() => {
+      // Small visual sync on load to reassure user
+      handleSyncCalendar();
+  }, []);
+
+  const handleSyncCalendar = () => {
+    if (isSyncingCalendar) return;
+    setIsSyncingCalendar(true);
+    refreshLogs(); // Trigger context refresh
+    
+    // Simulate visual loading for better UX
+    setTimeout(() => {
+        setIsSyncingCalendar(false);
+    }, 800);
+  };
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -354,6 +372,16 @@ const Dashboard: React.FC = () => {
                 <button onClick={() => setViewMode('course')} className={`p-2 rounded-lg transition-all ${viewMode === 'course' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><LayoutGrid size={18}/></button>
                 <button onClick={() => setViewMode('calendar')} className={`p-2 rounded-lg transition-all ${viewMode === 'calendar' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}><CalendarIcon size={18}/></button>
              </div>
+             {viewMode === 'calendar' && (
+                 <button 
+                    onClick={handleSyncCalendar} 
+                    disabled={isSyncingCalendar}
+                    className="p-2.5 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-slate-500 transition-all shadow-sm active:scale-95" 
+                    title="캘린더 최신 동기화"
+                 >
+                    {isSyncingCalendar ? <Loader2 size={18} className="animate-spin text-brand-600"/> : <RefreshCcw size={18} className="text-slate-600"/>}
+                 </button>
+             )}
           </div>
       </div>
 

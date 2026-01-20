@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { LogEntry, Department, ExternalEvent } from '../types';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
@@ -18,8 +19,8 @@ const DEPT_COLORS: Record<Department, string> = {
 };
 
 export const CalendarView: React.FC<CalendarViewProps> = ({ logs, externalEvents = [], onDateSelect, selectedDate }) => {
-  // Default to May 2024 to match mock data, normally would be new Date()
-  const [currentDate, setCurrentDate] = useState(new Date(2024, 4, 1));
+  // CHANGED: Default to current real date to ensure calendar is always up-to-date
+  const [currentDate, setCurrentDate] = useState(new Date());
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -61,7 +62,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ logs, externalEvents
         >
           <div className="flex justify-between items-start">
             <span className={`text-sm font-medium w-6 h-6 flex items-center justify-center rounded-full 
-              ${isToday ? 'bg-red-500 text-white' : isSelected ? 'text-brand-700 font-bold' : 'text-slate-700'}`}>
+              ${isToday ? 'bg-red-500 text-white shadow-md' : isSelected ? 'text-brand-700 font-bold' : 'text-slate-700'}`}>
               {day}
             </span>
           </div>
@@ -109,8 +110,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({ logs, externalEvents
             <ChevronRight size={18} />
           </button>
         </div>
-        <button onClick={goToday} className="text-xs font-medium px-3 py-1.5 bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-600 transition-colors">
-          오늘
+        <button onClick={goToday} className="text-xs font-medium px-3 py-1.5 bg-white border border-slate-200 rounded-md hover:bg-slate-50 text-slate-600 transition-colors shadow-sm active:scale-95">
+          오늘 (Today)
         </button>
       </div>
 

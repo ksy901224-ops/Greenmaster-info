@@ -712,7 +712,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const updateMaterial = async (record: MaterialRecord) => { await updateDocument('materials', record.id, record); logActivity('UPDATE', 'MATERIAL', record.name); };
   const deleteMaterial = (id: string) => { const target = materials.find(m => m.id === id); deleteDocument('materials', id); logActivity('DELETE', 'MATERIAL', target?.name || '자재'); };
 
-  const refreshLogs = () => { console.log("Real-time synchronization active via Firestore listeners."); };
+  const refreshLogs = () => { console.log("[System] Real-time synchronization is active."); };
 
   const resetData = () => {
       if (window.confirm("모든 데이터를 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
